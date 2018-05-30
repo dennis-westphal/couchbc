@@ -1,0 +1,104 @@
+{
+  "contractName": "Library",
+  "abi": [],
+  "bytecode": "0x604c602c600b82828239805160001a60731460008114601c57601e565bfe5b5030600052607381538281f30073000000000000000000000000000000000000000030146080604052600080fd00a165627a7a72305820ed7be93b356883fd389825ec7b1a1efee58d01bb38857843dfaae9c5b1d0ec000029",
+  "deployedBytecode": "0x73000000000000000000000000000000000000000030146080604052600080fd00a165627a7a72305820ed7be93b356883fd389825ec7b1a1efee58d01bb38857843dfaae9c5b1d0ec000029",
+  "sourceMap": "26:19:0:-;;132:2:-1;166:7;155:9;146:7;137:37;252:7;246:14;243:1;238:23;232:4;229:33;270:1;265:20;;;;222:63;;265:20;274:9;222:63;;298:9;295:1;288:20;328:4;319:7;311:22;352:7;343;336:24",
+  "deployedSourceMap": "26:19:0:-;;;;;;;;",
+  "source": "pragma solidity ^0.4.22;\n\nlibrary Library{\n\n}\n",
+  "sourcePath": "/Users/denniswestphal/rental/contracts/Library.sol",
+  "ast": {
+    "absolutePath": "/Users/denniswestphal/rental/contracts/Library.sol",
+    "exportedSymbols": {
+      "Library": [
+        2
+      ]
+    },
+    "id": 3,
+    "nodeType": "SourceUnit",
+    "nodes": [
+      {
+        "id": 1,
+        "literals": [
+          "solidity",
+          "^",
+          "0.4",
+          ".22"
+        ],
+        "nodeType": "PragmaDirective",
+        "src": "0:24:0"
+      },
+      {
+        "baseContracts": [],
+        "contractDependencies": [],
+        "contractKind": "library",
+        "documentation": null,
+        "fullyImplemented": true,
+        "id": 2,
+        "linearizedBaseContracts": [
+          2
+        ],
+        "name": "Library",
+        "nodeType": "ContractDefinition",
+        "nodes": [],
+        "scope": 3,
+        "src": "26:19:0"
+      }
+    ],
+    "src": "0:46:0"
+  },
+  "legacyAST": {
+    "absolutePath": "/Users/denniswestphal/rental/contracts/Library.sol",
+    "exportedSymbols": {
+      "Library": [
+        2
+      ]
+    },
+    "id": 3,
+    "nodeType": "SourceUnit",
+    "nodes": [
+      {
+        "id": 1,
+        "literals": [
+          "solidity",
+          "^",
+          "0.4",
+          ".22"
+        ],
+        "nodeType": "PragmaDirective",
+        "src": "0:24:0"
+      },
+      {
+        "baseContracts": [],
+        "contractDependencies": [],
+        "contractKind": "library",
+        "documentation": null,
+        "fullyImplemented": true,
+        "id": 2,
+        "linearizedBaseContracts": [
+          2
+        ],
+        "name": "Library",
+        "nodeType": "ContractDefinition",
+        "nodes": [],
+        "scope": 3,
+        "src": "26:19:0"
+      }
+    ],
+    "src": "0:46:0"
+  },
+  "compiler": {
+    "name": "solc",
+    "version": "0.4.23+commit.124ca40d.Emscripten.clang"
+  },
+  "networks": {
+    "4447": {
+      "events": {},
+      "links": {},
+      "address": "0x345ca3e014aaf5dca488057592ee47305d9b3e10",
+      "transactionHash": "0xd7737e3447b3885b087fc3b065d00b299b85dad4bce89dc3e55ab70a46120c49"
+    }
+  },
+  "schemaVersion": "2.0.0",
+  "updatedAt": "2018-05-30T15:27:26.057Z"
+}
