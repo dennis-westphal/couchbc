@@ -1,23 +1,16 @@
 pragma solidity ^0.4.22;
-pragma experimental ABIEncoderV2;
 
 import "./Library.sol";
 
 contract Rent {
-    struct Tenant {
-        address addr;
-        string name;
-        uint balance;
-    }
-
-    struct Renter {
+    struct User {
         address addr;
         string name;
         uint balance;
     }
 
     struct Apartment {
-        Renter owner;
+        User owner;
 
         string name;
         string street;
@@ -30,13 +23,13 @@ contract Rent {
 
     struct Rental {
         Apartment apartment;
-        Tenant tenant;
+        User tenant;
         uint16 fromDay; // Day as flat(unix timestamp / (60*60*24))
         uint16 tillDay;
         uint128 deposit;
     }
 
-    mapping(address => Tenant) tenants;
+    mapping(address => User) users;
 
     Apartment[] public apartments;
 
@@ -44,35 +37,41 @@ contract Rent {
     mapping(uint => Rental[]) rentals;
 
     event Rented(uint indexed apartmentId, Rental rental);
-    event Registered(address indexed tenantAddress);
+    event Registered(address indexed userAddress, User user);
 
-    function getTenantBalance() public view returns (uint) {
-        require(tenants[msg.sender].addr != 0);
-
-        return tenants[msg.sender].balance;
+    function isRegistered() public view returns (bool) {
+        return users[msg.sender].addr != 0;
     }
 
-    function getApartments() public view returns (Apartment[]) {
-        return apartments;
+    function getBalance() public view returns (uint) {
+        require(users[msg.sender].addr != 0);
+
+        return users[msg.sender].balance;
     }
 
-    function getRentals(uint apartmentId) public view returns (Rental[]) {
-        return rentals[apartmentId];
+    function getApartmentsNum() public view returns (uint) {
+        return apartments.length;
     }
 
-    function registerTenant(string name) public payable {
-        require(tenants[msg.sender].addr == 0);
+    function getRentalsNum(uint apartmentId) public view returns (uint) {
+        return rentals[apartmentId].length;
+    }
 
-        tenants[msg.sender] = Tenant(msg.sender, name, msg.value);
+    function register(string name) public payable {
+        require(users[msg.sender].addr == 0);
 
-        emit Registered(msg.sender);
+        User memory user = User(msg.sender, name, msg.value);
+
+        users[msg.sender] = user;
+
+        emit Registered(msg.sender, user);
     }
 
     function rent(uint apartmentId, uint16 fromDay, uint16 tillDay) public payable {
-        require(tenants[msg.sender].addr != 0);
+        require(users[msg.sender].addr != 0);
 
         if (msg.value > 0) {
-            tenants[msg.sender].balance += msg.value;
+            users[msg.sender].balance += msg.value;
         }
 
         // Forbid same-day rentals and rentals that are mixed up (start day after end day)
@@ -87,14 +86,14 @@ contract Rent {
         uint rentalFee = apartment.pricePerNight * (tillDay - fromDay);
 
         // Check if the tenant has enough balance to pay for the apartment rental and the deposit
-        require(tenants[msg.sender].balance > rentalFee + apartment.deposit);
+        require(users[msg.sender].balance > rentalFee + apartment.deposit);
 
         // Add a new rental
-        Rental memory rental = Rental(apartment, tenants[msg.sender], fromDay, tillDay, apartment.deposit);
+        Rental memory rental = Rental(apartment, users[msg.sender], fromDay, tillDay, apartment.deposit);
         rentals[apartmentId].push(rental);
 
-        // Reduce the tenants balance by deposit and rental fee
-        tenants[msg.sender].balance -= rentalFee + apartment.deposit;
+        // Reduce the tenant's balance by deposit and rental fee
+        users[msg.sender].balance -= rentalFee + apartment.deposit;
 
         emit Rented(apartmentId, rental);
     }
