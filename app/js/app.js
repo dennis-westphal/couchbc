@@ -1,7 +1,10 @@
 // Import the page's CSS. Webpack will know what to do with it.
-import '../stylesheets/app.css';
+import '../css/materialize.css';
+import '../css/app.css';
 
 // Import libraries we need.
+import '../js/materialize.js';
+import {default as Vue} from 'vue';
 import {default as Web3} from 'web3';
 import {default as contract} from 'truffle-contract';
 
@@ -11,15 +14,24 @@ import rent_artifacts from '../../build/contracts/Rent.json';
 // Get the contract from the artifacts
 let Rent = contract(rent_artifacts);
 
-// The following code is simple to show off interacting with your contracts.
-// As your needs grow you will likely need to change its form and structure.
-// For application bootstrapping, check out window.addEventListener below.
-var accounts;
-var account;
+// Save the accounts
+let accounts;
+let account;
+let rentContract;
+
+let data = new Vue({
+	el:   '#app',
+	data: {
+		page:           'start',
+		accountChecked: false,
+		registered:     false,
+		balance:        '',
+	},
+});
 
 window.App = {
 	start: function() {
-		var self = this;
+		let self = this;
 
 		// Bootstrap the MetaCoin abstraction for Use.
 		Rent.setProvider(web3.currentProvider);
@@ -39,33 +51,39 @@ window.App = {
 			accounts = accs;
 			account = accounts[0];
 
-			self.refreshBalance();
+			Rent.deployed().then(function(deployedContract) {
+				rentContract = deployedContract;
+
+				self.checkAccount();
+			});
 		});
 	},
 
 	setStatus: function(message) {
-		var status = document.getElementById('status');
+		let status = document.getElementById('status');
 		status.innerHTML = message;
 	},
 
+	checkAccount: function() {
+		let self = this;
+
+		rentContract.isRegistered().then(function(result) {
+			data.accountChecked = true;
+			data.registered = result;
+
+			if (data.registered) {
+				self.refreshBalance();
+			}
+		});
+	},
+
 	refreshBalance: function() {
-		var self = this;
+		let self = this;
 
-		Rent.deployed().then(function(rentContract) {
-			console.log(account);
-
-			rentContract.getApartmentsNum().then(function(apartmentsNum) {
-				console.log(apartmentsNum);
-			});
-
-			//return meta.getBalance.call(account, {from: account});
-		})/*.then(function(value) {
-			var balance_element = document.getElementById('balance');
-			balance_element.innerHTML = value.valueOf();
-		}).catch(function(e) {
-			console.log(e);
-			self.setStatus('Error getting balance; see log.');
-		})*/;
+		rentContract.getBalance().then(function(balance) {
+			console.log(balance);
+			//data.balance = balance;
+		});
 	},
 };
 
