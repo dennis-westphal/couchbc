@@ -7,11 +7,9 @@
 <div id="app">
 	<nav>
 		<div class="nav-wrapper">
-			<a href="#" class="brand-logo">Rental application</a>
-			<ul id="nav-mobile" class="right">
-				<li v-if="registered"><span id="balance">{{ balance }}</span> credits</li>
-				<li v-if="!registered && accountChecked"><a href="#" v-on:click="page = 'register'">Register</a></li>
-			</ul>
+			<a href="#" class="left">Rental application</a>
+			<span class="right" v-if="registered"><span id="balance">{{ balance }}</span> credits</span>
+			<span class="right" v-if="!registered && accountChecked"><a href="#" v-on:click="page = 'register'">Register</a></span>
 		</div>
 	</nav>
 
@@ -20,6 +18,7 @@
 			<ul>
 				<li><a href="#" v-on:click="page = 'start'">Start</a></li>
 				<li><a href="#" v-on:click="page = 'apartments'">Show apartments</a></li>
+				<li><a href="#" v-on:click="page = 'add-apartment'">Add apartments</a></li>
 				<li><a href="#" v-on:click="page = 'rentals'">Show my rentals</a></li>
 			</ul>
 		</div>
@@ -30,11 +29,66 @@
 			<div class="container" v-if="page == 'apartments'">
 				AAA
 			</div>
+			<div class="container" v-if="page == 'add-apartment'">
+				<form>
+					<div class="input-field">
+						<label for="register-title">Title</label>
+						<input id="register-title" type="text" name="title" v-model="newApartmentData.title">
+					</div>
+					<div class="input-field">
+						<label for="register-street">Street</label>
+						<input id="register-street" type="text" name="street" v-model="newApartmentData.street">
+					</div>
+					<div class="input-field">
+						<label for="register-zip">Zip code</label>
+						<input id="register-zip" type="text" name="zip" v-model="newApartmentData.zip">
+					</div>
+					<div class="input-field">
+						<label for="register-city">City</label>
+						<input id="register-city" type="text" name="city" v-model="newApartmentData.city">
+					</div>
+					<div class="input-field">
+						<label for="register-country">Country</label>
+						<input id="register-country" type="text" name="country" v-model="newApartmentData.country">
+					</div>
+					<div class="input-field">
+						<label for="register-pricePerNight">Price per night</label>
+						<input id="register-pricePerNight" type="number" name="pricePerNight" v-model="newApartmentData.pricePerNight">
+					</div>
+					<div class="input-field">
+						<label for="register-deposit">Deposit</label>
+						<input id="register-deposit" type="number" name="deposit" v-model="newApartmentData.deposit">
+					</div>
+					<button v-on:click="register">Register</button>
+				</form>
+			</div>
 			<div class="container" v-if="page == 'rentals'">
 				RRR
 			</div>
 			<div class="container" v-if="page == 'register'">
-				Reg
+				<form>
+					<div class="input-field">
+						<label for="register-name">Name</label>
+						<input id="register-name" type="text" name="name" v-model="newUserData.name">
+					</div>
+					<div class="input-field">
+						<label for="register-street">Street</label>
+						<input id="register-street" type="text" name="street" v-model="newUserData.street">
+					</div>
+					<div class="input-field">
+						<label for="register-zip">Zip code</label>
+						<input id="register-zip" type="text" name="zip" v-model="newUserData.zip">
+					</div>
+					<div class="input-field">
+						<label for="register-city">City</label>
+						<input id="register-city" type="text" name="city" v-model="newUserData.city">
+					</div>
+					<div class="input-field">
+						<label for="register-country">Country</label>
+						<input id="register-country" type="text" name="country" v-model="newUserData.country">
+					</div>
+					<button v-on:click="register">Register</button>
+				</form>
 			</div>
 		</div>
 	</div>

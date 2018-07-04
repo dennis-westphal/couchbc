@@ -27,7 +27,7 @@
 		"eslint-plugin-promise": "^3.0.0",
 		"eslint-plugin-standard": "^2.0.0",
 		"html-webpack-plugin": "^2.28.0",
-		"json-loader": "^0.5.4",
+		"json5-loader": "^1.0.1",
 		"lerna": "^2.11.0",
 		"style-loader": "^0.13.1",
 		"webpack": "^2.2.1",

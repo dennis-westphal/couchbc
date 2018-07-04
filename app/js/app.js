@@ -14,78 +14,134 @@ import rent_artifacts from '../../build/contracts/Rent.json';
 // Get the contract from the artifacts
 let Rent = contract(rent_artifacts);
 
-// Save the accounts
-let accounts;
+// Save the account and the rent contract
 let account;
 let rentContract;
 
-let data = new Vue({
-	el:   '#app',
-	data: {
-		page:           'start',
-		accountChecked: false,
-		registered:     false,
-		balance:        '',
+function showMessage(message) {
+	M.toast({html: message});
+}
+
+let app = new Vue({
+	el:      '#app',
+	data:    {
+		page:             'start',
+		accountChecked:   false,
+		registered:       false,
+		balance:          '',
+		newUserData:      {
+			name:    '',
+			street:  '',
+			zip:     '',
+			city:    '',
+			country: '',
+		},
+		newApartmentData: {
+			title:         '',
+			street:        '',
+			zip:           '',
+			city:          '',
+			country:       '',
+			pricePerNight: 0,
+			deposit:       0,
+		},
+	},
+	methods: {
+		register:     function(event) {
+			event.preventDefault();
+
+			// Call the register function
+			// Using the ES2015 spread operator does not work on vue data objects
+			rentContract.register(
+					this.newUserData.name,
+					this.newUserData.street,
+					this.newUserData.zip,
+					this.newUserData.city,
+					this.newUserData.country,
+			);
+
+			// Only watch for the event if we registered just now
+			rentContract.Registered({}).watch((err, result) => {
+				console.log(err, result);
+
+				if (result.args.userAddress === account) {
+					showMessage('Registered successfully');
+					return;
+				}
+
+				showMessage('Could not process registration');
+			});
+		},
+		addApartment: function(event) {
+			event.preventDefault();
+
+			// Call the register function
+			// Using the ES2015 spread operator does not work on vue data objects
+			rentContract.addApartment(
+					this.newApartmentData.title,
+					this.newApartmentData.street,
+					this.newApartmentData.zip,
+					this.newApartmentData.city,
+					this.newApartmentData.country,
+					this.newApartmentData.pricePerNight,
+					this.newApartmentData.deposit,
+			);
+		},
+
+		checkAccount:   function() {
+			rentContract.isRegistered().then(function(result) {
+				app.accountChecked = true;
+				app.registered = result;
+
+				if (app.registered) {
+					showMessage('Successfully logged in');
+
+					app.refreshBalance();
+				}
+			});
+		},
+		refreshBalance: function() {
+			rentContract.getBalance().then(function(balance) {
+				app.balance = balance.toNumber();
+			});
+		},
+
+		start: function() {
+			Rent.setProvider(web3.currentProvider);
+
+			web3.eth.getAccounts(function(err, accs) {
+				if (err != null) {
+					alert('There was an error fetching your accounts.');
+					return;
+				}
+
+				if (accs.length == 0) {
+					alert('Couldn\'t get any accounts! Make sure your Ethereum client is configured correctly.');
+					return;
+				}
+
+				account = accs[0];
+
+				web3.eth.defaultAccount = account;
+
+				Rent.deployed().then(function(deployedContract) {
+					rentContract = deployedContract;
+
+					app.checkAccount();
+
+					rentContract.ApartmentAdded({}).watch((err, result) => {
+						if (result.args.userAddress === account) {
+							showMessage('Apartment added');
+							return;
+						}
+
+						showMessage('Could not process registration');
+					});
+				});
+			});
+		},
 	},
 });
-
-window.App = {
-	start: function() {
-		let self = this;
-
-		// Bootstrap the MetaCoin abstraction for Use.
-		Rent.setProvider(web3.currentProvider);
-
-		// Get the initial account balance so it can be displayed.
-		web3.eth.getAccounts(function(err, accs) {
-			if (err != null) {
-				alert('There was an error fetching your accounts.');
-				return;
-			}
-
-			if (accs.length == 0) {
-				alert('Couldn\'t get any accounts! Make sure your Ethereum client is configured correctly.');
-				return;
-			}
-
-			accounts = accs;
-			account = accounts[0];
-
-			Rent.deployed().then(function(deployedContract) {
-				rentContract = deployedContract;
-
-				self.checkAccount();
-			});
-		});
-	},
-
-	setStatus: function(message) {
-		let status = document.getElementById('status');
-		status.innerHTML = message;
-	},
-
-	checkAccount: function() {
-		let self = this;
-
-		rentContract.isRegistered().then(function(result) {
-			data.accountChecked = true;
-			data.registered = result;
-
-			if (data.registered) {
-				self.refreshBalance();
-			}
-		});
-	},
-
-	refreshBalance: function() {
-		let self = this;
-
-		rentContract.getBalance().then(function(balance) {
-			console.log(balance);
-			//data.balance = balance;
-		});
-	},
-};
 
 window.addEventListener('load', function() {
 	// Checking if Web3 has been injected by the browser (Mist/MetaMask)
@@ -100,5 +156,5 @@ window.addEventListener('load', function() {
 				new Web3.providers.HttpProvider('http://127.0.0.1:7545'));
 	}
 
-	App.start();
+	app.start();
 });

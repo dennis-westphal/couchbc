@@ -14,28 +14,33 @@ module.exports = {
 		]),
 	],
 	module:  {
-		rules:   [
+		rules: [
 			{
 				test: /\.css$/,
 				use:  ['style-loader', 'css-loader'],
 			},
-		],
-		loaders: [
-			{test: /\.json$/, use: 'json-loader'},
 			{
-				test:    /\.js$/,
+				test:    /\.(js)|(jsx)$/,
 				exclude: /(node_modules|bower_components)/,
-				loader:  'babel-loader',
-				query:   {
-					presets: ['es2015'],
-					plugins: ['transform-runtime'],
-				},
+				use:     [
+					{
+						loader: 'babel-loader',
+					},
+				],
+			},
+			{
+				test: /\.json/,
+				use:  [
+					{
+						loader: 'json5-loader',
+					},
+				],
 			},
 		],
 	},
 	resolve: {
 		alias: {
-			vue: 'vue/dist/vue.js'
-		}
-	}
+			vue: 'vue/dist/vue.js',
+		},
+	},
 };
