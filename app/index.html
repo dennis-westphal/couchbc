@@ -27,39 +27,52 @@
 				SSS
 			</div>
 			<div class="container" v-if="page == 'apartments'">
-				AAA
+				<table>
+					<thead>
+					<tr>
+						<th>Title</th>
+						<th>Country</th>
+						<th>City</th>
+						<th>Price per night</th>
+					</tr>
+
+					<tr>
+						<td></td>
+					</tr>
+					</thead>
+				</table>
 			</div>
 			<div class="container" v-if="page == 'add-apartment'">
 				<form>
 					<div class="input-field">
-						<label for="register-title">Title</label>
-						<input id="register-title" type="text" name="title" v-model="newApartmentData.title">
+						<label for="add-apartment-title">Title</label>
+						<input id="add-apartment-title" type="text" name="title" v-model="newApartmentData.title">
 					</div>
 					<div class="input-field">
-						<label for="register-street">Street</label>
-						<input id="register-street" type="text" name="street" v-model="newApartmentData.street">
+						<label for="add-apartment-street">Street</label>
+						<input id="add-apartment-street" type="text" name="street" v-model="newApartmentData.street">
 					</div>
 					<div class="input-field">
-						<label for="register-zip">Zip code</label>
-						<input id="register-zip" type="text" name="zip" v-model="newApartmentData.zip">
+						<label for="add-apartment-zip">Zip code</label>
+						<input id="add-apartment-zip" type="text" name="zip" v-model="newApartmentData.zip">
 					</div>
 					<div class="input-field">
-						<label for="register-city">City</label>
-						<input id="register-city" type="text" name="city" v-model="newApartmentData.city">
+						<label for="add-apartment-city">City</label>
+						<input id="add-apartment-city" type="text" name="city" v-model="newApartmentData.city">
 					</div>
 					<div class="input-field">
-						<label for="register-country">Country</label>
-						<input id="register-country" type="text" name="country" v-model="newApartmentData.country">
+						<label for="add-apartment-country">Country</label>
+						<input id="add-apartment-country" type="text" name="country" v-model="newApartmentData.country">
 					</div>
 					<div class="input-field">
-						<label for="register-pricePerNight">Price per night</label>
-						<input id="register-pricePerNight" type="number" name="pricePerNight" v-model="newApartmentData.pricePerNight">
+						<label for="add-apartment-pricePerNight">Price per night</label>
+						<input id="add-apartment-pricePerNight" type="number" name="pricePerNight" v-model="newApartmentData.pricePerNight">
 					</div>
 					<div class="input-field">
-						<label for="register-deposit">Deposit</label>
-						<input id="register-deposit" type="number" name="deposit" v-model="newApartmentData.deposit">
+						<label for="add-apartment-deposit">Deposit</label>
+						<input id="add-apartment-deposit" type="number" name="deposit" v-model="newApartmentData.deposit">
 					</div>
-					<button v-on:click="register">Register</button>
+					<button v-on:click="addApartment">Register</button>
 				</form>
 			</div>
 			<div class="container" v-if="page == 'rentals'">

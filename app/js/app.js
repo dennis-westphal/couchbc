@@ -66,6 +66,17 @@ let app = new Vue({
 
 				if (result.args.userAddress === account) {
 					showMessage('Registered successfully');
+
+					app.accountChecked = true;
+					app.registered = result;
+
+					// Change the page if we're currently on the registration page
+					if (app.page === 'register') {
+						app.page = 'apartments';
+					}
+
+					app.refreshBalance();
+
 					return;
 				}
 
