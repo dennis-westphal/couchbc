@@ -62,7 +62,9 @@ let app = new Vue({
 			);
 
 			// Only watch for the event if we registered just now
-			rentContract.Registered({}).watch((err, result) => {
+			rentContract.Registered().on('data', event => {
+				console.log('reg', event);
+
 				if (result.args.userAddress === account) {
 					showMessage('Registered successfully');
 
@@ -95,16 +97,35 @@ let app = new Vue({
 					this.newApartmentData.country,
 					this.newApartmentData.pricePerNight,
 					this.newApartmentData.deposit,
-			);
+			).then(function() {
+				rentContract.ApartmentAdded().once('data', event => {
+					console.log('app-add', event);
+
+					if (err) {
+						console.log(err);
+						return;
+					}
+
+					app.loadApartments();
+
+					if (result.args.userAddress === account) {
+						// TODO: Only show this after adding the apartment
+						showMessage('Apartment added');
+						return;
+					}
+
+					showMessage('Could not process registration');
+				});
+			});
 		},
 		loadApartments: function() {
 			rentContract.getApartmentsNum().then(function(result) {
 				app.apartments = [];
 
-				let numApartments = result.toNumber();
+				let numApartments = parseInt(result);
 				for (let i = 0; i < numApartments; i++) {
 					rentContract.getApartment(i).then(function(result) {
-						console.log(result);
+						app.apartments.push(result);
 					});
 				}
 			});
@@ -124,7 +145,7 @@ let app = new Vue({
 		},
 		refreshBalance: function() {
 			rentContract.getBalance().then(function(balance) {
-				app.balance = balance.toNumber();
+				app.balance = parseInt(balance);
 			});
 		},
 
@@ -152,21 +173,13 @@ let app = new Vue({
 					app.checkAccount();
 					app.loadApartments();
 
-					rentContract.ApartmentAdded({}).watch((err, result) => {
-						if (err) {
-							console.log(err);
-							return;
-						}
+					// TODO: Find out why these are not fired; possibly replace truffle_contract with pure web3 contract?
+					rentContract.Registered().on('data', function(event) {
+						console.log(event);
+					});
 
-						app.loadApartments();
-
-						if (result.args.userAddress === account) {
-							// TODO: Only show this after adding the apartment
-							showMessage('Apartment added');
-							return;
-						}
-
-						showMessage('Could not process registration');
+					rentContract.Registered().on('error', function(event) {
+						console.error(event);
 					});
 				});
 			});

@@ -36,8 +36,11 @@
 						<th>Price per night</th>
 					</tr>
 
-					<tr>
-						<td></td>
+					<tr v-for="apartment in apartments">
+						<td>{{ apartment.title }}</td>
+						<td>{{ apartment.country }}</td>
+						<td>{{ apartment.city }}</td>
+						<td>{{ apartment.pricePerNight }}</td>
 					</tr>
 					</thead>
 				</table>
