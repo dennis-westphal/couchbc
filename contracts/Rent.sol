@@ -64,6 +64,27 @@ contract Rent {
         return apartments.length;
     }
 
+    function getApartment(uint apartmentId) public view returns (
+        address owner,
+        string title,
+        string street,
+        string zipCode,
+        string city,
+        string country,
+        uint128 pricePerNight,
+        uint128 deposit) {
+        Apartment storage apartment = apartments[apartmentId];
+
+        owner = apartment.owner.addr;
+        title = apartment.title;
+        street = apartment.street;
+        zipCode = apartment.zipCode;
+        city = apartment.city;
+        country = apartment.country;
+        pricePerNight = apartment.pricePerNight;
+        deposit = apartment.deposit;
+    }
+
     function getRentalsNum(uint apartmentId) public view returns (uint) {
         return rentals[apartmentId].length;
     }
@@ -81,7 +102,7 @@ contract Rent {
     }
 
     function addApartment(string title, string street, string zipCode, string city, string country, uint128 pricePerNight, uint128 deposit) public {
-        require(users[msg.sender].addr == 0);
+        require(users[msg.sender].addr != 0);
 
         User storage user = users[msg.sender];
 

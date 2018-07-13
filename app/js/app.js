@@ -45,9 +45,10 @@ let app = new Vue({
 			pricePerNight: 0,
 			deposit:       0,
 		},
+		apartments:       [],
 	},
 	methods: {
-		register:     function(event) {
+		register:       function(event) {
 			event.preventDefault();
 
 			// Call the register function
@@ -83,7 +84,7 @@ let app = new Vue({
 				showMessage('Could not process registration');
 			});
 		},
-		addApartment: function(event) {
+		addApartment:   function(event) {
 			event.preventDefault();
 
 			// Call the register function
@@ -97,6 +98,18 @@ let app = new Vue({
 					this.newApartmentData.pricePerNight,
 					this.newApartmentData.deposit,
 			);
+		},
+		loadApartments: function() {
+			rentContract.getApartmentsNum().then(function(result) {
+				app.apartments = [];
+
+				let numApartments = result.toNumber();
+				for (let i = 0; i < numApartments; i++) {
+					rentContract.getApartment(i).then(function(result) {
+						console.log(result);
+					});
+				}
+			});
 		},
 
 		checkAccount:   function() {
@@ -139,9 +152,18 @@ let app = new Vue({
 					rentContract = deployedContract;
 
 					app.checkAccount();
+					app.loadApartments();
 
 					rentContract.ApartmentAdded({}).watch((err, result) => {
+						if (err) {
+							console.log(err);
+							return;
+						}
+
+						app.loadApartments();
+
 						if (result.args.userAddress === account) {
+							// TODO: Only show this after adding the apartment
 							showMessage('Apartment added');
 							return;
 						}
