@@ -63,8 +63,6 @@ let app = new Vue({
 
 			// Only watch for the event if we registered just now
 			rentContract.Registered({}).watch((err, result) => {
-				console.log(err, result);
-
 				if (result.args.userAddress === account) {
 					showMessage('Registered successfully');
 
@@ -144,9 +142,9 @@ let app = new Vue({
 					return;
 				}
 
-				account = accs[0];
-
+				account = accs[0].toLowerCase();
 				web3.eth.defaultAccount = account;
+				Rent.defaults({from: account});
 
 				Rent.deployed().then(function(deployedContract) {
 					rentContract = deployedContract;
@@ -183,10 +181,21 @@ window.addEventListener('load', function() {
 		window.web3 = new Web3(web3.currentProvider);
 	} else {
 		console.warn(
-				'No web3 detected. Falling back to http://127.0.0.1:7545. You should remove this fallback when you deploy live, as it\'s inherently insecure. Consider switching to Metamask for development. More info here: http://truffleframework.com/tutorials/truffle-and-metamask');
+				'No web3 detected. Falling back to http://127.0.0.1:9545. You should remove this fallback when you deploy live, as it\'s inherently insecure. Consider switching to Metamask for development. More info here: http://truffleframework.com/tutorials/truffle-and-metamask');
 		// fallback - use your fallback strategy (local node / hosted node + in-dapp id mgmt / fail)
 		window.web3 = new Web3(
-				new Web3.providers.HttpProvider('http://127.0.0.1:7545'));
+				new Web3.providers.HttpProvider('http://127.0.0.1:9545'));
+
+		Rent.setProvider(web3.currentProvider);
+		//dirty hack for web3@1.0.0 support for localhost testrpc, see https://github.com/trufflesuite/truffle-contract/issues/56#issuecomment-331084530
+		if (typeof Rent.currentProvider.sendAsync !== 'function') {
+			Rent.currentProvider.sendAsync = function() {
+				return Rent.currentProvider.send.apply(
+						Rent.currentProvider,
+						arguments,
+				);
+			};
+		}
 	}
 
 	app.start();
