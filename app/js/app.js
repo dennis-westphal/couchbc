@@ -6,13 +6,9 @@ import '../css/app.css';
 import '../js/materialize.js';
 import {default as Vue} from 'vue';
 import {default as Web3} from 'web3';
-import {default as contract} from 'truffle-contract';
 
 // Import our contract artifacts and turn them into usable abstractions.
 import rent_artifacts from '../../build/contracts/Rent.json';
-
-// Get the contract from the artifacts
-let Rent = contract(rent_artifacts);
 
 // Save the account and the rent contract
 let account;
@@ -51,88 +47,103 @@ let app = new Vue({
 		register:       function(event) {
 			event.preventDefault();
 
-			// Call the register function
 			// Using the ES2015 spread operator does not work on vue data objects
-			rentContract.register(
-					this.newUserData.name,
-					this.newUserData.street,
-					this.newUserData.zip,
-					this.newUserData.city,
-					this.newUserData.country,
-			);
+			let params = [
+				this.newUserData.name,
+				this.newUserData.street,
+				this.newUserData.zip,
+				this.newUserData.city,
+				this.newUserData.country];
 
-			// Only watch for the event if we registered just now
-			rentContract.Registered().on('data', event => {
-				console.log('reg', event);
-
-				if (result.args.userAddress === account) {
-					showMessage('Registered successfully');
-
-					app.accountChecked = true;
-					app.registered = result;
-
-					// Change the page if we're currently on the registration page
-					if (app.page === 'register') {
-						app.page = 'apartments';
-					}
-
-					app.refreshBalance();
-
-					return;
-				}
-
-				showMessage('Could not process registration');
+			// Estimate gas and call the register function
+			let method = rentContract.methods.register(...params);
+			method.estimateGas().then(function(gasAmount) {
+				method.send({gas: gasAmount});
 			});
+
+			rentContract.once('Registered', {filter: {userAddress: account}},
+					function(error, event) {
+						if (error) {
+							showMessage('Could not process registration');
+							console.error(error);
+							return;
+						}
+
+						showMessage('Registered successfully');
+
+						app.accountChecked = true;
+						app.registered = true;
+
+						// Change the page if we're currently on the registration page
+						if (app.page === 'register') {
+							app.page = 'apartments';
+						}
+
+						app.refreshBalance();
+					});
 		},
 		addApartment:   function(event) {
 			event.preventDefault();
 
-			// Call the register function
 			// Using the ES2015 spread operator does not work on vue data objects
-			rentContract.addApartment(
-					this.newApartmentData.title,
-					this.newApartmentData.street,
-					this.newApartmentData.zip,
-					this.newApartmentData.city,
-					this.newApartmentData.country,
-					this.newApartmentData.pricePerNight,
-					this.newApartmentData.deposit,
-			).then(function() {
-				rentContract.ApartmentAdded().once('data', event => {
-					console.log('app-add', event);
+			let parameters = [
+				this.newApartmentData.title,
+				this.newApartmentData.street,
+				this.newApartmentData.zip,
+				this.newApartmentData.city,
+				this.newApartmentData.country,
+				this.newApartmentData.pricePerNight,
+				this.newApartmentData.deposit];
 
-					if (err) {
-						console.log(err);
-						return;
-					}
-
-					app.loadApartments();
-
-					if (result.args.userAddress === account) {
-						// TODO: Only show this after adding the apartment
-						showMessage('Apartment added');
-						return;
-					}
-
-					showMessage('Could not process registration');
-				});
+			// Estimate gas and call the addApartment function
+			let method = rentContract.methods.addApartment(...parameters);
+			method.estimateGas().then(function(gasAmount) {
+				method.send({gas: gasAmount});
 			});
+
+			rentContract.once('ApartmentAdded',
+					{filter: {userAddress: account}}, function(error, event) {
+						if (error) {
+							showMessage('Could not add apartment');
+							console.error(error);
+							return;
+						}
+
+						showMessage('Apartment added');
+					});
 		},
 		loadApartments: function() {
-			rentContract.getApartmentsNum().then(function(result) {
-				app.apartments = [];
+			rentContract.methods.getApartmentsNum().
+					call(function(error, result) {
+						if (error) {
+							console.error(error);
+							return;
+						}
 
-				let numApartments = parseInt(result);
-				for (let i = 0; i < numApartments; i++) {
-					rentContract.getApartment(i).then(function(result) {
-						app.apartments.push(result);
+						app.apartments = [];
+
+						let numApartments = parseInt(result);
+						for (let i = 0; i < numApartments; i++) {
+							rentContract.methods.getApartment(i).
+									call(function(error, result) {
+										if (error) {
+											console.error(error);
+											return;
+										}
+
+										app.apartments.push(result);
+									});
+						}
 					});
-				}
-			});
 		},
 
 		checkAccount:   function() {
-			rentContract.isRegistered().then(function(result) {
+			rentContract.methods.isRegistered().call(function(error, result) {
+				if (error) {
+					console.error(error);
+					return;
+				}
+
 				app.accountChecked = true;
 				app.registered = result;
 
@@ -144,71 +155,68 @@ let app = new Vue({
 			});
 		},
 		refreshBalance: function() {
-			rentContract.getBalance().then(function(balance) {
+			rentContract.methods.getBalance().call(function(error, balance) {
+				if (error) {
+					console.error(error);
+					return;
+				}
+
 				app.balance = parseInt(balance);
 			});
 		},
 
 		start: function() {
-			Rent.setProvider(web3.currentProvider);
+			// Get the contract from the artifacts
+			rentContract = new web3.eth.Contract(rent_artifacts.abi,
+					rent_artifacts.networks[4447].address);
 
-			web3.eth.getAccounts(function(err, accs) {
-				if (err != null) {
-					alert('There was an error fetching your accounts.');
+			//Rent.setProvider(web3.currentProvider);
+
+			web3.eth.getAccounts(function(error, accounts) {
+				if (error) {
+					showMessage('There was an error fetching your accounts');
+					console.error(error);
 					return;
 				}
 
-				if (accs.length == 0) {
-					alert('Couldn\'t get any accounts! Make sure your Ethereum client is configured correctly.');
+				if (accounts.length === 0) {
+					showMessage(
+							'Couldn\'t get any accounts! Make sure your Ethereum client is configured correctly.');
 					return;
 				}
 
-				account = accs[0].toLowerCase();
+				// Set the default account
+				account = accounts[0].toLowerCase();
 				web3.eth.defaultAccount = account;
-				Rent.defaults({from: account});
+				rentContract.options.from = account;
 
-				Rent.deployed().then(function(deployedContract) {
-					rentContract = deployedContract;
+				app.checkAccount();
 
-					app.checkAccount();
+				rentContract.events.ApartmentAdded({}, function(error, event) {
+					if (error) {
+						return;
+					}
+
 					app.loadApartments();
-
-					// TODO: Find out why these are not fired; possibly replace truffle_contract with pure web3 contract?
-					rentContract.Registered().on('data', function(event) {
-						console.log(event);
-					});
-
-					rentContract.Registered().on('error', function(event) {
-						console.error(event);
-					});
 				});
+
+				app.loadApartments();
 			});
 		},
 	},
 });
 
 window.addEventListener('load', function() {
-	// Checking if Web3 has been injected by the browser (Mist/MetaMask)
-	if (typeof web3 !== 'undefined') {
+	// We can't use Metamask's web3 currently as subscriptions through websockets are still in dev
+	if (typeof web3 !== 'undefined' && false) {
 		// Use Mist/MetaMask's provider
 		window.web3 = new Web3(web3.currentProvider);
 	} else {
 		console.warn(
-				'No web3 detected. Falling back to http://127.0.0.1:9545. You should remove this fallback when you deploy live, as it\'s inherently insecure. Consider switching to Metamask for development. More info here: http://truffleframework.com/tutorials/truffle-and-metamask');
+				'No web3 detected. Falling back to ws://127.0.0.1:9545. You should remove this fallback when you deploy live, as it\'s inherently insecure. Consider switching to Metamask for development. More info here: http://truffleframework.com/tutorials/truffle-and-metamask');
 		// fallback - use your fallback strategy (local node / hosted node + in-dapp id mgmt / fail)
 		window.web3 = new Web3(
-				new Web3.providers.HttpProvider('http://127.0.0.1:9545'));
-
-		Rent.setProvider(web3.currentProvider);
-		//dirty hack for web3@1.0.0 support for localhost testrpc, see https://github.com/trufflesuite/truffle-contract/issues/56#issuecomment-331084530
-		if (typeof Rent.currentProvider.sendAsync !== 'function') {
-			Rent.currentProvider.sendAsync = function() {
-				return Rent.currentProvider.send.apply(
-						Rent.currentProvider,
-						arguments,
-				);
-			};
-		}
+				new Web3.providers.WebsocketProvider('ws://127.0.0.1:9545'));
 	}
 
 	app.start();
