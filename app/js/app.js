@@ -20,7 +20,7 @@ function showMessage(message) {
 
 let app = new Vue({
 	el:      '#app',
-	data:    {
+	data:    () => ({
 		page:             'start',
 		accountChecked:   false,
 		registered:       false,
@@ -42,27 +42,27 @@ let app = new Vue({
 			deposit:       0,
 		},
 		apartments:       [],
-	},
+	}),
 	methods: {
-		register:       function(event) {
-			event.preventDefault();
+		register:       clickEvent => {
+			clickEvent.preventDefault();
 
 			// Using the ES2015 spread operator does not work on vue data objects
 			let params = [
-				this.newUserData.name,
-				this.newUserData.street,
-				this.newUserData.zip,
-				this.newUserData.city,
-				this.newUserData.country];
+				app.newUserData.name,
+				app.newUserData.street,
+				app.newUserData.zip,
+				app.newUserData.city,
+				app.newUserData.country];
 
 			// Estimate gas and call the register function
 			let method = rentContract.methods.register(...params);
-			method.estimateGas().then(function(gasAmount) {
+			method.estimateGas().then(gasAmount => {
 				method.send({gas: gasAmount});
 			});
 
 			rentContract.once('Registered', {filter: {userAddress: account}},
-					function(error, event) {
+					(error, event) => {
 						if (error) {
 							showMessage('Could not process registration');
 							console.error(error);
@@ -82,27 +82,27 @@ let app = new Vue({
 						app.refreshBalance();
 					});
 		},
-		addApartment:   function(event) {
-			event.preventDefault();
+		addApartment:   clickEvent => {
+			clickEvent.preventDefault();
 
 			// Using the ES2015 spread operator does not work on vue data objects
 			let parameters = [
-				this.newApartmentData.title,
-				this.newApartmentData.street,
-				this.newApartmentData.zip,
-				this.newApartmentData.city,
-				this.newApartmentData.country,
-				this.newApartmentData.pricePerNight,
-				this.newApartmentData.deposit];
+				app.newApartmentData.title,
+				app.newApartmentData.street,
+				app.newApartmentData.zip,
+				app.newApartmentData.city,
+				app.newApartmentData.country,
+				app.newApartmentData.pricePerNight,
+				app.newApartmentData.deposit];
 
 			// Estimate gas and call the addApartment function
 			let method = rentContract.methods.addApartment(...parameters);
-			method.estimateGas().then(function(gasAmount) {
+			method.estimateGas().then(gasAmount => {
 				method.send({gas: gasAmount});
 			});
 
 			rentContract.once('ApartmentAdded',
-					{filter: {userAddress: account}}, function(error, event) {
+					{filter: {userAddress: account}}, (error, event) => {
 						if (error) {
 							showMessage('Could not add apartment');
 							console.error(error);
@@ -110,11 +110,20 @@ let app = new Vue({
 						}
 
 						showMessage('Apartment added');
+
+						// Change the page if we're currently on the add apartment page
+						if (app.page === 'add-apartment') {
+							app.page = 'apartments';
+						}
+
+						// Clear the form
+						Object.assign(app.$data.newApartmentData,
+								app.$options.data.call(app).newApartmentData);
 					});
 		},
-		loadApartments: function() {
+		loadApartments: () => {
 			rentContract.methods.getApartmentsNum().
-					call(function(error, result) {
+					call((error, result) => {
 						if (error) {
 							console.error(error);
 							return;
@@ -125,7 +134,7 @@ let app = new Vue({
 						let numApartments = parseInt(result);
 						for (let i = 0; i < numApartments; i++) {
 							rentContract.methods.getApartment(i).
-									call(function(error, result) {
+									call((error, result) => {
 										if (error) {
 											console.error(error);
 											return;
@@ -137,8 +146,8 @@ let app = new Vue({
 					});
 		},
 
-		checkAccount:   function() {
-			rentContract.methods.isRegistered().call(function(error, result) {
+		checkAccount:   () => {
+			rentContract.methods.isRegistered().call((error, result) => {
 				if (error) {
 					console.error(error);
 					return;
@@ -154,8 +163,8 @@ let app = new Vue({
 				}
 			});
 		},
-		refreshBalance: function() {
-			rentContract.methods.getBalance().call(function(error, balance) {
+		refreshBalance: () => {
+			rentContract.methods.getBalance().call((error, balance) => {
 				if (error) {
 					console.error(error);
 					return;
@@ -165,14 +174,14 @@ let app = new Vue({
 			});
 		},
 
-		start: function() {
+		start: () => {
 			// Get the contract from the artifacts
 			rentContract = new web3.eth.Contract(rent_artifacts.abi,
 					rent_artifacts.networks[4447].address);
 
 			//Rent.setProvider(web3.currentProvider);
 
-			web3.eth.getAccounts(function(error, accounts) {
+			web3.eth.getAccounts((error, accounts) => {
 				if (error) {
 					showMessage('There was an error fetching your accounts');
 					console.error(error);
@@ -192,7 +201,7 @@ let app = new Vue({
 
 				app.checkAccount();
 
-				rentContract.events.ApartmentAdded({}, function(error, event) {
+				rentContract.events.ApartmentAdded({}, (error, event) => {
 					if (error) {
 						return;
 					}
@@ -206,7 +215,7 @@ let app = new Vue({
 	},
 });
 
-window.addEventListener('load', function() {
+window.addEventListener('load', () => {
 	// We can't use Metamask's web3 currently as subscriptions through websockets are still in dev
 	if (typeof web3 !== 'undefined' && false) {
 		// Use Mist/MetaMask's provider
