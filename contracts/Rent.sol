@@ -34,7 +34,7 @@ contract Rent {
     struct Rental {
         Apartment apartment;
         User tenant;
-        uint16 fromDay; // Day as flat(unix timestamp / (60*60*24))
+        uint16 fromDay; // Day as floor(unix timestamp / (60*60*24))
         uint16 tillDay;
         uint128 deposit;
     }
@@ -46,7 +46,7 @@ contract Rent {
     // Mapping of apartment id (index) to rentals
     mapping(uint => Rental[]) rentals;
 
-    event Rented(uint indexed apartmentId, uint rentalIndex);
+    event Rented(address indexed userAddress, uint apartmentId, uint rentalId);
     event Registered(address indexed userAddress);
     event ApartmentAdded(address indexed userAddress, uint apartmentId);
 
@@ -65,6 +65,7 @@ contract Rent {
     }
 
     function getApartment(uint apartmentId) public view returns (
+        uint id,
         address owner,
         string title,
         string street,
@@ -75,6 +76,7 @@ contract Rent {
         uint128 deposit) {
         Apartment storage apartment = apartments[apartmentId];
 
+        id = apartmentId;
         owner = apartment.owner.addr;
         title = apartment.title;
         street = apartment.street;
@@ -87,6 +89,23 @@ contract Rent {
 
     function getRentalsNum(uint apartmentId) public view returns (uint) {
         return rentals[apartmentId].length;
+    }
+
+    function getRental(uint apartmentIndex, uint rentalIndex) public view returns(
+        uint apartmentId,
+        uint rentalId,
+        address tenant,
+        uint16 fromDay,
+        uint16 tillDay,
+        uint128 deposit
+    ) {
+        Rental storage rental = rentals[apartmentIndex][rentalIndex];
+
+        apartmentId = apartmentIndex;
+        rentalId = rentalIndex;
+        tenant = rental.tenant.addr;
+        fromDay = rental.fromDay;
+        tillDay = rental.tillDay;
     }
 
     function register(string name, string street, string zipCode, string city, string country) public payable {
@@ -138,13 +157,13 @@ contract Rent {
 
         // Add a new rental
         Rental memory rental = Rental(apartment, users[msg.sender], fromDay, tillDay, apartment.deposit);
-        uint rentalIndex = rentals[apartmentId].length;
+        uint rentalId = rentals[apartmentId].length;
         rentals[apartmentId].push(rental);
 
         // Reduce the tenant's balance by deposit and rental fee
         users[msg.sender].balance -= rentalFee + apartment.deposit;
 
-        emit Rented(apartmentId, rentalIndex);
+        emit Rented(msg.sender, apartmentId, rentalId);
     }
 
     function isAvailable(uint apartmentIndex, uint16 fromDay, uint16 tillDay) public view returns (bool) {
@@ -170,5 +189,9 @@ contract Rent {
         }
 
         return true;
+    }
+
+    function getBalanceCost(uint balance) public pure returns (uint) {
+        return balance * 1000;
     }
 }

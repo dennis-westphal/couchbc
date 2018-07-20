@@ -27,6 +27,18 @@
 				SSS
 			</div>
 			<div class="container" v-if="page == 'apartments'">
+				<div class="right col s12 m6">
+					Search for apartments available at:
+					<div class="col s12 m6">
+						<span>From</span>
+						<datepicker v-model="apartmentsFrom"></datepicker>
+					</div>
+					<div class="col s12 m6">
+						<span>Till</span>
+						<datepicker v-model="apartmentsTill"></datepicker>
+					</div>
+				</div>
+
 				<table>
 					<thead>
 					<tr>
@@ -34,6 +46,8 @@
 						<th>Country</th>
 						<th>City</th>
 						<th>Price per night</th>
+						<th>Deposit</th>
+						<th></th>
 					</tr>
 
 					<tr v-for="apartment in apartments">
@@ -41,6 +55,10 @@
 						<td>{{ apartment.country }}</td>
 						<td>{{ apartment.city }}</td>
 						<td>{{ apartment.pricePerNight }}</td>
+						<td>{{ apartment.deposit }}</td>
+						<td>
+							<a class="waves-effect waves-light btn" v-if="apartmentsFrom && apartmentsTill" v-on:click="rent(apartment)">book</a>
+						</td>
 					</tr>
 					</thead>
 				</table>

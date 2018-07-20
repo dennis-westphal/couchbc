@@ -10,6 +10,8 @@ import {default as Web3} from 'web3';
 // Import our contract artifacts and turn them into usable abstractions.
 import rent_artifacts from '../../build/contracts/Rent.json';
 
+import Datepicker from 'vuejs-datepicker';
+
 // Save the account and the rent contract
 let account;
 let rentContract;
@@ -19,8 +21,8 @@ function showMessage(message) {
 }
 
 let app = new Vue({
-	el:      '#app',
-	data:    () => ({
+	el:         '#app',
+	data:       () => ({
 		page:             'start',
 		accountChecked:   false,
 		registered:       false,
@@ -42,9 +44,19 @@ let app = new Vue({
 			deposit:       0,
 		},
 		apartments:       [],
+		apartmentsFrom:   '',
+		apartmentsTill:   '',
 	}),
-	methods: {
-		register:       clickEvent => {
+	watch:      {
+		apartmentsFrom: () => {
+			app.changeApartmentFilter();
+		},
+		apartmentsTill: () => {
+			app.changeApartmentFilter();
+		},
+	},
+	methods:    {
+		register:              clickEvent => {
 			clickEvent.preventDefault();
 
 			// Using the ES2015 spread operator does not work on vue data objects
@@ -82,7 +94,7 @@ let app = new Vue({
 						app.refreshBalance();
 					});
 		},
-		addApartment:   clickEvent => {
+		addApartment:          clickEvent => {
 			clickEvent.preventDefault();
 
 			// Using the ES2015 spread operator does not work on vue data objects
@@ -117,11 +129,24 @@ let app = new Vue({
 						}
 
 						// Clear the form
-						Object.assign(app.$data.newApartmentData,
-								app.$options.data.call(app).newApartmentData);
+						Object.assign(app.$data.newApartmentData, app.$options.data.call(app).newApartmentData);
 					});
 		},
-		loadApartments: () => {
+		changeApartmentFilter: (apartmentsFrom, apartmentsTill) => {
+
+			// Only apply filter if we have dates
+			if (typeof(app.apartmentsFrom) !== 'object' ||
+					typeof(app.apartmentsTill) !== 'object') {
+				app.loadApartments();
+				return;
+			}
+
+			app.loadApartments(
+					app.getUnixDay(app.apartmentsFrom),
+					app.getUnixDay(app.apartmentsTill),
+			);
+		},
+		loadApartments:        (fromDay, tillDay) => {
 			rentContract.methods.getApartmentsNum().
 					call((error, result) => {
 						if (error) {
@@ -134,13 +159,24 @@ let app = new Vue({
 						let numApartments = parseInt(result);
 						for (let i = 0; i < numApartments; i++) {
 							rentContract.methods.getApartment(i).
-									call((error, result) => {
+									call((error, apartment) => {
 										if (error) {
 											console.error(error);
 											return;
 										}
 
-										app.apartments.push(result);
+										// Check if we need to apply a filter
+										if (typeof(fromDay) === 'undefined') {
+											app.apartments.push(apartment);
+											return;
+										}
+
+										rentContract.methods.isAvailable(apartment.id, fromDay, tillDay).
+												call((error, available) => {
+													if (available) {
+														app.apartments.push(apartment);
+													}
+												});
 									});
 						}
 					});
@@ -173,13 +209,31 @@ let app = new Vue({
 				app.balance = parseInt(balance);
 			});
 		},
+		rent:           (apartment) => {
+			let fromDay = app.getUnixDay(app.apartmentsFrom);
+			let tillDay = app.getUnixDay(app.apartmentsTill);
+			let cost = apartment.pricePerNight * (tillDay - fromDay) + apartment.deposit;
 
-		start: () => {
+			let method = rentContract.methods.rent(apartment.id, fromDay, tillDay);
+
+			// If we got enough balance, we can just send it
+			if (cost <= app.balance) {
+				method.estimateGas().then(gasAmount => {
+					method.send({gas: gasAmount});
+				});
+			}
+
+			// Determine the required value to aquire the balance and send it along
+			rentContract.methods.getBalanceCost(cost - app.balance).call((error, costInWei) => {
+				method.estimateGas({value: costInWei}).then(gasAmount => {
+					method.send({gas: gasAmount, value: costInWei});
+				});
+			});
+		},
+
+		start:      () => {
 			// Get the contract from the artifacts
-			rentContract = new web3.eth.Contract(rent_artifacts.abi,
-					rent_artifacts.networks[4447].address);
-
-			//Rent.setProvider(web3.currentProvider);
+			rentContract = new web3.eth.Contract(rent_artifacts.abi, rent_artifacts.networks[4447].address);
 
 			web3.eth.getAccounts((error, accounts) => {
 				if (error) {
@@ -209,9 +263,26 @@ let app = new Vue({
 					app.loadApartments();
 				});
 
+				rentContract.events.Rented({}, (error, event) => {
+					console.log(error, event);
+				});
+
 				app.loadApartments();
 			});
+
+			// Initialize datepickers
+			let elements = document.querySelectorAll('.datepicker');
+			M.Datepicker.init(elements, {
+				format:   'yyyy-mm-dd',
+				onSelect: app.changeApartmentFilter,
+			});
 		},
+		getUnixDay: function(date) {
+			return Math.floor(date.getTime() / (1000 * 60 * 60 * 24));
+		},
+	},
+	components: {
+		'datepicker': Datepicker,
 	},
 });
 
