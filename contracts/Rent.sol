@@ -14,10 +14,13 @@ contract Rent {
 
         uint balance;
 
-        uint[] apartments;
+        Apartment[] apartments;
+        Rental[] rentals;
     }
 
     struct Apartment {
+        uint id;
+
         User owner;
 
         string title;
@@ -33,6 +36,8 @@ contract Rent {
 
     struct Rental {
         Apartment apartment;
+        uint id;
+
         User tenant;
         uint16 fromDay; // Day as floor(unix timestamp / (60*60*24))
         uint16 tillDay;
@@ -60,6 +65,30 @@ contract Rent {
         return users[msg.sender].balance;
     }
 
+    function getUserRentalsNum() public view returns (uint) {
+        require(users[msg.sender].addr != 0);
+
+        return users[msg.sender].rentals.length;
+    }
+
+    function getUserRental(uint userRentalIndex) public view returns (
+        uint apartmentId,
+        uint rentalId,
+        uint16 fromDay,
+        uint16 tillDay,
+        uint128 deposit
+    ) {
+        require(users[msg.sender].addr != 0);
+
+        Rental storage rental = users[msg.sender].rentals[userRentalIndex];
+
+        apartmentId = rental.apartment.id;
+        rentalId = rental.id;
+        fromDay = rental.fromDay;
+        tillDay = rental.tillDay;
+        deposit = rental.deposit;
+    }
+
     function getApartmentsNum() public view returns (uint) {
         return apartments.length;
     }
@@ -76,7 +105,7 @@ contract Rent {
         uint128 deposit) {
         Apartment storage apartment = apartments[apartmentId];
 
-        id = apartmentId;
+        id = apartment.id;
         owner = apartment.owner.addr;
         title = apartment.title;
         street = apartment.street;
@@ -91,7 +120,7 @@ contract Rent {
         return rentals[apartmentId].length;
     }
 
-    function getRental(uint apartmentIndex, uint rentalIndex) public view returns(
+    function getRental(uint apartmentIndex, uint rentalIndex) public view returns (
         uint apartmentId,
         uint rentalId,
         address tenant,
@@ -123,11 +152,11 @@ contract Rent {
     function addApartment(string title, string street, string zipCode, string city, string country, uint128 pricePerNight, uint128 deposit) public {
         require(users[msg.sender].addr != 0);
 
+        uint apartmentId = apartments.length;
         User storage user = users[msg.sender];
 
-        Apartment memory apartment = Apartment(user, title, street, zipCode, city, country, pricePerNight, deposit);
+        Apartment memory apartment = Apartment(apartmentId, user, title, street, zipCode, city, country, pricePerNight, deposit);
 
-        uint apartmentId = apartments.length;
         apartments.push(apartment);
         user.apartments.push(apartmentId);
 
@@ -156,12 +185,15 @@ contract Rent {
         require(users[msg.sender].balance > rentalFee + apartment.deposit);
 
         // Add a new rental
-        Rental memory rental = Rental(apartment, users[msg.sender], fromDay, tillDay, apartment.deposit);
         uint rentalId = rentals[apartmentId].length;
+        Rental memory rental = Rental(apartment, rentalId, users[msg.sender], fromDay, tillDay, apartment.deposit);
         rentals[apartmentId].push(rental);
 
         // Reduce the tenant's balance by deposit and rental fee
         users[msg.sender].balance -= rentalFee + apartment.deposit;
+
+        // Add the rental to the users rentals
+        users[msg.sender].rentals.push(rental);
 
         emit Rented(msg.sender, apartmentId, rentalId);
     }

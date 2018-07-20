@@ -209,6 +209,9 @@ let app = new Vue({
 				app.balance = parseInt(balance);
 			});
 		},
+		updateUserRentals: () => {
+
+		},
 		rent:           (apartment) => {
 			let fromDay = app.getUnixDay(app.apartmentsFrom);
 			let tillDay = app.getUnixDay(app.apartmentsTill);
