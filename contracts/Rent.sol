@@ -21,7 +21,7 @@ contract Rent {
     struct Apartment {
         uint id;
 
-        User owner;
+        address owner;
 
         string title;
 
@@ -35,7 +35,7 @@ contract Rent {
     }
 
     struct Rental {
-        Apartment apartment;
+        uint apartment;
         uint id;
 
         User tenant;
@@ -82,7 +82,7 @@ contract Rent {
 
         Rental storage rental = users[msg.sender].rentals[userRentalIndex];
 
-        apartmentId = rental.apartment.id;
+        apartmentId = rental.apartment;
         rentalId = rental.id;
         fromDay = rental.fromDay;
         tillDay = rental.tillDay;
@@ -106,7 +106,7 @@ contract Rent {
         Apartment storage apartment = apartments[apartmentId];
 
         id = apartment.id;
-        owner = apartment.owner.addr;
+        owner = apartment.owner;
         title = apartment.title;
         street = apartment.street;
         zipCode = apartment.zipCode;
@@ -130,8 +130,8 @@ contract Rent {
     ) {
         Rental storage rental = rentals[apartmentIndex][rentalIndex];
 
-        apartmentId = apartmentIndex;
-        rentalId = rentalIndex;
+        apartmentId = rental.apartment;
+        rentalId = rental.id;
         tenant = rental.tenant.addr;
         fromDay = rental.fromDay;
         tillDay = rental.tillDay;
@@ -141,8 +141,9 @@ contract Rent {
         require(users[msg.sender].addr == 0);
 
         // Adding this is necessary as apparently struct array members cannot be omitted in the struct constructor
-        uint[] storage userApartments;
-        User memory user = User(msg.sender, name, street, zipCode, city, country, msg.value, userApartments);
+        Apartment[] storage userApartments;
+        Rental[] storage userRentals;
+        User memory user = User(msg.sender, name, street, zipCode, city, country, msg.value, userApartments, userRentals);
 
         users[msg.sender] = user;
 
@@ -155,10 +156,10 @@ contract Rent {
         uint apartmentId = apartments.length;
         User storage user = users[msg.sender];
 
-        Apartment memory apartment = Apartment(apartmentId, user, title, street, zipCode, city, country, pricePerNight, deposit);
+        Apartment memory apartment = Apartment(apartmentId, user.addr, title, street, zipCode, city, country, pricePerNight, deposit);
 
         apartments.push(apartment);
-        user.apartments.push(apartmentId);
+        user.apartments.push(apartment);
 
         emit ApartmentAdded(msg.sender, apartmentId);
     }
@@ -186,7 +187,7 @@ contract Rent {
 
         // Add a new rental
         uint rentalId = rentals[apartmentId].length;
-        Rental memory rental = Rental(apartment, rentalId, users[msg.sender], fromDay, tillDay, apartment.deposit);
+        Rental memory rental = Rental(apartmentId, rentalId, users[msg.sender], fromDay, tillDay, apartment.deposit);
         rentals[apartmentId].push(rental);
 
         // Reduce the tenant's balance by deposit and rental fee
@@ -198,12 +199,12 @@ contract Rent {
         emit Rented(msg.sender, apartmentId, rentalId);
     }
 
-    function isAvailable(uint apartmentIndex, uint16 fromDay, uint16 tillDay) public view returns (bool) {
-        require(apartments.length > apartmentIndex);
+    function isAvailable(uint apartmentId, uint16 fromDay, uint16 tillDay) public view returns (bool) {
+        require(apartments.length > apartmentId);
 
         // TODO: Check if apartment was deleted
 
-        Rental[] memory apartmentRentals = rentals[apartmentIndex];
+        Rental[] memory apartmentRentals = rentals[apartmentId];
 
         uint numRentals = apartmentRentals.length;
 
