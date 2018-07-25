@@ -182,7 +182,7 @@ let app = new Vue({
 					});
 		},
 
-		checkAccount:   () => {
+		checkAccount:      () => {
 			rentContract.methods.isRegistered().call((error, result) => {
 				if (error) {
 					console.error(error);
@@ -199,7 +199,7 @@ let app = new Vue({
 				}
 			});
 		},
-		refreshBalance: () => {
+		refreshBalance:    () => {
 			rentContract.methods.getBalance().call((error, balance) => {
 				if (error) {
 					console.error(error);
@@ -212,7 +212,7 @@ let app = new Vue({
 		updateUserRentals: () => {
 
 		},
-		rent:           (apartment) => {
+		rent:              (apartment) => {
 			let fromDay = app.getUnixDay(app.apartmentsFrom);
 			let tillDay = app.getUnixDay(app.apartmentsTill);
 			let cost = apartment.pricePerNight * (tillDay - fromDay) + apartment.deposit;
