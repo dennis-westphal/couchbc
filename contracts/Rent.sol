@@ -20,13 +20,11 @@ contract Rent {
 
     struct Apartment {
         uint id;
+        bool deleted;
 
         address owner;
 
-        bool deleted;
-
         string title;
-
         string street;
         string zipCode;
         string city;
@@ -42,8 +40,8 @@ contract Rent {
         uint id;
 
         uint apartment;
+        address tenant;
 
-        User tenant;
         uint16 fromDay; // Day as floor(unix timestamp / (60*60*24))
         uint16 tillDay;
         uint128 deposit;
@@ -123,11 +121,17 @@ contract Rent {
         deposit = apartment.deposit;
     }
 
-    function getRentalsNum(uint apartmentId) public view returns (uint) {
-        return rentals[apartmentId].length;
+    function getRentalsNum() public view returns (uint) {
+        return rentals.length;
     }
 
-    function getRental(uint apartmentIndex, uint rentalIndex) public view returns (
+    function getApartmentRentalsNum(uint apartmentId) public view returns (uint) {
+        // TODO: Check if apartment exists
+
+        return apartments[apartmentId].rentals.length;
+    }
+
+    function getRental(uint rentalIndex) public view returns (
         uint apartmentId,
         uint rentalId,
         address tenant,
@@ -139,7 +143,7 @@ contract Rent {
 
         rentalId = rental.id;
         apartmentId = rental.apartment;
-        tenant = rental.tenant.addr;
+        tenant = rental.tenant;
         fromDay = rental.fromDay;
         tillDay = rental.tillDay;
     }
@@ -150,7 +154,7 @@ contract Rent {
         // Adding this is necessary as apparently struct array members cannot be omitted in the struct constructor
         uint[] storage userApartments;
         uint[] storage userRentals;
-        User memory user = User(msg.sender, name, street, zipCode, city, country, msg.value, userApartments, userRentals);
+        User memory user = User(msg.sender, name, street, zipCode, city, country, msg.value / getBalanceCost(), userApartments, userRentals);
 
         users[msg.sender] = user;
 
@@ -179,7 +183,7 @@ contract Rent {
         require(apartments[apartmentId].deleted == false);
 
         if (msg.value > 0) {
-            users[msg.sender].balance += msg.value;
+            users[msg.sender].balance += msg.value / getBalanceCost();
         }
 
         // Forbid same-day rentals and rentals that are mixed up (start day after end day)
@@ -198,7 +202,7 @@ contract Rent {
 
         // Add a new rental
         uint rentalId = rentals.length;
-        Rental memory rental = Rental(apartmentId, rentalId, users[msg.sender], fromDay, tillDay, apartment.deposit);
+        Rental memory rental = Rental(apartmentId, rentalId, msg.sender, fromDay, tillDay, apartment.deposit);
 
         // Add the rental to the rentals
         rentals.push(rental);

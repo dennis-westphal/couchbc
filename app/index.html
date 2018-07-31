@@ -31,11 +31,11 @@
 					Search for apartments available at:
 					<div class="col s12 m6">
 						<span>From</span>
-						<datepicker v-model="apartmentsFrom"></datepicker>
+						<datepicker v-model="apartmentsFrom" :disabled-dates="disabledDates" :monday-first="true"></datepicker>
 					</div>
 					<div class="col s12 m6">
 						<span>Till</span>
-						<datepicker v-model="apartmentsTill"></datepicker>
+						<datepicker v-model="apartmentsTill" :disabled-dates="disabledDates" :monday-first="true"></datepicker>
 					</div>
 				</div>
 
@@ -97,7 +97,32 @@
 				</form>
 			</div>
 			<div class="container" v-if="page == 'rentals'">
-				RRR
+				<table>
+					<thead>
+					<tr>
+						<th>Title</th>
+						<th>Country</th>
+						<th>City</th>
+						<th>From</th>
+						<th>Till</th>
+						<th>Deposit</th>
+						<th></th>
+					</tr>
+
+					<tr v-for="rental in rentals">
+						<td>{{ rental.apartment.title }}</td>
+						<td>{{ rental.apartment.country }}</td>
+						<td>{{ rental.apartment.city }}</td>
+						<td>{{ rental.from | formatDate }}</td>
+						<td>{{ rental.till | formatDate }}</td>
+						<td>{{ rental.deposit }}</td>
+						<td>
+							<a class="waves-effect waves-light btn" v-if="depositClaimable(rental)" v-on:click="claimDeposit(rental)">claim
+								deposit</a>
+						</td>
+					</tr>
+					</thead>
+				</table>
 			</div>
 			<div class="container" v-if="page == 'register'">
 				<form>

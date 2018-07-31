@@ -11,6 +11,7 @@ import {default as Web3} from 'web3';
 import rent_artifacts from '../../build/contracts/Rent.json';
 
 import Datepicker from 'vuejs-datepicker';
+import moment from 'moment';
 
 // Save the account and the rent contract
 let account;
@@ -19,6 +20,17 @@ let rentContract;
 function showMessage(message) {
 	M.toast({html: message});
 }
+
+Vue.filter('formatDate', function(date) {
+	if (date) {
+		return moment(date).format('DD.MM.YYYY');
+	}
+});
+Vue.filter('formatDateTime', function(date) {
+	if (date) {
+		return moment(date).format('DD.MM.YYYY hh:mm');
+	}
+});
 
 let app = new Vue({
 	el:         '#app',
@@ -44,8 +56,12 @@ let app = new Vue({
 			deposit:       0,
 		},
 		apartments:       [],
+		rentals:          [],
 		apartmentsFrom:   '',
 		apartmentsTill:   '',
+		disabledDates:    {
+			to: new Date(),
+		},
 	}),
 	watch:      {
 		apartmentsFrom: () => {
@@ -196,6 +212,7 @@ let app = new Vue({
 					showMessage('Successfully logged in');
 
 					app.refreshBalance();
+					app.updateUserRentals();
 				}
 			});
 		},
@@ -210,7 +227,36 @@ let app = new Vue({
 			});
 		},
 		updateUserRentals: () => {
+			rentContract.methods.getUserRentalsNum().call((error, numRentals) => {
+				if (error) {
+					console.error(error);
+					return;
+				}
 
+				if (numRentals === 0) {
+					return;
+				}
+
+				app.rentals = [];
+
+				for (let i = 0; i < numRentals; i++) {
+					rentContract.methods.getUserRental(i).call((error, rental) => {
+						rentContract.methods.getApartment(rental.apartmentId).call((error, apartment) => {
+							rental.apartment = apartment;
+							rental.from = new Date(rental.fromDay * 1000 * 60 * 60 * 24);
+							rental.till = new Date(rental.tillDay * 1000 * 60 * 60 * 24);
+
+							app.rentals.push(rental);
+						});
+					});
+				}
+			});
+		},
+		depositClaimable:  (rental) => {
+			return false;
+		},
+		claimDeposit:      (rental) => {
+			return false;
 		},
 		rent:              (apartment) => {
 			let fromDay = app.getUnixDay(app.apartmentsFrom);
@@ -229,6 +275,7 @@ let app = new Vue({
 			// Determine the required value to aquire the balance and send it along
 			rentContract.methods.getBalanceCost(cost - app.balance).call((error, costInWei) => {
 				method.estimateGas({value: costInWei}).then(gasAmount => {
+					console.log('Sending ' + costInWei + ' wei along with transaction to pay for rent...');
 					method.send({gas: gasAmount, value: costInWei});
 				});
 			});
@@ -266,8 +313,13 @@ let app = new Vue({
 					app.loadApartments();
 				});
 
-				rentContract.events.Rented({}, (error, event) => {
-					console.log(error, event);
+				rentContract.events.Rented({userAddress: account}, (error, event) => {
+					showMessage('Apartment successfully rented');
+
+					app.apartmentsFrom = '';
+					app.apartmentsTill = '';
+
+					app.updateUserRentals();
 				});
 
 				app.loadApartments();

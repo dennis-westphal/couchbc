@@ -36,8 +36,9 @@
 		"webpack-dev-server": "^2.3.0"
 	},
 	"dependencies": {
+		"moment": "^2.22.2",
 		"vue": "^2.5.16",
-		"web3": "^1.0.0-beta.34",
-		"vuejs-datepicker": "^1.5.2"
+		"vuejs-datepicker": "^1.5.2",
+		"web3": "^1.0.0-beta.35"
 	}
 }
