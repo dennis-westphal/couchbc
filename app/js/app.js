@@ -63,6 +63,7 @@ let app = new Vue({
 			deposit:       0,
 		},
 		apartments:       [],
+		userApartments:   [],
 		rentals:          [],
 		apartmentsFrom:   '',
 		apartmentsTill:   '',
@@ -106,6 +107,9 @@ let app = new Vue({
 
 			// Load the apartments
 			app.loadApartments();
+
+			// Load the user apartments
+			app.loadUserApartments();
 		},
 	},
 	methods:    {
@@ -185,7 +189,6 @@ let app = new Vue({
 					});
 		},
 		changeApartmentFilter: (apartmentsFrom, apartmentsTill) => {
-
 			// Only apply filter if we have dates
 			if (typeof(app.apartmentsFrom) !== 'object' ||
 					typeof(app.apartmentsTill) !== 'object') {
@@ -199,41 +202,73 @@ let app = new Vue({
 			);
 		},
 		loadApartments:        (fromDay, tillDay) => {
-			rentContract.methods.getApartmentsNum().
-					call((error, result) => {
+			// TODO: When this is called twice at the same time, it will show duplicate apartments
+			// => The callbacks are executed in parallel
+
+			rentContract.methods.getApartmentsNum().call((error, result) => {
+				if (error) {
+					console.error(error);
+					return;
+				}
+
+				app.apartments = [];
+
+				let numApartments = parseInt(result);
+				for (let i = 0; i < numApartments; i++) {
+					rentContract.methods.getApartment(i).call((error, apartment) => {
 						if (error) {
 							console.error(error);
 							return;
 						}
 
-						app.apartments = [];
-
-						let numApartments = parseInt(result);
-						for (let i = 0; i < numApartments; i++) {
-							rentContract.methods.getApartment(i).
-									call((error, apartment) => {
-										if (error) {
-											console.error(error);
-											return;
-										}
-
-										// Check if we need to apply a filter
-										if (typeof(fromDay) === 'undefined') {
-											app.apartments.push(apartment);
-											return;
-										}
-
-										rentContract.methods.isAvailable(apartment.id, fromDay, tillDay).
-												call((error, available) => {
-													if (available) {
-														app.apartments.push(apartment);
-													}
-												});
-									});
+						// Check if we need to apply a filter
+						if (typeof(fromDay) === 'undefined') {
+							app.apartments.push(apartment);
+							return;
 						}
+
+						rentContract.methods.isAvailable(apartment.id, fromDay, tillDay).call((error, available) => {
+							if (available) {
+								app.apartments.push(apartment);
+							}
+						});
 					});
+				}
+			});
 		},
-		getBlockie:            function(account) {
+		loadUserApartments:    () => {
+			rentContract.methods.getUserApartmentsNum().call((error, result) => {
+				if (error) {
+					console.error(error);
+					return;
+				}
+
+				app.userApartments = [];
+
+				let numApartments = parseInt(result);
+				for (let i = 0; i < numApartments; i++) {
+					rentContract.methods.getUserApartment(i).call((error, apartment) => {
+						if (error) {
+							console.error(error);
+							return;
+						}
+
+						rentContract.methods.getApartmentRentalsNum(apartment.id).call((error, numRentals) => {
+							apartment.rentals = numRentals;
+							app.userApartments.push(apartment);
+						});
+					});
+				}
+			});
+		},
+		disableApartment:      apartment => {
+
+		},
+		showApartmentRentals:  apartment => {
+
+		},
+
+		getBlockie: account => {
 			if (account) {
 				return {
 					'background-image': 'url(\'' + blockies.create({
@@ -274,6 +309,12 @@ let app = new Vue({
 			});
 
 			app.refreshEthBalance();
+		},
+		switchAccount:     index => {
+			app.account = app.accounts[index];
+			let params = new URLSearchParams(location.search);
+			params.set('a', index);
+			window.history.replaceState({}, '', `${location.pathname}?${params}`);
 		},
 		refreshEthBalance: () => {
 			web3.eth.getBalance(app.account).then((weiBalance) => {
@@ -324,16 +365,16 @@ let app = new Vue({
 				}
 			});
 		},
-		depositClaimable:  (rental) => {
+		depositClaimable:  rental => {
 			return false;
 		},
-		claimDeposit:      (rental) => {
+		claimDeposit:      rental => {
 			return false;
 		},
-		rent:              (apartment) => {
+		rent:              apartment => {
 			let fromDay = app.getUnixDay(app.apartmentsFrom);
 			let tillDay = app.getUnixDay(app.apartmentsTill);
-			let cost = apartment.pricePerNight * (tillDay - fromDay) + apartment.deposit;
+			let cost = apartment.pricePerNight * (tillDay - fromDay) + apartment.deposit * 1;
 
 			let method = rentContract.methods.rent(apartment.id, fromDay, tillDay);
 
@@ -342,13 +383,20 @@ let app = new Vue({
 				method.estimateGas().then(gasAmount => {
 					method.send({gas: gasAmount});
 				});
+				return;
 			}
 
 			// Determine the required value to aquire the balance and send it along
 			rentContract.methods.creditsToWei(cost - app.balance).call((error, costInWei) => {
+				if (error) {
+					console.error('Could not determine wei cost', error);
+					showMessage('Could not book apartment');
+					return;
+				}
+
 				method.estimateGas({value: costInWei}).then(gasAmount => {
-					console.log('Sending ' + costInWei + ' wei along with transaction to pay for rent...');
-					method.send({gas: gasAmount, value: costInWei});
+					console.log('Sending ' + (costInWei + 21000) + ' wei along with transaction to pay for rent...');
+					method.send({gas: gasAmount + 21000, value: costInWei});
 				});
 			});
 		},
@@ -372,8 +420,9 @@ let app = new Vue({
 
 				app.accounts = accounts;
 
-				// Use the first account
-				app.account = accounts[0];
+				// Use the first account unless specified otherwise in the params
+				const params = new URLSearchParams(location.search);
+				app.account = accounts[params.get('a') || 0];
 
 				app.registerEvents();
 			});
@@ -397,6 +446,7 @@ let app = new Vue({
 				}
 
 				app.loadApartments();
+				app.loadUserApartments();
 			});
 
 			rentContract.events.Rented({userAddress: app.account}, (error, event) => {
@@ -412,6 +462,7 @@ let app = new Vue({
 				app.apartmentsTill = '';
 
 				app.updateUserRentals();
+				app.refreshBalance();
 			});
 
 			rentContract.events.Transferred({userAddress: app.account}, (error, event) => {
@@ -442,13 +493,13 @@ let app = new Vue({
 				app.refreshEthBalance();
 			});
 		},
-		getUnixDay:     function(date) {
+		getUnixDay:     date => {
 			return Math.floor(date.getTime() / (1000 * 60 * 60 * 24));
 		},
-		weiToEth:       function(wei) {
+		weiToEth:       wei => {
 			return Math.floor(wei / Math.pow(10, 15)) / Math.pow(10, 3);
 		},
-		ethToWei:       function(eth) {
+		ethToWei:       eth => {
 			return eth * Math.pow(10, 18);
 		},
 	},

@@ -22,7 +22,7 @@ contract Rent {
 
     struct Apartment {
         uint id;
-        bool deleted;
+        bool disabled;
 
         address owner;
 
@@ -70,6 +70,40 @@ contract Rent {
         return users[msg.sender].balance;
     }
 
+    function getUserApartmentsNum() public view returns (uint) {
+        require(users[msg.sender].addr != 0);
+
+        return users[msg.sender].apartments.length;
+    }
+
+    function getUserApartment(uint userApartmentIndex) public view returns (
+        uint id,
+        bool disabled,
+        address owner,
+        string title,
+        string street,
+        string zipCode,
+        string city,
+        string country,
+        uint128 pricePerNight,
+        uint128 deposit) {
+        require(users[msg.sender].addr != 0);
+        // TODO: Check if apartment exists
+
+        Apartment storage apartment = apartments[users[msg.sender].apartments[userApartmentIndex]];
+
+        id = apartment.id;
+        disabled = apartment.disabled;
+        owner = apartment.owner;
+        title = apartment.title;
+        street = apartment.street;
+        zipCode = apartment.zipCode;
+        city = apartment.city;
+        country = apartment.country;
+        pricePerNight = apartment.pricePerNight;
+        deposit = apartment.deposit;
+    }
+
     function getUserRentalsNum() public view returns (uint) {
         require(users[msg.sender].addr != 0);
 
@@ -100,7 +134,7 @@ contract Rent {
 
     function getApartment(uint apartmentId) public view returns (
         uint id,
-        bool deleted,
+        bool disabled,
         address owner,
         string title,
         string street,
@@ -114,7 +148,7 @@ contract Rent {
         Apartment storage apartment = apartments[apartmentId];
 
         id = apartment.id;
-        deleted = apartment.deleted;
+        disabled = apartment.disabled;
         owner = apartment.owner;
         title = apartment.title;
         street = apartment.street;
@@ -213,14 +247,14 @@ contract Rent {
 
     function rent(uint apartmentId, uint16 fromDay, uint16 tillDay) public payable {
         require(users[msg.sender].addr != 0);
-        require(apartments[apartmentId].deleted == false);
+        require(apartments[apartmentId].disabled == false);
+
+        // Forbid same-day rentals and rentals that are mixed up (start day after end day)
+        require(tillDay > fromDay);
 
         if (msg.value > 0) {
             users[msg.sender].balance += weiToCredits(msg.value);
         }
-
-        // Forbid same-day rentals and rentals that are mixed up (start day after end day)
-        require(tillDay > fromDay);
 
         // Check if the apartment is occupied
         require(isAvailable(apartmentId, fromDay, tillDay));
@@ -231,11 +265,11 @@ contract Rent {
         uint rentalFee = apartment.pricePerNight * (tillDay - fromDay);
 
         // Check if the tenant has enough balance to pay for the apartment rental and the deposit
-        require(users[msg.sender].balance > rentalFee + apartment.deposit);
+        require(users[msg.sender].balance >= rentalFee + apartment.deposit);
 
         // Add a new rental
         uint rentalId = rentals.length;
-        Rental memory rental = Rental(apartmentId, rentalId, msg.sender, fromDay, tillDay, apartment.deposit);
+        Rental memory rental = Rental(rentalId, apartmentId, msg.sender, fromDay, tillDay, apartment.deposit);
 
         // Add the rental to the rentals
         rentals.push(rental);
@@ -257,7 +291,10 @@ contract Rent {
 
     function isAvailable(uint apartmentId, uint16 fromDay, uint16 tillDay) public view returns (bool) {
         require(apartments.length > apartmentId);
-        require(apartments[apartmentId].deleted == false);
+        require(apartments[apartmentId].disabled == false);
+
+        // Forbid same-day rentals and rentals that are mixed up (start day after end day)
+        require(tillDay > fromDay);
 
         uint[] memory apartmentRentals = apartments[apartmentId].rentals;
 
@@ -265,12 +302,14 @@ contract Rent {
 
         // Check all rentals for the apartment
         for (uint i = 0; i < numRentals; i ++) {
-            if (
-            // Check if the rental ends in the requested period
-                rentals[apartmentRentals[i]].fromDay < fromDay && rentals[apartmentRentals[i]].tillDay > fromDay ||
+            Rental storage rental = rentals[apartmentRentals[i]];
 
-                // Check if the rental starts in the requested period
-                rentals[apartmentRentals[i]].fromDay < tillDay && rentals[apartmentRentals[i]].tillDay > tillDay
+            if (
+            // Check if the requested rental starts in the time frame of the currently checked rental
+                fromDay >= rental.fromDay && fromDay < rental.tillDay ||
+
+                // Check if the requested rental ends in the time frame of the currently checked rental
+                tillDay > rental.fromDay && fromDay <= rental.fromDay
             ) {
                 return false;
             }

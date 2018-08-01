@@ -13,7 +13,7 @@
 			<span class="right">
 				<a class="dropdown-trigger" href="#!" data-target="account-select"><i class="material-icons right">arrow_drop_down</i></a>
 				<ul id="account-select" class="dropdown-content">
-					<li v-bind:class="{account: true, active: account == currentAccount}" v-for="currentAccount in accounts" v-on:click="account = currentAccount">
+					<li v-bind:class="{account: true, active: account == currentAccount}" v-for="(currentAccount, index) in accounts" v-on:click="switchAccount(index)">
 						<span v-bind:style="getBlockie(currentAccount)"></span>
 						{{currentAccount.substr(0, 10)}}...
 					</li>
@@ -34,6 +34,7 @@
 				<li><a href="#" v-on:click.stop="page = 'start'">Start</a></li>
 				<li><a href="#" v-on:click.stop="page = 'apartments'">Show apartments</a></li>
 				<li><a href="#" v-on:click.stop="page = 'add-apartment'">Add apartments</a></li>
+				<li><a href="#" v-on:click.stop="page = 'user-apartments'">Show my apartments</a></li>
 				<li><a href="#" v-on:click.stop="page = 'rentals'">Show my rentals</a></li>
 			</ul>
 		</div>
@@ -42,7 +43,7 @@
 				Start
 			</div>
 			<div class="container" v-if="page == 'apartments'">
-				<div class="right col s12 m6">
+				<div class="col s12 m6">
 					Search for apartments available at:
 					<div class="col s12 m6">
 						<span>From</span>
@@ -78,6 +79,35 @@
 					</thead>
 				</table>
 			</div>
+			<div class="container" v-if="page == 'user-apartments'">
+				<table>
+					<thead>
+					<tr>
+						<th>Title</th>
+						<th>Country</th>
+						<th>City</th>
+						<th>Price per night</th>
+						<th>Deposit</th>
+						<th>Rentals</th>
+						<th></th>
+					</tr>
+
+					<tr v-for="apartment in userApartments">
+						<td>{{ apartment.title }}</td>
+						<td>{{ apartment.country }}</td>
+						<td>{{ apartment.city }}</td>
+						<td>{{ apartment.pricePerNight }}</td>
+						<td>{{ apartment.deposit }}</td>
+						<td>
+							<a href="#" v-on:click.stop="showApartmentRentals(apartment)">{{ apartment.rentals }}</a>
+						</td>
+						<td>
+							<a class="waves-effect waves-light btn" v-on:click.stop="disableApartment(apartment)">delete</a>
+						</td>
+					</tr>
+					</thead>
+				</table>
+			</div>
 			<div class="container" v-if="page == 'add-apartment'">
 				<form>
 					<div class="input-field">
@@ -108,7 +138,7 @@
 						<label for="add-apartment-deposit">Deposit</label>
 						<input id="add-apartment-deposit" type="number" name="deposit" v-model="newApartmentData.deposit">
 					</div>
-					<a class="waves-effect waves-light btn" v-on:click.stop="addApartment">Register</a>
+					<a class="waves-effect waves-light btn" v-on:click.stop="addApartment">Add apartment</a>
 				</form>
 			</div>
 			<div class="container" v-if="page == 'rentals'">
