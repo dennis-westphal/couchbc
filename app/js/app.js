@@ -38,7 +38,12 @@ let app = new Vue({
 		page:             'start',
 		accountChecked:   false,
 		registered:       false,
-		balance:          '',
+		balance:          0,
+		ethBalance:       0,
+		transferEth:      0,
+		transferCredits:  0,
+		payoutEth:        0,
+		payoutCredits:    0,
 		newUserData:      {
 			name:    '',
 			street:  '',
@@ -69,6 +74,26 @@ let app = new Vue({
 		},
 		apartmentsTill: () => {
 			app.changeApartmentFilter();
+		},
+		transferEth:    (eth) => {
+			rentContract.methods.weiToCredits(app.ethToWei(eth)).call((error, credits) => {
+				if (error) {
+					console.error(error);
+					return;
+				}
+
+				app.transferCredits = credits;
+			});
+		},
+		payoutCredits:  (credits) => {
+			rentContract.methods.creditsToWei(credits).call((error, wei) => {
+				if (error) {
+					console.error(error);
+					return;
+				}
+
+				app.payoutEth = app.weiToEth(wei);
+			});
 		},
 	},
 	methods:    {
@@ -225,6 +250,31 @@ let app = new Vue({
 
 				app.balance = parseInt(balance);
 			});
+
+			app.refreshEthBalance();
+		},
+		refreshEthBalance: () => {
+			web3.eth.getBalance(account).then((weiBalance) => {
+				app.ethBalance = app.weiToEth(weiBalance);
+			});
+		},
+		doTransfer:        () => {
+			let wei = app.ethToWei(app.transferEth);
+
+			let method = rentContract.methods.transfer();
+			method.estimateGas({value: wei}).then(gasAmount => {
+				method.send({gas: gasAmount, value: wei});
+
+				showMessage('Transfer started...');
+			});
+		},
+		doPayout:          () => {
+			let method = rentContract.methods.payout(app.payoutCredits);
+			method.estimateGas().then(gasAmount => {
+				method.send({gas: gasAmount + 21000});
+
+				showMessage('Payout started...');
+			});
 		},
 		updateUserRentals: () => {
 			rentContract.methods.getUserRentalsNum().call((error, numRentals) => {
@@ -273,7 +323,7 @@ let app = new Vue({
 			}
 
 			// Determine the required value to aquire the balance and send it along
-			rentContract.methods.getBalanceCost(cost - app.balance).call((error, costInWei) => {
+			rentContract.methods.creditsToWei(cost - app.balance).call((error, costInWei) => {
 				method.estimateGas({value: costInWei}).then(gasAmount => {
 					console.log('Sending ' + costInWei + ' wei along with transaction to pay for rent...');
 					method.send({gas: gasAmount, value: costInWei});
@@ -281,7 +331,7 @@ let app = new Vue({
 			});
 		},
 
-		start:      () => {
+		start:          () => {
 			// Get the contract from the artifacts
 			rentContract = new web3.eth.Contract(rent_artifacts.abi, rent_artifacts.networks[4447].address);
 
@@ -303,25 +353,8 @@ let app = new Vue({
 				web3.eth.defaultAccount = account;
 				rentContract.options.from = account;
 
+				app.registerEvents();
 				app.checkAccount();
-
-				rentContract.events.ApartmentAdded({}, (error, event) => {
-					if (error) {
-						return;
-					}
-
-					app.loadApartments();
-				});
-
-				rentContract.events.Rented({userAddress: account}, (error, event) => {
-					showMessage('Apartment successfully rented');
-
-					app.apartmentsFrom = '';
-					app.apartmentsTill = '';
-
-					app.updateUserRentals();
-				});
-
 				app.loadApartments();
 			});
 
@@ -332,8 +365,68 @@ let app = new Vue({
 				onSelect: app.changeApartmentFilter,
 			});
 		},
-		getUnixDay: function(date) {
+		registerEvents: function() {
+			rentContract.events.ApartmentAdded({}, (error, event) => {
+				if (error) {
+					console.error(error);
+					showMessage('Apartment could not be added');
+					return;
+				}
+
+				app.loadApartments();
+			});
+
+			rentContract.events.Rented({userAddress: account}, (error, event) => {
+				if (error) {
+					console.error(error);
+					showMessage('Apartment could not be rented');
+					return;
+				}
+
+				showMessage('Apartment successfully rented');
+
+				app.apartmentsFrom = '';
+				app.apartmentsTill = '';
+
+				app.updateUserRentals();
+			});
+
+			rentContract.events.Transferred({userAddress: account}, (error, event) => {
+				if (error) {
+					console.error(error);
+					showMessage('Failed to buy credits');
+					return;
+				}
+				showMessage('Credits successfully bought');
+
+				app.transferEth = 0;
+
+				app.balance = event.returnValues.newBalance;
+				app.refreshEthBalance();
+			});
+
+			rentContract.events.Paidout({userAddress: account}, (error, event) => {
+				if (error) {
+					console.error(error);
+					showMessage('Failed to pay out credits');
+					return;
+				}
+				showMessage('Successfully paid out credits');
+
+				app.payoutCredits = 0;
+
+				app.balance = event.returnValues.newBalance;
+				app.refreshEthBalance();
+			});
+		},
+		getUnixDay:     function(date) {
 			return Math.floor(date.getTime() / (1000 * 60 * 60 * 24));
+		},
+		weiToEth:       function(wei) {
+			return Math.floor(wei / Math.pow(10, 15)) / Math.pow(10, 3);
+		},
+		ethToWei:       function(eth) {
+			return eth * Math.pow(10, 18);
 		},
 	},
 	components: {

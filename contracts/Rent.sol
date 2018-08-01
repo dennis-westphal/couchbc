@@ -3,6 +3,8 @@ pragma solidity ^0.4.24;
 import "./Library.sol";
 
 contract Rent {
+    uint constant creditConversionFactor = 500000000000000;
+
     struct User {
         address addr;
 
@@ -52,9 +54,11 @@ contract Rent {
     Apartment[] public apartments;
     Rental[] public rentals;
 
-    event Rented(address indexed userAddress, uint apartmentId, uint rentalId);
+    event Rented(address indexed userAddress, address indexed ownerAddress, uint apartmentId, uint rentalId);
     event Registered(address indexed userAddress);
     event ApartmentAdded(address indexed userAddress, uint apartmentId);
+    event Transferred(address indexed userAddress, uint newBalance);
+    event Paidout(address indexed userAddress, uint newBalance);
 
     function isRegistered() public view returns (bool) {
         return users[msg.sender].addr != 0;
@@ -146,19 +150,48 @@ contract Rent {
         tenant = rental.tenant;
         fromDay = rental.fromDay;
         tillDay = rental.tillDay;
+        deposit = rental.deposit;
     }
 
     function register(string name, string street, string zipCode, string city, string country) public payable {
         require(users[msg.sender].addr == 0);
 
         // Adding this is necessary as apparently struct array members cannot be omitted in the struct constructor
-        uint[] storage userApartments;
-        uint[] storage userRentals;
-        User memory user = User(msg.sender, name, street, zipCode, city, country, msg.value / getBalanceCost(), userApartments, userRentals);
+        uint[] memory userApartments;
+        uint[] memory userRentals;
+        User memory user = User(msg.sender, name, street, zipCode, city, country, weiToCredits(msg.value), userApartments, userRentals);
 
         users[msg.sender] = user;
 
         emit Registered(msg.sender);
+    }
+
+    function transfer() public payable {
+        require(users[msg.sender].addr != 0);
+
+        // Increase the user's balance
+        users[msg.sender].balance += weiToCredits(msg.value);
+
+        emit Transferred(msg.sender, users[msg.sender].balance);
+    }
+
+    function payout(uint credits) public {
+        require(users[msg.sender].addr != 0);
+        require(credits > 0);
+        require(users[msg.sender].balance >= credits);
+
+        uint desiredWei = creditsToWei(credits);
+
+        // Only perform the transaction if the contract's balance is high enough
+        require(address(this).balance >= desiredWei);
+
+        // Reduce the user's balance
+        users[msg.sender].balance -= credits;
+
+        // Send the wei to the user
+        msg.sender.transfer(desiredWei);
+
+        emit Paidout(msg.sender, users[msg.sender].balance);
     }
 
     function addApartment(string title, string street, string zipCode, string city, string country, uint128 pricePerNight, uint128 deposit) public {
@@ -168,7 +201,7 @@ contract Rent {
         User storage user = users[msg.sender];
 
         // Adding this is necessary as apparently struct array members cannot be omitted in the struct constructor
-        uint[] storage apartmentRentals;
+        uint[] memory apartmentRentals;
 
         Apartment memory apartment = Apartment(apartmentId, false, user.addr, title, street, zipCode, city, country, pricePerNight, deposit, apartmentRentals);
 
@@ -183,7 +216,7 @@ contract Rent {
         require(apartments[apartmentId].deleted == false);
 
         if (msg.value > 0) {
-            users[msg.sender].balance += msg.value / getBalanceCost();
+            users[msg.sender].balance += weiToCredits(msg.value);
         }
 
         // Forbid same-day rentals and rentals that are mixed up (start day after end day)
@@ -216,7 +249,10 @@ contract Rent {
         // Reduce the tenant's balance by deposit and rental fee
         users[msg.sender].balance -= rentalFee + apartment.deposit;
 
-        emit Rented(msg.sender, apartmentId, rentalId);
+        // Increase the owner's balance by rental fee (the deposit is still in the rental)
+        users[apartment.owner].balance += rentalFee;
+
+        emit Rented(msg.sender, apartment.owner, apartmentId, rentalId);
     }
 
     function isAvailable(uint apartmentId, uint16 fromDay, uint16 tillDay) public view returns (bool) {
@@ -243,7 +279,11 @@ contract Rent {
         return true;
     }
 
-    function getBalanceCost(uint balance) public pure returns (uint) {
-        return balance * 1000;
+    function creditsToWei(uint credits) public pure returns (uint) {
+        return credits * creditConversionFactor;
+    }
+
+    function weiToCredits(uint value) public pure returns (uint) {
+        return value / creditConversionFactor;
     }
 }

@@ -8,23 +8,27 @@
 	<nav>
 		<div class="nav-wrapper">
 			<a href="#" class="left">Rental application</a>
-			<span class="right" v-if="registered"><span id="balance">{{ balance }}</span> credits</span>
-			<span class="right" v-if="!registered && accountChecked"><a href="#" v-on:click="page = 'register'">Register</a></span>
+			<span class="right" v-if="registered">
+				{{ balance }} credits
+				<a href="#" v-on:click.stop="page = 'transfer'" class="transfer" v-if="ethBalance > 0">&lt;</a> | <a href="#" v-on:click.stop="page = 'payout'" class="payout" v-if="balance > 0">&gt;</a>
+				~{{ ethBalance }} eth
+			</span>
+			<span class="right" v-if="!registered && accountChecked"><a href="#" v-on:click.stop="page = 'register'">Register</a></span>
 		</div>
 	</nav>
 
 	<div class="row">
 		<div class="col m3 menu">
 			<ul>
-				<li><a href="#" v-on:click="page = 'start'">Start</a></li>
-				<li><a href="#" v-on:click="page = 'apartments'">Show apartments</a></li>
-				<li><a href="#" v-on:click="page = 'add-apartment'">Add apartments</a></li>
-				<li><a href="#" v-on:click="page = 'rentals'">Show my rentals</a></li>
+				<li><a href="#" v-on:click.stop="page = 'start'">Start</a></li>
+				<li><a href="#" v-on:click.stop="page = 'apartments'">Show apartments</a></li>
+				<li><a href="#" v-on:click.stop="page = 'add-apartment'">Add apartments</a></li>
+				<li><a href="#" v-on:click.stop="page = 'rentals'">Show my rentals</a></li>
 			</ul>
 		</div>
 		<div class="col m9">
 			<div class="container" v-if="page == 'start'">
-				SSS
+				Start
 			</div>
 			<div class="container" v-if="page == 'apartments'">
 				<div class="right col s12 m6">
@@ -57,7 +61,7 @@
 						<td>{{ apartment.pricePerNight }}</td>
 						<td>{{ apartment.deposit }}</td>
 						<td>
-							<a class="waves-effect waves-light btn" v-if="apartmentsFrom && apartmentsTill" v-on:click="rent(apartment)">book</a>
+							<a class="waves-effect waves-light btn" v-if="apartmentsFrom && apartmentsTill" v-on:click.stop="rent(apartment)">book</a>
 						</td>
 					</tr>
 					</thead>
@@ -93,7 +97,7 @@
 						<label for="add-apartment-deposit">Deposit</label>
 						<input id="add-apartment-deposit" type="number" name="deposit" v-model="newApartmentData.deposit">
 					</div>
-					<button v-on:click="addApartment">Register</button>
+					<a class="waves-effect waves-light btn" v-on:click.stop="addApartment">Register</a>
 				</form>
 			</div>
 			<div class="container" v-if="page == 'rentals'">
@@ -117,7 +121,7 @@
 						<td>{{ rental.till | formatDate }}</td>
 						<td>{{ rental.deposit }}</td>
 						<td>
-							<a class="waves-effect waves-light btn" v-if="depositClaimable(rental)" v-on:click="claimDeposit(rental)">claim
+							<a class="waves-effect waves-light btn" v-if="depositClaimable(rental)" v-on:click.stop="claimDeposit(rental)">claim
 								deposit</a>
 						</td>
 					</tr>
@@ -146,7 +150,31 @@
 						<label for="register-country">Country</label>
 						<input id="register-country" type="text" name="country" v-model="newUserData.country">
 					</div>
-					<button v-on:click="register">Register</button>
+					<a class="waves-effect waves-light btn" v-on:click.stop="register">Register</a>
+				</form>
+			</div>
+			<div class="container" v-if="page == 'transfer'">
+				<h2>Buy credits</h2>
+				<p>Use ether to buy credits</p>
+				<form>
+					<div class="input-field">
+						<label for="transfer-eth">Eth</label>
+						<input id="transfer-eth" type="number" min="0.001" step="0.001" name="eth" v-model="transferEth">
+					</div>
+					<p>=> {{transferCredits}} credits</p>
+					<a class="waves-effect waves-light btn" v-on:click.stop="doTransfer">Transfer</a>
+				</form>
+			</div>
+			<div class="container" v-if="page == 'payout'">
+				<h2>Payout</h2>
+				<p>Convert credits and transfer to account address</p>
+				<form>
+					<div class="input-field">
+						<label for="payout-credits">Credits</label>
+						<input id="payout-credits" type="number" min="1" v-bind:max="balance" name="credits" v-model="payoutCredits">
+					</div>
+					<p>=> {{payoutEth}} eth</p>
+					<a class="waves-effect waves-light btn" v-on:click.stop="doPayout">Payout</a>
 				</form>
 			</div>
 		</div>

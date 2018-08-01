@@ -1,3 +1,17 @@
+nav {
+    background-color: #838383;
+    height: 32px !important;
+}
+
 div.nav-wrapper {
     padding: 0 2%;
+    line-height: 32px !important;
+}
+
+a.transfer {
+    color: #00E676;
+}
+
+a.payout {
+    color: #FF0800
 }
