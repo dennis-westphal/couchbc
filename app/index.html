@@ -2,18 +2,29 @@
 <html>
 <head>
 	<title>Rental application</title>
+	<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 </head>
 <body>
 <div id="app">
 	<nav>
 		<div class="nav-wrapper">
 			<a href="#" class="left">Rental application</a>
+
+			<span class="right">
+				<a class="dropdown-trigger" href="#!" data-target="account-select"><i class="material-icons right">arrow_drop_down</i></a>
+				<ul id="account-select" class="dropdown-content">
+					<li v-bind:class="{account: true, active: account == currentAccount}" v-for="currentAccount in accounts" v-on:click="account = currentAccount">
+						<span v-bind:style="getBlockie(currentAccount)"></span>
+						{{currentAccount.substr(0, 10)}}...
+					</li>
+				</ul>
+			</span>
 			<span class="right" v-if="registered">
 				{{ balance }} credits
 				<a href="#" v-on:click.stop="page = 'transfer'" class="transfer" v-if="ethBalance > 0">&lt;</a> | <a href="#" v-on:click.stop="page = 'payout'" class="payout" v-if="balance > 0">&gt;</a>
 				~{{ ethBalance }} eth
 			</span>
-			<span class="right" v-if="!registered && accountChecked"><a href="#" v-on:click.stop="page = 'register'">Register</a></span>
+			<span class="right" v-if="!registered"><a href="#" v-on:click.stop="page = 'register'">Register</a></span>
 		</div>
 	</nav>
 

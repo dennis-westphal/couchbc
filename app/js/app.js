@@ -13,8 +13,9 @@ import rent_artifacts from '../../build/contracts/Rent.json';
 import Datepicker from 'vuejs-datepicker';
 import moment from 'moment';
 
-// Save the account and the rent contract
-let account;
+require('./blockies.min.js');
+
+// Save the rent contract
 let rentContract;
 
 function showMessage(message) {
@@ -35,8 +36,9 @@ Vue.filter('formatDateTime', function(date) {
 let app = new Vue({
 	el:         '#app',
 	data:       () => ({
+		accounts:         [],
+		account:          null,
 		page:             'start',
-		accountChecked:   false,
 		registered:       false,
 		balance:          0,
 		ethBalance:       0,
@@ -95,6 +97,16 @@ let app = new Vue({
 				app.payoutEth = app.weiToEth(wei);
 			});
 		},
+		account:        (account) => {
+			web3.eth.defaultAccount = app.account;
+			rentContract.options.from = app.account;
+
+			// Check if the eth account has an account
+			app.checkAccount();
+
+			// Load the apartments
+			app.loadApartments();
+		},
 	},
 	methods:    {
 		register:              clickEvent => {
@@ -114,7 +126,7 @@ let app = new Vue({
 				method.send({gas: gasAmount});
 			});
 
-			rentContract.once('Registered', {filter: {userAddress: account}},
+			rentContract.once('Registered', {filter: {userAddress: app.account}},
 					(error, event) => {
 						if (error) {
 							showMessage('Could not process registration');
@@ -124,7 +136,6 @@ let app = new Vue({
 
 						showMessage('Registered successfully');
 
-						app.accountChecked = true;
 						app.registered = true;
 
 						// Change the page if we're currently on the registration page
@@ -155,7 +166,7 @@ let app = new Vue({
 			});
 
 			rentContract.once('ApartmentAdded',
-					{filter: {userAddress: account}}, (error, event) => {
+					{filter: {userAddress: app.account}}, (error, event) => {
 						if (error) {
 							showMessage('Could not add apartment');
 							console.error(error);
@@ -222,6 +233,18 @@ let app = new Vue({
 						}
 					});
 		},
+		getBlockie:            function(account) {
+			if (account) {
+				return {
+					'background-image': 'url(\'' + blockies.create({
+						seed: account,
+					}).toDataURL() + '\')',
+				};
+			}
+			else {
+				return {};
+			}
+		},
 
 		checkAccount:      () => {
 			rentContract.methods.isRegistered().call((error, result) => {
@@ -230,7 +253,6 @@ let app = new Vue({
 					return;
 				}
 
-				app.accountChecked = true;
 				app.registered = result;
 
 				if (app.registered) {
@@ -254,7 +276,7 @@ let app = new Vue({
 			app.refreshEthBalance();
 		},
 		refreshEthBalance: () => {
-			web3.eth.getBalance(account).then((weiBalance) => {
+			web3.eth.getBalance(app.account).then((weiBalance) => {
 				app.ethBalance = app.weiToEth(weiBalance);
 			});
 		},
@@ -348,14 +370,12 @@ let app = new Vue({
 					return;
 				}
 
-				// Set the default account
-				account = accounts[0].toLowerCase();
-				web3.eth.defaultAccount = account;
-				rentContract.options.from = account;
+				app.accounts = accounts;
+
+				// Use the first account
+				app.account = accounts[0];
 
 				app.registerEvents();
-				app.checkAccount();
-				app.loadApartments();
 			});
 
 			// Initialize datepickers
@@ -364,6 +384,9 @@ let app = new Vue({
 				format:   'yyyy-mm-dd',
 				onSelect: app.changeApartmentFilter,
 			});
+
+			// Initialize dropdown trigger
+			M.Dropdown.init(document.querySelectorAll('.dropdown-trigger'));
 		},
 		registerEvents: function() {
 			rentContract.events.ApartmentAdded({}, (error, event) => {
@@ -376,7 +399,7 @@ let app = new Vue({
 				app.loadApartments();
 			});
 
-			rentContract.events.Rented({userAddress: account}, (error, event) => {
+			rentContract.events.Rented({userAddress: app.account}, (error, event) => {
 				if (error) {
 					console.error(error);
 					showMessage('Apartment could not be rented');
@@ -391,7 +414,7 @@ let app = new Vue({
 				app.updateUserRentals();
 			});
 
-			rentContract.events.Transferred({userAddress: account}, (error, event) => {
+			rentContract.events.Transferred({userAddress: app.account}, (error, event) => {
 				if (error) {
 					console.error(error);
 					showMessage('Failed to buy credits');
@@ -405,7 +428,7 @@ let app = new Vue({
 				app.refreshEthBalance();
 			});
 
-			rentContract.events.Paidout({userAddress: account}, (error, event) => {
+			rentContract.events.Paidout({userAddress: app.account}, (error, event) => {
 				if (error) {
 					console.error(error);
 					showMessage('Failed to pay out credits');
