@@ -498,6 +498,17 @@ let app = new Vue({
 				app.loadUserApartments();
 			});
 
+			rentContract.events.ApartmentEnabled({userAddress: app.account}, (error, event) => {
+				if (error) {
+					console.error(error);
+					showMessage('Apartment could not be enabled');
+					return;
+				}
+				showMessage('Apartment successfully enabled');
+
+				app.loadApartments();
+				app.loadUserApartments();
+			});
 			rentContract.events.ApartmentDisabled({userAddress: app.account}, (error, event) => {
 				if (error) {
 					console.error(error);

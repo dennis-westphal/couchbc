@@ -135,7 +135,8 @@
 							<a href="#" v-on:click.stop="showApartmentRentals(apartment)">{{ apartment.rentals }}</a>
 						</td>
 						<td>
-							<a class="waves-effect waves-light btn" v-on:click.stop="disableApartment(apartment)">Disable</a>
+							<a class="waves-effect waves-light btn" v-if="apartment.disabled" v-on:click.stop="enableApartment(apartment)">Enable</a>
+							<a class="waves-effect waves-light btn" v-if="!apartment.disabled" v-on:click.stop="disableApartment(apartment)">Disable</a>
 						</td>
 					</tr>
 					</thead>

@@ -58,6 +58,7 @@ contract Rent {
     event Registered(address indexed userAddress);
 
     event ApartmentAdded(address indexed userAddress, uint apartmentId);
+    event ApartmentEnabled(address indexed userAddress, uint apartmentId);
     event ApartmentDisabled(address indexed userAddress, uint apartmentId);
 
     event Rented(address indexed userAddress, address indexed ownerAddress, uint apartmentId, uint rentalId);
@@ -277,6 +278,15 @@ contract Rent {
         user.apartments.push(apartmentId);
 
         emit ApartmentAdded(msg.sender, apartmentId);
+    }
+
+    function enableApartment(uint apartmentId) public {
+        require(apartments[apartmentId].disabled == true);
+        require(apartments[apartmentId].owner == msg.sender);
+
+        apartments[apartmentId].disabled = false;
+
+        emit ApartmentEnabled(msg.sender, apartmentId);
     }
 
     function disableApartment(uint apartmentId) public {
