@@ -65,6 +65,10 @@ let app = new Vue({
 		apartments:       [],
 		userApartments:   [],
 		rentals:          [],
+		currentApartment: null,
+		currentRental:    null,
+		deductAmount:     0,
+		apartmentRentals: [],
 		apartmentsFrom:   '',
 		apartmentsTill:   '',
 		disabledDates:    {
@@ -202,18 +206,17 @@ let app = new Vue({
 			);
 		},
 		loadApartments:        (fromDay, tillDay) => {
-			// TODO: When this is called twice at the same time, it will show duplicate apartments
-			// => The callbacks are executed in parallel
-
 			rentContract.methods.getApartmentsNum().call((error, result) => {
 				if (error) {
 					console.error(error);
 					return;
 				}
 
-				app.apartments = [];
-
+				let apartments = [];
 				let numApartments = parseInt(result);
+
+				let promises = [];
+
 				for (let i = 0; i < numApartments; i++) {
 					rentContract.methods.getApartment(i).call((error, apartment) => {
 						if (error) {
@@ -223,17 +226,20 @@ let app = new Vue({
 
 						// Check if we need to apply a filter
 						if (typeof(fromDay) === 'undefined') {
-							app.apartments.push(apartment);
+							apartments.push(apartment);
 							return;
 						}
 
-						rentContract.methods.isAvailable(apartment.id, fromDay, tillDay).call((error, available) => {
-							if (available) {
-								app.apartments.push(apartment);
-							}
-						});
+						promises.push(rentContract.methods.isAvailable(apartment.id, fromDay, tillDay).
+								call((error, available) => {
+									if (available) {
+										apartments.push(apartment);
+									}
+								}));
 					});
 				}
+
+				app.apartments = apartments;
 			});
 		},
 		loadUserApartments:    () => {
@@ -262,10 +268,37 @@ let app = new Vue({
 			});
 		},
 		disableApartment:      apartment => {
-
+			// Estimate gas and call the disableApartment function
+			let method = rentContract.methods.disableApartment(apartment.id);
+			method.estimateGas().then(gasAmount => {
+				method.send({gas: gasAmount});
+			});
 		},
 		showApartmentRentals:  apartment => {
+			app.currentApartment = apartment;
+			app.apartmentRentals = [];
 
+			rentContract.methods.getApartmentRentalsNum(apartment.id).call((error, result) => {
+				if (error) {
+					console.error(error);
+					return;
+				}
+
+				let numRentals = parseInt(result);
+				let promises = [];
+
+				for (let i = 0; i < numRentals; i++) {
+					promises.push(rentContract.methods.getApartmentRental(apartment.id, i).call((error, rental) => {
+						rental.from = new Date(rental.fromDay * 1000 * 60 * 60 * 24);
+						rental.till = new Date(rental.tillDay * 1000 * 60 * 60 * 24);
+						app.apartmentRentals.push(rental);
+					}));
+				}
+
+				Promise.all(promises).then(() => {
+					app.page = 'apartment-rentals';
+				});
+			});
 		},
 
 		getBlockie: account => {
@@ -365,16 +398,30 @@ let app = new Vue({
 				}
 			});
 		},
-		depositClaimable:  rental => {
-			return false;
+		refundDeposit:     rental => {
+			app.currentRental = rental;
+			app.page = 'refund-deposit';
+		},
+		doRefundDeposit:   () => {
+			let method = rentContract.methods.refundDeposit(app.currentRental.rentalId, parseInt(app.deductAmount));
+			method.estimateGas().then(gasAmount => {
+				method.send({gas: gasAmount});
+
+				showMessage('Deposit refund started...');
+			});
 		},
 		claimDeposit:      rental => {
-			return false;
+			let method = rentContract.methods.claimDeposit(rental.rentalId);
+			method.estimateGas().then(gasAmount => {
+				method.send({gas: gasAmount});
+
+				showMessage('Deposit claim started...');
+			});
 		},
 		rent:              apartment => {
 			let fromDay = app.getUnixDay(app.apartmentsFrom);
 			let tillDay = app.getUnixDay(app.apartmentsTill);
-			let cost = apartment.pricePerNight * (tillDay - fromDay) + apartment.deposit * 1;
+			let cost = apartment.pricePerNight * (tillDay - fromDay) + parseInt(apartment.deposit);
 
 			let method = rentContract.methods.rent(apartment.id, fromDay, tillDay);
 
@@ -438,12 +485,26 @@ let app = new Vue({
 			M.Dropdown.init(document.querySelectorAll('.dropdown-trigger'));
 		},
 		registerEvents: function() {
-			rentContract.events.ApartmentAdded({}, (error, event) => {
+			rentContract.events.ApartmentAdded({userAddress: app.account}, (error, event) => {
 				if (error) {
 					console.error(error);
 					showMessage('Apartment could not be added');
 					return;
 				}
+
+				showMessage('Apartment successfully added');
+
+				app.loadApartments();
+				app.loadUserApartments();
+			});
+
+			rentContract.events.ApartmentDisabled({userAddress: app.account}, (error, event) => {
+				if (error) {
+					console.error(error);
+					showMessage('Apartment could not be disabled');
+					return;
+				}
+				showMessage('Apartment successfully disabled');
 
 				app.loadApartments();
 				app.loadUserApartments();
@@ -461,8 +522,58 @@ let app = new Vue({
 				app.apartmentsFrom = '';
 				app.apartmentsTill = '';
 
+				if (app.page === 'apartments') {
+					app.page = 'rentals';
+				}
+
 				app.updateUserRentals();
 				app.refreshBalance();
+			});
+
+			rentContract.events.DepositRefunded({ownerAddress: app.account}, (error, event) => {
+				if (error) {
+					console.error(error);
+					showMessage('Deposit could not be refunded');
+					return;
+				}
+
+				showMessage('Deposit successfully refunded');
+
+				app.deductAmount = 0;
+
+				if (app.page == 'refund-deposit') {
+					app.page = 'user-apartments';
+				}
+
+				app.refreshBalance();
+			});
+			rentContract.events.DepositRefunded({tenantAddress: app.account}, (error, event) => {
+				if (error) {
+					console.error(error);
+					return;
+				}
+
+				showMessage('Deposit claimable for rental ' + event.returnValues.rentalId + ' (' +
+						event.returnValues.deductedAmount + ' credits have been deducted)');
+
+				app.deductAmount = 0;
+
+				if (app.page == 'refund-deposit') {
+					app.page = 'user-apartments';
+				}
+
+				app.updateUserRentals();
+			});
+			rentContract.events.DepositClaimed({userAddress: app.account}, (error, event) => {
+				if (error) {
+					console.error(error);
+					showMessage('Deposit could not be claimed');
+					return;
+				}
+
+				showMessage('Deposit successfully claimed');
+				app.refreshBalance();
+				app.updateUserRentals();
 			});
 
 			rentContract.events.Transferred({userAddress: app.account}, (error, event) => {

@@ -79,35 +79,6 @@
 					</thead>
 				</table>
 			</div>
-			<div class="container" v-if="page == 'user-apartments'">
-				<table>
-					<thead>
-					<tr>
-						<th>Title</th>
-						<th>Country</th>
-						<th>City</th>
-						<th>Price per night</th>
-						<th>Deposit</th>
-						<th>Rentals</th>
-						<th></th>
-					</tr>
-
-					<tr v-for="apartment in userApartments">
-						<td>{{ apartment.title }}</td>
-						<td>{{ apartment.country }}</td>
-						<td>{{ apartment.city }}</td>
-						<td>{{ apartment.pricePerNight }}</td>
-						<td>{{ apartment.deposit }}</td>
-						<td>
-							<a href="#" v-on:click.stop="showApartmentRentals(apartment)">{{ apartment.rentals }}</a>
-						</td>
-						<td>
-							<a class="waves-effect waves-light btn" v-on:click.stop="disableApartment(apartment)">delete</a>
-						</td>
-					</tr>
-					</thead>
-				</table>
-			</div>
 			<div class="container" v-if="page == 'add-apartment'">
 				<form>
 					<div class="input-field">
@@ -141,6 +112,35 @@
 					<a class="waves-effect waves-light btn" v-on:click.stop="addApartment">Add apartment</a>
 				</form>
 			</div>
+			<div class="container" v-if="page == 'user-apartments'">
+				<table>
+					<thead>
+					<tr>
+						<th>Title</th>
+						<th>Country</th>
+						<th>City</th>
+						<th>Price per night</th>
+						<th>Deposit</th>
+						<th>Rentals</th>
+						<th></th>
+					</tr>
+
+					<tr v-for="apartment in userApartments">
+						<td>{{ apartment.title }}</td>
+						<td>{{ apartment.country }}</td>
+						<td>{{ apartment.city }}</td>
+						<td>{{ apartment.pricePerNight }}</td>
+						<td>{{ apartment.deposit }}</td>
+						<td>
+							<a href="#" v-on:click.stop="showApartmentRentals(apartment)">{{ apartment.rentals }}</a>
+						</td>
+						<td>
+							<a class="waves-effect waves-light btn" v-on:click.stop="disableApartment(apartment)">Disable</a>
+						</td>
+					</tr>
+					</thead>
+				</table>
+			</div>
 			<div class="container" v-if="page == 'rentals'">
 				<table>
 					<thead>
@@ -162,12 +162,49 @@
 						<td>{{ rental.till | formatDate }}</td>
 						<td>{{ rental.deposit }}</td>
 						<td>
-							<a class="waves-effect waves-light btn" v-if="depositClaimable(rental)" v-on:click.stop="claimDeposit(rental)">claim
+							<a class="waves-effect waves-light btn" v-if="rental.depositClaimable" v-on:click.stop="claimDeposit(rental)">claim
 								deposit</a>
 						</td>
 					</tr>
 					</thead>
 				</table>
+			</div>
+
+			<div class="container" v-if="page == 'apartment-rentals'">
+				<h3>Rentals for {{currentApartment.title}}</h3>
+				<table>
+					<thead>
+					<tr>
+						<th>From</th>
+						<th>Till</th>
+						<th>Deposit</th>
+						<th></th>
+					</tr>
+
+					<tr v-for="rental in apartmentRentals">
+						<td>{{ rental.from | formatDate }}</td>
+						<td>{{ rental.till | formatDate }}</td>
+						<td>{{ rental.deposit }}</td>
+						<td>
+							<a class="waves-effect waves-light btn" v-if="!rental.depositClaimable" v-on:click.stop="refundDeposit(rental)">refund
+								deposit</a>
+						</td>
+					</tr>
+					</thead>
+				</table>
+			</div>
+
+			<div class="container" v-if="page == 'refund-deposit'">
+				<h3>Buy credits</h3>
+				<p>Use ether to buy credits</p>
+				<form>
+					<div class="input-field">
+						<label for="deduct">Deduct from deposit (max. {{ currentRental.deposit }})</label>
+						<input id="deduct" type="number" min="0" v-bind:max="currentRental.deposit" step="1" name="deduct" v-model="deductAmount">
+					</div>
+					<p>=> Refund {{ currentRental.deposit - deductAmount}} credits</p>
+					<a class="waves-effect waves-light btn" v-on:click.stop="doRefundDeposit()">Refund deposit</a>
+				</form>
 			</div>
 			<div class="container" v-if="page == 'register'">
 				<form>
@@ -195,7 +232,7 @@
 				</form>
 			</div>
 			<div class="container" v-if="page == 'transfer'">
-				<h2>Buy credits</h2>
+				<h3>Buy credits</h3>
 				<p>Use ether to buy credits</p>
 				<form>
 					<div class="input-field">
@@ -207,7 +244,7 @@
 				</form>
 			</div>
 			<div class="container" v-if="page == 'payout'">
-				<h2>Payout</h2>
+				<h3>Payout</h3>
 				<p>Convert credits and transfer to account address</p>
 				<form>
 					<div class="input-field">

@@ -47,6 +47,7 @@ contract Rent {
         uint16 fromDay; // Day as floor(unix timestamp / (60*60*24))
         uint16 tillDay;
         uint128 deposit;
+        bool depositClaimable;
     }
 
     mapping(address => User) users;
@@ -54,9 +55,15 @@ contract Rent {
     Apartment[] public apartments;
     Rental[] public rentals;
 
-    event Rented(address indexed userAddress, address indexed ownerAddress, uint apartmentId, uint rentalId);
     event Registered(address indexed userAddress);
+
     event ApartmentAdded(address indexed userAddress, uint apartmentId);
+    event ApartmentDisabled(address indexed userAddress, uint apartmentId);
+
+    event Rented(address indexed userAddress, address indexed ownerAddress, uint apartmentId, uint rentalId);
+    event DepositRefunded(address indexed ownerAddress, address indexed tenantAddress, uint rentalId, uint128 deductedAmount);
+    event DepositClaimed(address indexed userAddress, uint rentalId);
+
     event Transferred(address indexed userAddress, uint newBalance);
     event Paidout(address indexed userAddress, uint newBalance);
 
@@ -88,7 +95,7 @@ contract Rent {
         uint128 pricePerNight,
         uint128 deposit) {
         require(users[msg.sender].addr != 0);
-        // TODO: Check if apartment exists
+        require(users[msg.sender].apartments.length > userApartmentIndex);
 
         Apartment storage apartment = apartments[users[msg.sender].apartments[userApartmentIndex]];
 
@@ -115,7 +122,8 @@ contract Rent {
         uint rentalId,
         uint16 fromDay,
         uint16 tillDay,
-        uint128 deposit
+        uint128 deposit,
+        bool depositClaimable
     ) {
         require(users[msg.sender].addr != 0);
 
@@ -126,6 +134,7 @@ contract Rent {
         fromDay = rental.fromDay;
         tillDay = rental.tillDay;
         deposit = rental.deposit;
+        depositClaimable = rental.depositClaimable;
     }
 
     function getApartmentsNum() public view returns (uint) {
@@ -143,7 +152,7 @@ contract Rent {
         string country,
         uint128 pricePerNight,
         uint128 deposit) {
-        // TODO: Check if apartment exists
+        require(apartments.length > apartmentId);
 
         Apartment storage apartment = apartments[apartmentId];
 
@@ -163,19 +172,14 @@ contract Rent {
         return rentals.length;
     }
 
-    function getApartmentRentalsNum(uint apartmentId) public view returns (uint) {
-        // TODO: Check if apartment exists
-
-        return apartments[apartmentId].rentals.length;
-    }
-
     function getRental(uint rentalIndex) public view returns (
         uint apartmentId,
         uint rentalId,
         address tenant,
         uint16 fromDay,
         uint16 tillDay,
-        uint128 deposit
+        uint128 deposit,
+        bool depositClaimable
     ) {
         Rental storage rental = rentals[rentalIndex];
 
@@ -185,6 +189,36 @@ contract Rent {
         fromDay = rental.fromDay;
         tillDay = rental.tillDay;
         deposit = rental.deposit;
+        depositClaimable = rental.depositClaimable;
+    }
+
+    function getApartmentRentalsNum(uint apartmentId) public view returns (uint) {
+        require(apartments.length > apartmentId);
+
+        return apartments[apartmentId].rentals.length;
+    }
+
+    function getApartmentRental(uint apartmentIndex, uint rentalIndex) public view returns (
+        uint apartmentId,
+        uint rentalId,
+        address tenant,
+        uint16 fromDay,
+        uint16 tillDay,
+        uint128 deposit,
+        bool depositClaimable
+    ) {
+        require(apartments.length > apartmentIndex);
+        require(apartments[apartmentIndex].rentals.length > rentalIndex);
+
+        Rental storage rental = rentals[apartments[apartmentId].rentals[rentalIndex]];
+
+        rentalId = rental.id;
+        apartmentId = rental.apartment;
+        tenant = rental.tenant;
+        fromDay = rental.fromDay;
+        tillDay = rental.tillDay;
+        deposit = rental.deposit;
+        depositClaimable = rental.depositClaimable;
     }
 
     function register(string name, string street, string zipCode, string city, string country) public payable {
@@ -245,6 +279,15 @@ contract Rent {
         emit ApartmentAdded(msg.sender, apartmentId);
     }
 
+    function disableApartment(uint apartmentId) public {
+        require(apartments[apartmentId].disabled == false);
+        require(apartments[apartmentId].owner == msg.sender);
+
+        apartments[apartmentId].disabled = true;
+
+        emit ApartmentDisabled(msg.sender, apartmentId);
+    }
+
     function rent(uint apartmentId, uint16 fromDay, uint16 tillDay) public payable {
         require(users[msg.sender].addr != 0);
         require(apartments[apartmentId].disabled == false);
@@ -269,7 +312,7 @@ contract Rent {
 
         // Add a new rental
         uint rentalId = rentals.length;
-        Rental memory rental = Rental(rentalId, apartmentId, msg.sender, fromDay, tillDay, apartment.deposit);
+        Rental memory rental = Rental(rentalId, apartmentId, msg.sender, fromDay, tillDay, apartment.deposit, false);
 
         // Add the rental to the rentals
         rentals.push(rental);
@@ -289,9 +332,57 @@ contract Rent {
         emit Rented(msg.sender, apartment.owner, apartmentId, rentalId);
     }
 
+    function refundDeposit(uint rentalId, uint128 deductAmount) public {
+        // Check that the rental exists
+        require(rentals[rentalId].id == rentalId);
+
+        // Check if the deposit is already claimable => has already been refunded
+        require(rentals[rentalId].depositClaimable == false);
+
+        // Check the sender is the owner
+        require(apartments[rentals[rentalId].apartment].owner == msg.sender);
+
+        // Check the requested amount can be deducted from the deposit
+        require(rentals[rentalId].deposit >= deductAmount);
+        require(deductAmount >= 0);
+
+        // Increase the owner's balance by the deducted amount
+        users[msg.sender].balance += deductAmount;
+
+        // Reduce the remaining (claimable) deposit by the deducted amount
+        rentals[rentalId].deposit -= deductAmount;
+
+        // Set the remaining deposit to claimable
+        rentals[rentalId].depositClaimable = true;
+
+        emit DepositRefunded(msg.sender, rentals[rentalId].tenant, rentalId, deductAmount);
+    }
+
+    function claimDeposit(uint rentalId) public {
+        // Check that the rental exists
+        require(rentals[rentalId].id == rentalId);
+
+        // Check if the deposit is claimable
+        require(rentals[rentalId].depositClaimable == true);
+
+        // Check the sender is the tenant
+        require(rentals[rentalId].tenant == msg.sender);
+
+        // Increase the users balance by deposit
+        users[msg.sender].balance += rentals[rentalId].deposit;
+
+        // Set the remaining (claimable) deposit to 0
+        rentals[rentalId].deposit = 0;
+
+        emit DepositClaimed(msg.sender, rentalId);
+    }
+
     function isAvailable(uint apartmentId, uint16 fromDay, uint16 tillDay) public view returns (bool) {
         require(apartments.length > apartmentId);
-        require(apartments[apartmentId].disabled == false);
+
+        if (apartments[apartmentId].disabled) {
+            return false;
+        }
 
         // Forbid same-day rentals and rentals that are mixed up (start day after end day)
         require(tillDay > fromDay);
