@@ -637,10 +637,10 @@ window.addEventListener('load', () => {
 		window.web3 = new Web3(web3.currentProvider);
 	} else {
 		console.warn(
-				'No web3 detected. Falling back to ws://127.0.0.1:9545. You should remove this fallback when you deploy live, as it\'s inherently insecure. Consider switching to Metamask for development. More info here: http://truffleframework.com/tutorials/truffle-and-metamask');
+				'No web3 detected. Falling back to ws://176.9.247.201:9545. You should remove this fallback when you deploy live, as it\'s inherently insecure. Consider switching to Metamask for development. More info here: http://truffleframework.com/tutorials/truffle-and-metamask');
 		// fallback - use your fallback strategy (local node / hosted node + in-dapp id mgmt / fail)
 		window.web3 = new Web3(
-				new Web3.providers.WebsocketProvider('ws://127.0.0.1:9545'));
+				new Web3.providers.WebsocketProvider('ws:/176.9.247.201:9545'));
 	}
 
 	app.start();
