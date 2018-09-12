@@ -1,3 +1,7 @@
+// Define the server address (for now)
+const serverAddr = '176.9.247.201';
+const ipfsShowUrl = 'https://ipfs.io/ipfs/';
+
 // Import the page's CSS. Webpack will know what to do with it.
 import '../css/materialize.css';
 import '../css/app.css';
@@ -6,6 +10,8 @@ import '../css/app.css';
 import '../js/materialize.js';
 import {default as Vue} from 'vue';
 import {default as Web3} from 'web3';
+import {default as Buffer} from 'buffer';
+import {default as IpfsApi} from 'ipfs-api';
 
 // Import our contract artifacts and turn them into usable abstractions.
 import rent_artifacts from '../../build/contracts/Rent.json';
@@ -36,6 +42,7 @@ Vue.filter('formatDateTime', function(date) {
 let app = new Vue({
 	el:         '#app',
 	data:       () => ({
+		ipfsShowUrl:      ipfsShowUrl,
 		accounts:         [],
 		account:          null,
 		page:             'start',
@@ -154,9 +161,53 @@ let app = new Vue({
 						app.refreshBalance();
 					});
 		},
+		uploadImage:           (inputElement) => {
+			// Return a promise that is resolved if the image upload succeeded
+			return new Promise((resolve, reject) => {
+				let reader = new FileReader();
+				reader.onloadend = () => {
+					// Get an IPFS connection
+					let ipfsConnection = new IpfsApi(serverAddr);
+
+					// Fill a file buffer
+					let filledBuffer = Buffer.Buffer(reader.result);
+
+					// Add the file to IPFS
+					ipfsConnection.files.add(filledBuffer, (err, result) => {
+						if (err) {
+							console.error(err);
+							showMessage('Could not upload file to apartment image');
+
+							reject();
+							return;
+						}
+
+						app.newApartmentData.image = result[0].hash;
+						console.log('Image uploaded to ' + app.newApartmentData.image);
+
+						resolve();
+					});
+				};
+
+				reader.readAsArrayBuffer(inputElement.files[0]);
+			});
+		},
 		addApartment:          clickEvent => {
 			clickEvent.preventDefault();
 
+			let inputElement = document.getElementById('add-apartment-image');
+
+			// Check if we need to upload an image to IPFS
+			if (inputElement.files[0]) {
+				app.uploadImage(inputElement).then(app.addApartmentToBc);
+
+				return;
+			}
+
+			// Otherwise, we can directly add the apartment
+			app.addApartmentToBc();
+		},
+		addApartmentToBc:      () => {
 			// Using the ES2015 spread operator does not work on vue data objects
 			let parameters = [
 				app.newApartmentData.title,
@@ -164,6 +215,7 @@ let app = new Vue({
 				app.newApartmentData.zip,
 				app.newApartmentData.city,
 				app.newApartmentData.country,
+				app.newApartmentData.image || '',
 				app.newApartmentData.pricePerNight,
 				app.newApartmentData.deposit];
 
@@ -212,10 +264,8 @@ let app = new Vue({
 					return;
 				}
 
-				let apartments = [];
+				app.apartments = [];
 				let numApartments = parseInt(result);
-
-				let promises = [];
 
 				for (let i = 0; i < numApartments; i++) {
 					rentContract.methods.getApartment(i).call((error, apartment) => {
@@ -226,21 +276,36 @@ let app = new Vue({
 
 						// Check if we need to apply a filter
 						if (typeof(fromDay) === 'undefined') {
-							apartments.push(apartment);
+							app.loadApartmentData(apartment);
 							return;
 						}
 
-						promises.push(rentContract.methods.isAvailable(apartment.id, fromDay, tillDay).
+						rentContract.methods.isAvailable(apartment.id, fromDay, tillDay).
 								call((error, available) => {
 									if (available) {
-										apartments.push(apartment);
+										app.loadApartmentData(apartment);
 									}
-								}));
+								});
 					});
 				}
-
-				app.apartments = apartments;
 			});
+		},
+		loadApartmentData:     (apartment) => {
+			// Load the address data for the apartment
+			rentContract.methods.getPhysicalAddress(apartment.physicalAddress).
+					call((error, physicalAddress) => {
+						// Ensure we add an apartment to the list twice by checking if it already exists in the apartments
+						for (let exitingApartment of app.apartments) {
+							if (exitingApartment.id === apartment.id) {
+								return;
+							}
+						}
+
+						// Add the apartment with the address to the apartment list
+						apartment.address = physicalAddress;
+						app.apartments.push(apartment);
+					});
+
 		},
 		loadUserApartments:    () => {
 			rentContract.methods.getUserApartmentsNum().call((error, result) => {
@@ -552,7 +617,7 @@ let app = new Vue({
 
 				app.deductAmount = 0;
 
-				if (app.page == 'refund-deposit') {
+				if (app.page === 'refund-deposit') {
 					app.page = 'user-apartments';
 				}
 
@@ -569,7 +634,7 @@ let app = new Vue({
 
 				app.deductAmount = 0;
 
-				if (app.page == 'refund-deposit') {
+				if (app.page === 'refund-deposit') {
 					app.page = 'user-apartments';
 				}
 
@@ -637,10 +702,11 @@ window.addEventListener('load', () => {
 		window.web3 = new Web3(web3.currentProvider);
 	} else {
 		console.warn(
-				'No web3 detected. Falling back to ws://176.9.247.201:9545. You should remove this fallback when you deploy live, as it\'s inherently insecure. Consider switching to Metamask for development. More info here: http://truffleframework.com/tutorials/truffle-and-metamask');
+				'No web3 detected. Falling back to ws://' + serverAddr +
+				':9545. You should remove this fallback when you deploy live, as it\'s inherently insecure. Consider switching to Metamask for development. More info here: http://truffleframework.com/tutorials/truffle-and-metamask');
 		// fallback - use your fallback strategy (local node / hosted node + in-dapp id mgmt / fail)
 		window.web3 = new Web3(
-				new Web3.providers.WebsocketProvider('ws:/176.9.247.201:9545'));
+				new Web3.providers.WebsocketProvider('ws://' + serverAddr + ':9545'));
 	}
 
 	app.start();

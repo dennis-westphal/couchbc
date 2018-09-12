@@ -33,9 +33,9 @@
 			<ul>
 				<li><a href="#" v-on:click.stop="page = 'start'">Start</a></li>
 				<li><a href="#" v-on:click.stop="page = 'apartments'">Show apartments</a></li>
-				<li><a href="#" v-on:click.stop="page = 'add-apartment'">Add apartments</a></li>
-				<li><a href="#" v-on:click.stop="page = 'user-apartments'">Show my apartments</a></li>
-				<li><a href="#" v-on:click.stop="page = 'rentals'">Show my rentals</a></li>
+				<li><a href="#" v-on:click.stop="page = 'add-apartment'" v-if="registered">Add apartments</a></li>
+				<li><a href="#" v-on:click.stop="page = 'user-apartments'" v-if="registered">Show my apartments</a></li>
+				<li><a href="#" v-on:click.stop="page = 'rentals'" v-if="registered">Show my rentals</a></li>
 			</ul>
 		</div>
 		<div class="col m9">
@@ -58,6 +58,7 @@
 				<table>
 					<thead>
 					<tr>
+						<th></th>
 						<th>Title</th>
 						<th>Country</th>
 						<th>City</th>
@@ -67,13 +68,14 @@
 					</tr>
 
 					<tr v-for="apartment in apartments">
+						<td><img v-bind:src="ipfsShowUrl + apartment.image"></td>
 						<td>{{ apartment.title }}</td>
-						<td>{{ apartment.country }}</td>
-						<td>{{ apartment.city }}</td>
+						<td>{{ apartment.address.country }}</td>
+						<td>{{ apartment.address.city }}</td>
 						<td>{{ apartment.pricePerNight }}</td>
 						<td>{{ apartment.deposit }}</td>
 						<td>
-							<a class="waves-effect waves-light btn" v-if="apartmentsFrom && apartmentsTill" v-on:click.stop="rent(apartment)">book</a>
+							<a class="waves-effect waves-light btn" v-if="apartmentsFrom && apartmentsTill && registered" v-on:click.stop="rent(apartment)">book</a>
 						</td>
 					</tr>
 					</thead>
@@ -108,6 +110,10 @@
 					<div class="input-field">
 						<label for="add-apartment-deposit">Deposit</label>
 						<input id="add-apartment-deposit" type="number" name="deposit" v-model="newApartmentData.deposit">
+					</div>
+					<div class="input-field">
+						<label for="add-apartment-image">Image</label>
+						<input id="add-apartment-image" type="file" name="image">
 					</div>
 					<a class="waves-effect waves-light btn" v-on:click.stop="addApartment">Add apartment</a>
 				</form>

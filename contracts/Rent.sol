@@ -5,14 +5,19 @@ import "./Library.sol";
 contract Rent {
     uint constant creditConversionFactor = 500000000000000;
 
-    struct User {
-        address addr;
-
-        string name;
+    struct Address {
+        uint id;
         string street;
         string zipCode;
         string city;
         string country;
+    }
+
+    struct User {
+        address addr;
+
+        string name;
+        uint physicalAddress;
 
         uint balance;
 
@@ -27,10 +32,8 @@ contract Rent {
         address owner;
 
         string title;
-        string street;
-        string zipCode;
-        string city;
-        string country;
+        uint physicalAddress;
+        string image; // as IPFS hash
 
         uint128 pricePerNight;
         uint128 deposit;
@@ -52,6 +55,7 @@ contract Rent {
 
     mapping(address => User) users;
 
+    Address[] public addresses;
     Apartment[] public apartments;
     Rental[] public rentals;
 
@@ -84,15 +88,30 @@ contract Rent {
         return users[msg.sender].apartments.length;
     }
 
+    function getPhysicalAddress(uint addressIndex) public view returns (
+        uint id,
+        string street,
+        string zipCode,
+        string city,
+        string country) {
+        require(addresses.length > addressIndex);
+
+        Address storage physicalAddress = addresses[addressIndex];
+
+        id = physicalAddress.id;
+        street = physicalAddress.street;
+        zipCode = physicalAddress.zipCode;
+        city = physicalAddress.city;
+        country = physicalAddress.country;
+    }
+
     function getUserApartment(uint userApartmentIndex) public view returns (
         uint id,
         bool disabled,
         address owner,
         string title,
-        string street,
-        string zipCode,
-        string city,
-        string country,
+        uint physicalAddress,
+        string image,
         uint128 pricePerNight,
         uint128 deposit) {
         require(users[msg.sender].addr != 0);
@@ -104,10 +123,8 @@ contract Rent {
         disabled = apartment.disabled;
         owner = apartment.owner;
         title = apartment.title;
-        street = apartment.street;
-        zipCode = apartment.zipCode;
-        city = apartment.city;
-        country = apartment.country;
+        physicalAddress = apartment.physicalAddress;
+        image = apartment.image;
         pricePerNight = apartment.pricePerNight;
         deposit = apartment.deposit;
     }
@@ -147,10 +164,8 @@ contract Rent {
         bool disabled,
         address owner,
         string title,
-        string street,
-        string zipCode,
-        string city,
-        string country,
+        uint physicalAddress,
+        string image,
         uint128 pricePerNight,
         uint128 deposit) {
         require(apartments.length > apartmentId);
@@ -161,10 +176,8 @@ contract Rent {
         disabled = apartment.disabled;
         owner = apartment.owner;
         title = apartment.title;
-        street = apartment.street;
-        zipCode = apartment.zipCode;
-        city = apartment.city;
-        country = apartment.country;
+        physicalAddress = apartment.physicalAddress;
+        image = apartment.image;
         pricePerNight = apartment.pricePerNight;
         deposit = apartment.deposit;
     }
@@ -228,7 +241,7 @@ contract Rent {
         // Adding this is necessary as apparently struct array members cannot be omitted in the struct constructor
         uint[] memory userApartments;
         uint[] memory userRentals;
-        User memory user = User(msg.sender, name, street, zipCode, city, country, weiToCredits(msg.value), userApartments, userRentals);
+        User memory user = User(msg.sender, name, addAddress(street, zipCode, city, country), weiToCredits(msg.value), userApartments, userRentals);
 
         users[msg.sender] = user;
 
@@ -263,21 +276,28 @@ contract Rent {
         emit Paidout(msg.sender, users[msg.sender].balance);
     }
 
-    function addApartment(string title, string street, string zipCode, string city, string country, uint128 pricePerNight, uint128 deposit) public {
+    function addAddress(string street, string zipCode, string city, string country) private returns (uint){
+        Address memory newAddress = Address(addresses.length, street, zipCode, city, country);
+
+        addresses.push(newAddress);
+
+        return addresses.length - 1;
+    }
+
+    function addApartment(string title, string street, string zipCode, string city, string country, string image, uint128 pricePerNight, uint128 deposit) public {
         require(users[msg.sender].addr != 0);
 
-        uint apartmentId = apartments.length;
         User storage user = users[msg.sender];
 
         // Adding this is necessary as apparently struct array members cannot be omitted in the struct constructor
         uint[] memory apartmentRentals;
 
-        Apartment memory apartment = Apartment(apartmentId, false, user.addr, title, street, zipCode, city, country, pricePerNight, deposit, apartmentRentals);
+        Apartment memory apartment = Apartment(apartments.length, false, user.addr, title, addAddress(street, zipCode, city, country), image, pricePerNight, deposit, apartmentRentals);
 
         apartments.push(apartment);
-        user.apartments.push(apartmentId);
+        user.apartments.push(apartments.length - 1);
 
-        emit ApartmentAdded(msg.sender, apartmentId);
+        emit ApartmentAdded(msg.sender, apartments.length - 1);
     }
 
     function enableApartment(uint apartmentId) public {
