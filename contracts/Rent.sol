@@ -33,7 +33,7 @@ contract Rent {
 
         string title;
         uint physicalAddress;
-        string image; // as IPFS hash
+        string[] images; // as IPFS hashes
 
         uint128 pricePerNight;
         uint128 deposit;
@@ -64,6 +64,8 @@ contract Rent {
     event ApartmentAdded(address indexed userAddress, uint apartmentId);
     event ApartmentEnabled(address indexed userAddress, uint apartmentId);
     event ApartmentDisabled(address indexed userAddress, uint apartmentId);
+
+    event ImageAdded(address indexed userAddress, uint apartmentId, string image);
 
     event Rented(address indexed userAddress, address indexed ownerAddress, uint apartmentId, uint rentalId);
     event DepositRefunded(address indexed ownerAddress, address indexed tenantAddress, uint rentalId, uint128 deductedAmount);
@@ -110,8 +112,8 @@ contract Rent {
         bool disabled,
         address owner,
         string title,
+        uint8 numImages,
         uint physicalAddress,
-        string image,
         uint128 pricePerNight,
         uint128 deposit) {
         require(users[msg.sender].addr != 0);
@@ -123,8 +125,8 @@ contract Rent {
         disabled = apartment.disabled;
         owner = apartment.owner;
         title = apartment.title;
+        numImages = apartment.images.length;
         physicalAddress = apartment.physicalAddress;
-        image = apartment.image;
         pricePerNight = apartment.pricePerNight;
         deposit = apartment.deposit;
     }
@@ -164,8 +166,8 @@ contract Rent {
         bool disabled,
         address owner,
         string title,
+        uint8 numImages,
         uint physicalAddress,
-        string image,
         uint128 pricePerNight,
         uint128 deposit) {
         require(apartments.length > apartmentId);
@@ -176,10 +178,18 @@ contract Rent {
         disabled = apartment.disabled;
         owner = apartment.owner;
         title = apartment.title;
+        numImages = apartment.images.length;
         physicalAddress = apartment.physicalAddress;
-        image = apartment.image;
         pricePerNight = apartment.pricePerNight;
         deposit = apartment.deposit;
+    }
+
+    function getApartmentImage(uint apartmentId, uint imageId) public view returns (string)
+    {
+        require(apartments[apartmentId].owner == msg.sender);
+        require(imageId < apartments[apartmentId].images.length);
+
+        return apartments[apartmentId].images[imageId];
     }
 
     function getRentalsNum() public view returns (uint) {
@@ -284,20 +294,45 @@ contract Rent {
         return addresses.length - 1;
     }
 
-    function addApartment(string title, string street, string zipCode, string city, string country, string image, uint128 pricePerNight, uint128 deposit) public {
+    function addApartment(string title, string street, string zipCode, string city, string country, uint128 pricePerNight, uint128 deposit) public {
         require(users[msg.sender].addr != 0);
 
         User storage user = users[msg.sender];
 
         // Adding this is necessary as apparently struct array members cannot be omitted in the struct constructor
         uint[] memory apartmentRentals;
+        uint[] memory images;
 
-        Apartment memory apartment = Apartment(apartments.length, false, user.addr, title, addAddress(street, zipCode, city, country), image, pricePerNight, deposit, apartmentRentals);
+        Apartment memory apartment = Apartment(apartments.length, false, user.addr, title, addAddress(street, zipCode, city, country), images, pricePerNight, deposit, apartmentRentals);
 
         apartments.push(apartment);
         user.apartments.push(apartments.length - 1);
 
         emit ApartmentAdded(msg.sender, apartments.length - 1);
+    }
+
+    function addApartmentImage(uint apartmentId, string image) public
+    {
+        require(apartments[apartmentId].owner == msg.sender);
+        require(apartments[apartmentId].images.length < 5);
+
+        apartments[apartmentId].images.push(image);
+
+        emit ImageAdded(msg.sender, apartmentId, image);
+    }
+
+    function removeImage(uint apartmentId, uint imageId) public
+    {
+        require(apartments[apartmentId].owner == msg.sender);
+        require(imageId < apartments[apartmentId].images.length);
+
+        for (uint8 i = imageId; i < apartments[apartmentId].images.length - 1; i++){
+            apartments[apartmentId].images[i] = apartments[apartmentId].images[i+1];
+        }
+
+        array.length--;
+
+        return array;
     }
 
     function enableApartment(uint apartmentId) public {

@@ -1,5 +1,7 @@
 // Define the server address (for now)
 const serverAddr = '176.9.247.201';
+const ipfsAddr = 'fmberlin.ddns.net';
+const ipfsPort = 5051;
 const ipfsShowUrl = 'https://ipfs.io/ipfs/';
 
 // Import the page's CSS. Webpack will know what to do with it.
@@ -167,7 +169,7 @@ let app = new Vue({
 				let reader = new FileReader();
 				reader.onloadend = () => {
 					// Get an IPFS connection
-					let ipfsConnection = new IpfsApi(serverAddr);
+					let ipfsConnection = new IpfsApi(ipfsAddr, ipfsPort);
 
 					// Fill a file buffer
 					let filledBuffer = Buffer.Buffer(reader.result);
@@ -182,10 +184,9 @@ let app = new Vue({
 							return;
 						}
 
-						app.newApartmentData.image = result[0].hash;
-						console.log('Image uploaded to ' + app.newApartmentData.image);
+						console.log('Image uploaded to ' + result[0].hash);
 
-						resolve();
+						resolve(result[0].hash);
 					});
 				};
 
@@ -195,19 +196,6 @@ let app = new Vue({
 		addApartment:          clickEvent => {
 			clickEvent.preventDefault();
 
-			let inputElement = document.getElementById('add-apartment-image');
-
-			// Check if we need to upload an image to IPFS
-			if (inputElement.files[0]) {
-				app.uploadImage(inputElement).then(app.addApartmentToBc);
-
-				return;
-			}
-
-			// Otherwise, we can directly add the apartment
-			app.addApartmentToBc();
-		},
-		addApartmentToBc:      () => {
 			// Using the ES2015 spread operator does not work on vue data objects
 			let parameters = [
 				app.newApartmentData.title,
@@ -215,7 +203,6 @@ let app = new Vue({
 				app.newApartmentData.zip,
 				app.newApartmentData.city,
 				app.newApartmentData.country,
-				app.newApartmentData.image || '',
 				app.newApartmentData.pricePerNight,
 				app.newApartmentData.deposit];
 
@@ -226,23 +213,33 @@ let app = new Vue({
 			});
 
 			rentContract.once('ApartmentAdded',
-					{filter: {userAddress: app.account}}, (error, event) => {
-						if (error) {
-							showMessage('Could not add apartment');
-							console.error(error);
-							return;
-						}
+				{filter: {userAddress: app.account}}, (error, event) => {
+					// Change the page if we're currently on the add apartment page
+					if (app.page === 'add-apartment') {
+						app.page = 'apartments';
+					}
 
-						showMessage('Apartment added');
+					// Clear the form
+					Object.assign(app.$data.newApartmentData, app.$options.data.call(app).newApartmentData);
+				});
+		},
+		addApartmentImage:      () => {
+			let inputElement = document.getElementById('add-apartment-image');
 
-						// Change the page if we're currently on the add apartment page
-						if (app.page === 'add-apartment') {
-							app.page = 'apartments';
-						}
+			// Check if we need to upload an image to IPFS
+			app.uploadImage(inputElement).then(hash => {
+				if(error) {
+					console.error(error);
+					showMessage('Could not upload image');
+					return;
+				}
 
-						// Clear the form
-						Object.assign(app.$data.newApartmentData, app.$options.data.call(app).newApartmentData);
-					});
+				let method = rentContract.methods.addApartmentImage(hash);
+
+				method.estimateGas().then(gasAmount => {
+					method.send({gas: gasAmount});
+				});
+			});
 		},
 		changeApartmentFilter: (apartmentsFrom, apartmentsTill) => {
 			// Only apply filter if we have dates
@@ -292,22 +289,30 @@ let app = new Vue({
 		},
 		loadApartmentData:     (apartment) => {
 			// Load the address data for the apartment
-			rentContract.methods.getPhysicalAddress(apartment.physicalAddress).
-					call((error, physicalAddress) => {
-						// Ensure we add an apartment to the list twice by checking if it already exists in the apartments
-						for (let exitingApartment of app.apartments) {
-							if (exitingApartment.id === apartment.id) {
-								return;
-							}
-						}
+			rentContract.methods.getPhysicalAddress(apartment.physicalAddress).call((error, physicalAddress) => {
+				// Ensure we add an apartment to the list twice by checking if it already exists in the apartments
+				for (let exitingApartment of app.apartments) {
+					if (exitingApartment.id === apartment.id) {
+						return;
+					}
+				}
 
-						// Add the apartment with the address to the apartment list
-						apartment.address = physicalAddress;
-						app.apartments.push(apartment);
+				// Add the apartment with the address to the apartment list
+				apartment.address = physicalAddress;
+				app.apartments.push(apartment);
+
+				// Load apartment images
+				apartment.images = [];
+				for(let i = 0; i < apartment.numImages; i ++) {
+					rentContract.methods.getApartmentImage(apartment.id, i).call(image => {
+						apartment.images.push(image);
 					});
-
+				}
+			});
 		},
 		loadUserApartments:    () => {
+			// TODO: images
+
 			rentContract.methods.getUserApartmentsNum().call((error, result) => {
 				if (error) {
 					console.error(error);
@@ -584,6 +589,25 @@ let app = new Vue({
 
 				app.loadApartments();
 				app.loadUserApartments();
+			});
+
+			rentContract.events.ImageAdded({userAddress: app.account}, (error, event) => {
+				if (error) {
+					console.error(error);
+					showMessage('Image could not be added');
+					return;
+				}
+
+				showMessage('Image successfully added');
+
+				// Add the image to the apartment
+				for(let currentApartment of app.apartments) {
+					if(currentApartment.id === event.returnValues.apartmentId) {
+						app.apartments.images.push(event.returnValues.apartmentId);
+						return;
+					}
+				}
+
 			});
 
 			rentContract.events.Rented({userAddress: app.account}, (error, event) => {
