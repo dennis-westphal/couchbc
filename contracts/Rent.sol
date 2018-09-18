@@ -66,6 +66,7 @@ contract Rent {
     event ApartmentDisabled(address indexed userAddress, uint apartmentId);
 
     event ImageAdded(address indexed userAddress, uint apartmentId, string image);
+    event ImageRemoved(address indexed userAddress, uint apartmentId, uint imageId);
 
     event Rented(address indexed userAddress, address indexed ownerAddress, uint apartmentId, uint rentalId);
     event DepositRefunded(address indexed ownerAddress, address indexed tenantAddress, uint rentalId, uint128 deductedAmount);
@@ -112,7 +113,7 @@ contract Rent {
         bool disabled,
         address owner,
         string title,
-        uint8 numImages,
+        uint numImages,
         uint physicalAddress,
         uint128 pricePerNight,
         uint128 deposit) {
@@ -166,7 +167,7 @@ contract Rent {
         bool disabled,
         address owner,
         string title,
-        uint8 numImages,
+        uint numImages,
         uint physicalAddress,
         uint128 pricePerNight,
         uint128 deposit) {
@@ -294,14 +295,19 @@ contract Rent {
         return addresses.length - 1;
     }
 
-    function addApartment(string title, string street, string zipCode, string city, string country, uint128 pricePerNight, uint128 deposit) public {
+    function addApartment(string title, string street, string zipCode, string city, string country, string image, uint128 pricePerNight, uint128 deposit) public {
         require(users[msg.sender].addr != 0);
 
         User storage user = users[msg.sender];
 
         // Adding this is necessary as apparently struct array members cannot be omitted in the struct constructor
         uint[] memory apartmentRentals;
-        uint[] memory images;
+
+        string[] memory images = new string[](bytes(image).length > 0 ? 1 : 0);
+
+        if (bytes(image).length > 0) {
+            images[0] = image;
+        }
 
         Apartment memory apartment = Apartment(apartments.length, false, user.addr, title, addAddress(street, zipCode, city, country), images, pricePerNight, deposit, apartmentRentals);
 
@@ -326,13 +332,13 @@ contract Rent {
         require(apartments[apartmentId].owner == msg.sender);
         require(imageId < apartments[apartmentId].images.length);
 
-        for (uint8 i = imageId; i < apartments[apartmentId].images.length - 1; i++){
-            apartments[apartmentId].images[i] = apartments[apartmentId].images[i+1];
+        for (uint i = imageId; i < apartments[apartmentId].images.length - 1; i++) {
+            apartments[apartmentId].images[i] = apartments[apartmentId].images[i + 1];
         }
 
-        array.length--;
+        apartments[apartmentId].images.length--;
 
-        return array;
+        emit ImageRemoved(msg.sender, apartmentId, imageId);
     }
 
     function enableApartment(uint apartmentId) public {

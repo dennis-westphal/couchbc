@@ -55,6 +55,23 @@
 					</div>
 				</div>
 
+				<div class="col">
+					<div class="apartment" v-for="apartment in apartments">
+						<img v-bind:src="ipfsShowUrl + apartment.images[0]">
+						<p class="title">{{ apartment.title }}</p>
+						<p>
+							<span v-if="apartmentsFrom && apartmentsTill">{{ getTotalPrice(apartment) }}
+								 per night</span>
+							<span v-if="!(apartmentsFrom && apartmentsTill)">{{ apartment.pricePerNight }}
+								 per night</span>
+							/ {{ apartment.deposit }} deposit</p>
+
+						<a class="waves-effect waves-light btn" v-on:click.stop="showDetails(apartment)">Details</a>
+						<!--<a class="waves-effect waves-light btn" v-if="apartmentsFrom && apartmentsTill && registered" v-on:click.stop="rent(apartment)">book</a>-->
+					</div>
+				</div>
+
+				<!--
 				<table>
 					<thead>
 					<tr>
@@ -75,11 +92,12 @@
 						<td>{{ apartment.pricePerNight }}</td>
 						<td>{{ apartment.deposit }}</td>
 						<td>
-							<a class="waves-effect waves-light btn" v-if="apartmentsFrom && apartmentsTill && registered" v-on:click.stop="rent(apartment)">book</a>
+
 						</td>
 					</tr>
 					</thead>
 				</table>
+				-->
 			</div>
 			<div class="container" v-if="page == 'add-apartment'">
 				<form>
@@ -117,6 +135,12 @@
 					</div>
 					<a class="waves-effect waves-light btn" v-on:click.stop="addApartment">Add apartment</a>
 				</form>
+			</div>
+			<div class="container" v-if="page == 'add-apartment-image'">
+				<div class="input-field">
+					<label for="add-apartment-image">Image</label>
+					<input id="add-apartment-image" type="file" name="image">
+				</div>
 			</div>
 			<div class="container" v-if="page == 'user-apartments'">
 				<table>

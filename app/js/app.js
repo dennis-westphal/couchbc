@@ -120,9 +120,6 @@ let app = new Vue({
 
 			// Load the apartments
 			app.loadApartments();
-
-			// Load the user apartments
-			app.loadUserApartments();
 		},
 	},
 	methods:    {
@@ -196,6 +193,19 @@ let app = new Vue({
 		addApartment:          clickEvent => {
 			clickEvent.preventDefault();
 
+			let inputElement = document.getElementById('add-apartment-image');
+
+			// Check if we need to upload an image to IPFS
+			if (inputElement.files[0]) {
+				app.uploadImage(inputElement).then(app.addApartmentToBc);
+
+				return;
+			}
+
+			// Otherwise, we can directly add the apartment
+			app.addApartmentToBc();
+		},
+		addApartmentToBc:      () => {
 			// Using the ES2015 spread operator does not work on vue data objects
 			let parameters = [
 				app.newApartmentData.title,
@@ -203,6 +213,7 @@ let app = new Vue({
 				app.newApartmentData.zip,
 				app.newApartmentData.city,
 				app.newApartmentData.country,
+				app.newApartmentData.image || '',
 				app.newApartmentData.pricePerNight,
 				app.newApartmentData.deposit];
 
@@ -213,33 +224,50 @@ let app = new Vue({
 			});
 
 			rentContract.once('ApartmentAdded',
-				{filter: {userAddress: app.account}}, (error, event) => {
-					// Change the page if we're currently on the add apartment page
-					if (app.page === 'add-apartment') {
-						app.page = 'apartments';
-					}
+					{filter: {userAddress: app.account}}, (error, event) => {
+						if (error) {
+							showMessage('Could not add apartment');
+							console.error(error);
+							return;
+						}
 
-					// Clear the form
-					Object.assign(app.$data.newApartmentData, app.$options.data.call(app).newApartmentData);
-				});
+						showMessage('Apartment added');
+
+						// Change the page if we're currently on the add apartment page
+						if (app.page === 'add-apartment') {
+							app.page = 'apartments';
+						}
+
+						// Clear the form
+						Object.assign(app.$data.newApartmentData, app.$options.data.call(app).newApartmentData);
+					});
 		},
-		addApartmentImage:      () => {
+		addApartmentImage:     (apartment) => {
 			let inputElement = document.getElementById('add-apartment-image');
 
 			// Check if we need to upload an image to IPFS
 			app.uploadImage(inputElement).then(hash => {
-				if(error) {
+				if (error) {
 					console.error(error);
 					showMessage('Could not upload image');
 					return;
 				}
 
-				let method = rentContract.methods.addApartmentImage(hash);
+				let method = rentContract.methods.addApartmentImage(apartment.id, hash);
 
 				method.estimateGas().then(gasAmount => {
 					method.send({gas: gasAmount});
 				});
 			});
+		},
+		getTotalPrice:         (apartment) => {
+			let days = app.getUnixDay(app.apartmentsTill) - app.getUnixDay(app.apartmentsFrom);
+
+			if (days > 0) {
+				return app.pricePerNight * days;
+			}
+
+			return null;
 		},
 		changeApartmentFilter: (apartmentsFrom, apartmentsTill) => {
 			// Only apply filter if we have dates
@@ -303,7 +331,7 @@ let app = new Vue({
 
 				// Load apartment images
 				apartment.images = [];
-				for(let i = 0; i < apartment.numImages; i ++) {
+				for (let i = 0; i < apartment.numImages; i++) {
 					rentContract.methods.getApartmentImage(apartment.id, i).call(image => {
 						apartment.images.push(image);
 					});
@@ -396,8 +424,14 @@ let app = new Vue({
 				if (app.registered) {
 					showMessage('Successfully logged in');
 
+					// Refresh the user balance
 					app.refreshBalance();
+
+					// Load the user rentals
 					app.updateUserRentals();
+
+					// Load the user apartments
+					app.loadUserApartments();
 				}
 			});
 		},
@@ -601,8 +635,8 @@ let app = new Vue({
 				showMessage('Image successfully added');
 
 				// Add the image to the apartment
-				for(let currentApartment of app.apartments) {
-					if(currentApartment.id === event.returnValues.apartmentId) {
+				for (let currentApartment of app.apartments) {
+					if (currentApartment.id === event.returnValues.apartmentId) {
 						app.apartments.images.push(event.returnValues.apartmentId);
 						return;
 					}
