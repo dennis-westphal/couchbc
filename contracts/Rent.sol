@@ -33,6 +33,7 @@ contract Rent {
 
         string title;
         uint physicalAddress;
+        string primaryImage; // as IPFS hash
         string[] images; // as IPFS hashes
 
         uint128 pricePerNight;
@@ -65,6 +66,7 @@ contract Rent {
     event ApartmentEnabled(address indexed userAddress, uint apartmentId);
     event ApartmentDisabled(address indexed userAddress, uint apartmentId);
 
+    event PrimaryImageChanged(address indexed userAddress, uint apartmentId, string image);
     event ImageAdded(address indexed userAddress, uint apartmentId, string image);
     event ImageRemoved(address indexed userAddress, uint apartmentId, uint imageId);
 
@@ -113,6 +115,7 @@ contract Rent {
         bool disabled,
         address owner,
         string title,
+        string primaryImage,
         uint numImages,
         uint physicalAddress,
         uint128 pricePerNight,
@@ -126,6 +129,7 @@ contract Rent {
         disabled = apartment.disabled;
         owner = apartment.owner;
         title = apartment.title;
+        primaryImage = apartment.primaryImage;
         numImages = apartment.images.length;
         physicalAddress = apartment.physicalAddress;
         pricePerNight = apartment.pricePerNight;
@@ -167,6 +171,7 @@ contract Rent {
         bool disabled,
         address owner,
         string title,
+        string primaryImage,
         uint numImages,
         uint physicalAddress,
         uint128 pricePerNight,
@@ -179,6 +184,7 @@ contract Rent {
         disabled = apartment.disabled;
         owner = apartment.owner;
         title = apartment.title;
+        primaryImage = apartment.primaryImage;
         numImages = apartment.images.length;
         physicalAddress = apartment.physicalAddress;
         pricePerNight = apartment.pricePerNight;
@@ -295,26 +301,30 @@ contract Rent {
         return addresses.length - 1;
     }
 
-    function addApartment(string title, string street, string zipCode, string city, string country, string image, uint128 pricePerNight, uint128 deposit) public {
+    function addApartment(string title, string street, string zipCode, string city, string country, string primaryImage, uint128 pricePerNight, uint128 deposit) public {
         require(users[msg.sender].addr != 0);
 
         User storage user = users[msg.sender];
 
         // Adding this is necessary as apparently struct array members cannot be omitted in the struct constructor
         uint[] memory apartmentRentals;
+        string[] memory images;
 
-        string[] memory images = new string[](bytes(image).length > 0 ? 1 : 0);
-
-        if (bytes(image).length > 0) {
-            images[0] = image;
-        }
-
-        Apartment memory apartment = Apartment(apartments.length, false, user.addr, title, addAddress(street, zipCode, city, country), images, pricePerNight, deposit, apartmentRentals);
+        Apartment memory apartment = Apartment(apartments.length, false, user.addr, title, addAddress(street, zipCode, city, country), primaryImage, images, pricePerNight, deposit, apartmentRentals);
 
         apartments.push(apartment);
         user.apartments.push(apartments.length - 1);
 
         emit ApartmentAdded(msg.sender, apartments.length - 1);
+    }
+
+    function changePrimaryImage(uint apartmentId, string image) public
+    {
+        require(apartments[apartmentId].owner == msg.sender);
+
+        apartments[apartmentId].primaryImage = image;
+
+        emit PrimaryImageChanged(msg.sender, apartmentId, image);
     }
 
     function addApartmentImage(uint apartmentId, string image) public

@@ -1,0 +1,16 @@
+div.page.start {
+	div.header {
+		position: relative;
+		img {
+			width: 100%;
+		}
+		div.text {
+			position: absolute;
+			max-width: 70%;
+			bottom: 2rem;
+			right: 2rem;
+			padding: 2rem;
+			background: rgba(255, 255, 255, 0.5);
+		}
+	}
+}

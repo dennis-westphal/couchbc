@@ -1,19 +1,19 @@
 // Define the server address (for now)
-const serverAddr = '176.9.247.201';
+const websocketAddress = 'wss://couchbc.com';
 const ipfsAddr = 'fmberlin.ddns.net';
 const ipfsPort = 5051;
-const ipfsShowUrl = 'https://ipfs.io/ipfs/';
+const ipfsGatewayUrl = 'http://' + ipfsAddr + ':8080/';
 
-// Import the page's CSS. Webpack will know what to do with it.
-import '../css/materialize.css';
-import '../css/app.css';
+// Import the page's SCSS. Webpack will know what to do with it.
+import '../scss/app.scss';
 
 // Import libraries we need.
-import '../js/materialize.js';
+import {default as $} from 'jquery';
 import {default as Vue} from 'vue';
 import {default as Web3} from 'web3';
 import {default as Buffer} from 'buffer';
 import {default as IpfsApi} from 'ipfs-api';
+import Toasted from 'vue-toasted';
 
 // Import our contract artifacts and turn them into usable abstractions.
 import rent_artifacts from '../../build/contracts/Rent.json';
@@ -22,13 +22,20 @@ import Datepicker from 'vuejs-datepicker';
 import moment from 'moment';
 
 require('./blockies.min.js');
+require('foundation-sites');
 
 // Save the rent contract
 let rentContract;
 
-function showMessage(message) {
-	M.toast({html: message});
+const defaultToastOptions = {
+	duration: 3000,
+};
+
+function showMessage(message, options) {
+	Vue.toasted.show(message, $.extend({}, defaultToastOptions, options));
 }
+
+Vue.use(Toasted);
 
 Vue.filter('formatDate', function(date) {
 	if (date) {
@@ -44,7 +51,6 @@ Vue.filter('formatDateTime', function(date) {
 let app = new Vue({
 	el:         '#app',
 	data:       () => ({
-		ipfsShowUrl:      ipfsShowUrl,
 		accounts:         [],
 		account:          null,
 		page:             'start',
@@ -85,6 +91,15 @@ let app = new Vue({
 		},
 	}),
 	watch:      {
+		accounts:       () => {
+			app.redrawMenu();
+		},
+		registered:     () => {
+			app.redrawMenu();
+		},
+		rentals:        () => {
+			app.redrawMenu();
+		},
 		apartmentsFrom: () => {
 			app.changeApartmentFilter();
 		},
@@ -123,6 +138,14 @@ let app = new Vue({
 		},
 	},
 	methods:    {
+		redrawMenu:            () => {
+			let menu = $('#menu');
+
+			menu.foundation('_destroy');
+			app.$nextTick(() => {
+				new Foundation.DropdownMenu(menu);
+			});
+		},
 		register:              clickEvent => {
 			clickEvent.preventDefault();
 
@@ -205,7 +228,7 @@ let app = new Vue({
 			// Otherwise, we can directly add the apartment
 			app.addApartmentToBc();
 		},
-		addApartmentToBc:      () => {
+		addApartmentToBc:      (image) => {
 			// Using the ES2015 spread operator does not work on vue data objects
 			let parameters = [
 				app.newApartmentData.title,
@@ -213,7 +236,7 @@ let app = new Vue({
 				app.newApartmentData.zip,
 				app.newApartmentData.city,
 				app.newApartmentData.country,
-				app.newApartmentData.image || '',
+				image || '',
 				app.newApartmentData.pricePerNight,
 				app.newApartmentData.deposit];
 
@@ -268,6 +291,26 @@ let app = new Vue({
 			}
 
 			return null;
+		},
+		getImageUrl:           (image) => {
+			return ipfsGatewayUrl + image;
+		},
+		getRandomColor:        () => {
+			let oneBlack = Math.random() * 10;
+
+			let r = oneBlack <= 0.3333 ? 0 : Math.floor(Math.random() * 255);
+			let g = (oneBlack <= 0.6666 && oneBlack > 0.3333) ? 0 : Math.floor(Math.random() * 255);
+			let b = oneBlack > 0.6666 ? 0 : Math.floor(Math.random() * 255);
+
+			return 'rgba(' + r + ', ' + g + ', ' + b + ', 0.15';
+		},
+		getApartmentStyle:     (apartment) => {
+			// Don't apply a specific style if we have an image
+			if (apartment.primaryImage) {
+				return '';
+			}
+
+			return 'background-color: ' + app.getRandomColor();
 		},
 		changeApartmentFilter: (apartmentsFrom, apartmentsTill) => {
 			// Only apply filter if we have dates
@@ -576,17 +619,9 @@ let app = new Vue({
 				app.account = accounts[params.get('a') || 0];
 
 				app.registerEvents();
-			});
 
-			// Initialize datepickers
-			let elements = document.querySelectorAll('.datepicker');
-			M.Datepicker.init(elements, {
-				format:   'yyyy-mm-dd',
-				onSelect: app.changeApartmentFilter,
+				$(document).foundation();
 			});
-
-			// Initialize dropdown trigger
-			M.Dropdown.init(document.querySelectorAll('.dropdown-trigger'));
 		},
 		registerEvents: function() {
 			rentContract.events.ApartmentAdded({userAddress: app.account}, (error, event) => {
@@ -760,11 +795,11 @@ window.addEventListener('load', () => {
 		window.web3 = new Web3(web3.currentProvider);
 	} else {
 		console.warn(
-				'No web3 detected. Falling back to ws://' + serverAddr +
-				':9545. You should remove this fallback when you deploy live, as it\'s inherently insecure. Consider switching to Metamask for development. More info here: http://truffleframework.com/tutorials/truffle-and-metamask');
+				'No web3 detected. Falling back to ' + websocketAddress +
+				'. You should remove this fallback when you deploy live, as it\'s inherently insecure. Consider switching to Metamask for development. More info here: http://truffleframework.com/tutorials/truffle-and-metamask');
 		// fallback - use your fallback strategy (local node / hosted node + in-dapp id mgmt / fail)
 		window.web3 = new Web3(
-				new Web3.providers.WebsocketProvider('ws://' + serverAddr + ':9545'));
+				new Web3.providers.WebsocketProvider(websocketAddress));
 	}
 
 	app.start();
