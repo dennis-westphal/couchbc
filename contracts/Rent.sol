@@ -25,14 +25,15 @@ contract Rent {
         bool mediator;
 
         string name;
-        uint physicalAddress;
 
+        // Keeping same data types together for struct tightly packing
+        uint physicalAddress;
         uint balance;
+        uint totalScore;
 
         uint[] apartments;
         uint[] rentals;
         uint[] ratings;
-        uint totalScore;
     }
 
     struct Apartment {
@@ -41,10 +42,10 @@ contract Rent {
         address owner;
 
         string title;
-        uint physicalAddress;
         string primaryImage; // as IPFS hash
         string[] images; // as IPFS hashes
 
+        uint physicalAddress;
         uint128 pricePerNight;
         uint128 deposit;
 
@@ -54,18 +55,20 @@ contract Rent {
 
     enum DeductionStatus {
         Requested,
-        Accepted,
         Objected,
         Resolved
     }
 
     struct DepositDeduction {
         uint rental;
+        uint16 lastChange; // As a unix timestamp day
         uint128 amount;
+
         string reason;
         string objection;
-        address mediator;
         string conclusion;
+
+        address mediator;
 
         DeductionStatus status;
     }
@@ -78,12 +81,13 @@ contract Rent {
     }
     struct Rental {
         uint apartment;
-        address tenant;
 
-        uint16 fromDay; // Day as floor(unix timestamp / (60*60*24))
+        uint16 fromDay; // Day as floor(unix timestamp / (60*60*24 = 86400))
         uint16 tillDay;
-        uint price;
         uint128 deposit;
+        uint price;
+
+        address tenant;
 
         bool ownerRated; // When rating + deposit status have been determined
         bool tenantRated; // When rated
@@ -285,13 +289,14 @@ contract Rent {
     }
 
     // Register a new user
-    function register(string name, string street, string zipCode, string city, string country, string phone) public {
+    function register(string name, string street, string zipCode, string city, string country, string phone) public payable {
         require(users[msg.sender].addr == 0);
 
         // Adding this is necessary as apparently struct array members cannot be omitted in the struct constructor
         uint[] memory userApartments;
         uint[] memory userRentals;
-        User memory user = User(msg.sender, false, name, addAddress(street, zipCode, city, country, phone), weiToCredits(msg.value), userApartments, userRentals, 0);
+        uint[] memory userRatings;
+        User memory user = User(msg.sender, false, name, addAddress(street, zipCode, city, country, phone), weiToCredits(msg.value), 0, userApartments, userRentals, userRatings);
 
         users[msg.sender] = user;
 
@@ -351,6 +356,7 @@ contract Rent {
         emit Paidout(msg.sender, users[msg.sender].balance);
     }
 
+    // Add a address. Returns the new address id.
     function addAddress(string street, string zipCode, string city, string country) private returns (uint){
         Address memory newAddress = Address(street, zipCode, city, country);
 
@@ -359,6 +365,7 @@ contract Rent {
         return addresses.length - 1;
     }
 
+    // Add an apartment available for rent
     function addApartment(string title, string street, string zipCode, string city, string country, string phone, string primaryImage, uint128 pricePerNight, uint128 deposit) public {
         require(users[msg.sender].addr != 0);
 
@@ -366,9 +373,10 @@ contract Rent {
 
         // Adding this is necessary as apparently struct array members cannot be omitted in the struct constructor
         uint[] memory apartmentRentals;
+        uint[] memory apartmentRatings;
         string[] memory images;
 
-        Apartment memory apartment = Apartment(false, user.addr, title, addAddress(street, zipCode, city, country, phone), primaryImage, images, pricePerNight, deposit, apartmentRentals);
+        Apartment memory apartment = Apartment(false, user.addr, title, primaryImage, images, addAddress(street, zipCode, city, country, phone), pricePerNight, deposit, apartmentRentals, apartmentRatings);
 
         apartments.push(apartment);
         user.apartments.push(apartments.length - 1);
@@ -376,6 +384,7 @@ contract Rent {
         emit ApartmentAdded(msg.sender, apartments.length - 1);
     }
 
+    // Change the apartments primary image
     function changePrimaryImage(uint apartmentId, string image) public
     {
         require(apartments[apartmentId].owner == msg.sender);
@@ -385,6 +394,7 @@ contract Rent {
         emit PrimaryImageChanged(msg.sender, apartmentId, image);
     }
 
+    // Add an image to an apartment
     function addApartmentImage(uint apartmentId, string image) public
     {
         require(apartments[apartmentId].owner == msg.sender);
@@ -395,6 +405,7 @@ contract Rent {
         emit ImageAdded(msg.sender, apartmentId, image);
     }
 
+    // Remove an image from an apartment
     function removeImage(uint apartmentId, uint apartmentImageIndex) public
     {
         require(apartments[apartmentId].owner == msg.sender);
@@ -409,6 +420,7 @@ contract Rent {
         emit ImageRemoved(msg.sender, apartmentId, apartmentImageIndex);
     }
 
+    // Enable an apartment so it can be rented again
     function enableApartment(uint apartmentId) public {
         require(apartments[apartmentId].disabled == true);
         require(apartments[apartmentId].owner == msg.sender);
@@ -418,6 +430,8 @@ contract Rent {
         emit ApartmentEnabled(msg.sender, apartmentId);
     }
 
+    // Disable an apartment so that it cannot be rented anymore
+    // Doesn't affect existing rentals
     function disableApartment(uint apartmentId) public {
         require(apartments[apartmentId].disabled == false);
         require(apartments[apartmentId].owner == msg.sender);
@@ -427,6 +441,7 @@ contract Rent {
         emit ApartmentDisabled(msg.sender, apartmentId);
     }
 
+    // Rent an apartment for a specified timeframe
     function rent(uint apartmentId, uint16 fromDay, uint16 tillDay) public payable {
         require(users[msg.sender].addr != 0);
         require(apartments[apartmentId].disabled == false);
@@ -451,7 +466,7 @@ contract Rent {
 
         // Add a new rental
         uint rentalId = rentals.length;
-        Rental memory rental = Rental(apartmentId, msg.sender, fromDay, tillDay, rentalFee, apartment.deposit, false, false, DepositStatus.Open);
+        Rental memory rental = Rental(apartmentId, fromDay, tillDay, apartment.deposit, rentalFee, msg.sender, false, false, DepositStatus.Open);
 
         // Add the rental to the rentals
         rentals.push(rental);
@@ -471,6 +486,7 @@ contract Rent {
         emit Rented(msg.sender, apartment.owner, apartmentId, rentalId);
     }
 
+    // Rate a rental as a tenant
     function rateRental(uint rentalId, uint8 score, string text) public {
         // Check the parameters
         require(score < 6 && score > 0);
@@ -510,9 +526,10 @@ contract Rent {
         rentals[rentalId].depositStatus == DepositStatus.Claimable ||
         rentals[rentalId].depositStatus == DepositStatus.Open &&
         // Calculate the days passed by comparing the tillDay with the block day - 7 days
-        rentals[rentalId].tillDay > block.timestamp * 86400 - 7;
+        rentals[rentalId].tillDay < block.timestamp * 86400 - 7;
     }
 
+    // Rate the tenant and request deposit deductions
     function rateTenant(uint rentalId, uint8 score, string text, uint depositDeduction, string deductionReason) public
     {
         // Check the parameters
@@ -566,11 +583,12 @@ contract Rent {
         // If there was a deduction requested, we must create a new deduction and save it in the rental
         rental.depositDeduction = DepositDeduction(
             rentalId,
+            block.timestamp / 86400, // current block day
             depositDeduction,
             deductionReason,
             "",
-            getRandomMediator(),
             "",
+            address(0),
             DeductionStatus.Requested
         );
         rental.depositStatus = DepositStatus.Pending;
@@ -587,8 +605,9 @@ contract Rent {
         return mediators[uint256(keccak256(block.timestamp, block.difficulty)) % mediators.length];
     }
 
-    // Claim the deposit if the tenant has already rated, the owner hasn't rated and 7 days have passed after the rental
-    function claimDeposit(uint rentalId) public {
+    // Claim the deposit refund if the tenant has already rated,
+    // the owner hasn't rated and 7 days have passed after the rental
+    function claimDepositRefund(uint rentalId) public {
         // Check that the rental exists
         require(rentals.length > rentalId);
 
@@ -608,7 +627,80 @@ contract Rent {
         users[msg.sender].balance += rental.deposit;
     }
 
-    // TODO: Implement deposit deduction objection
+    // Accept a deposit deduction as a tenant
+    function acceptDepositDeduction(uint rentalId) public {
+        require(rentals.length > rentalId);
+
+        Rental storage rental = rentals[rentalId];
+
+        // Only allow accepting deductions from the tenant
+        require(msg.sender == rental.tenant);
+
+        // Only allow objections if the depositStatus and the deduction status match
+        require(rental.depositStatus == DepositStatus.Pending);
+        require(rental.depositDeduction.status == DeductionStatus.Requested);
+
+        // Change the status
+        rental.depositStatus = DepositStatus.Processed;
+        rental.depositDeduction.status = DeductionStatus.Resolved;
+
+        // Transfer the deducted amount to the owner and the rest to the tenant
+        users[apartments[rental.apartment].owner].balance += rental.depositDeduction.amount;
+        users[rental.tenant].balance += rental.deposit - rental.depositDeduction.amount;
+    }
+
+    // Object a deposit deduction as a tenant
+    function objectDepositDeduction(uint rentalId, string objection) public {
+        require(rentals.length > rentalId);
+
+        Rental storage rental = rentals[rentalId];
+
+        // Only allow objections from the tenant
+        require(msg.sender == rental.tenant);
+
+        // Only allow objections if the depositStatus and the deduction status match
+        require(rental.depositStatus == DepositStatus.Pending);
+        require(rental.depositDeduction.status == DeductionStatus.Requested);
+
+        // Change the status
+        rental.depositDeduction.status = DeductionStatus.Objected;
+        rental.depositDeduction.objection = objection;
+
+        // Assign a mediator
+        rental.depositDeduction.mediator = getRandomMediator();
+
+        // Update the lastChange day
+        rental.depositDeduction.lastChange = block.timestamp / 86400;
+    }
+
+    // Resolve deposit deduction after a timeout (eg. after no change occurred for 7 days)
+    // If the deduction was not objected, it is granted to the owner
+    // If it was objected but the mediator did not mediate it, the owner receives half of the deducted amount
+    function resolveDeductionTimeout(uint rentalId) public {
+        require(rentals.length > rentalId);
+
+        Rental storage rental = rentals[rentalId];
+
+        // Only allow resolving from the tenant or owner
+        require(msg.sender == rental.tenant || msg.sender == apartments[rental.apartment].owner);
+
+        // Only allow resolving if the depositStatus and the deduction status match
+        require(rental.depositStatus == DepositStatus.Pending);
+        require(rental.depositDeduction.status == DeductionStatus.Requested || rental.depositDeduction.status == DeductionStatus.Objected);
+
+        // Only allow resolving after 7 days
+        require(rental.lastChange < block.timestamp * 86400 - 7);
+
+        // Change the status
+        rental.depositStatus = DepositStatus.Processed;
+        rental.depositDeduction.status = DeductionStatus.Resolved;
+
+        // Transfer the deposit minus half of the deduction (rounded down) to the tenant
+        users[rental.tenant].balance += rental.deposit - (rental.depositDeduction.amount / 2 - rental.depositDeduction.amount % 2);
+
+        // Transfer the other half of the deduction (rounded down) to the owner
+        users[apartments[rental.apartment].owner].balance += rental.depositDeduction.amount / 2 - rental.depositDeduction.amount % 2;
+    }
 
     // Mediate an deposit request that was objected
     function mediate(uint deductionId, uint128 ownerRefund, uint128 tenantRefund, string conclusion) public {
@@ -639,6 +731,7 @@ contract Rent {
         users[msg.sender].balance += mediatorFee;
     }
 
+    // Check if the apartment is available at the requested time
     function isAvailable(uint apartmentId, uint16 fromDay, uint16 tillDay) public view returns (bool) {
         require(apartments.length > apartmentId);
 
@@ -672,10 +765,12 @@ contract Rent {
         return true;
     }
 
+    // Get the amount of wei for the provided credits
     function creditsToWei(uint credits) public pure returns (uint) {
         return credits * creditConversionFactor;
     }
 
+    // Get the amount of credits for the provided wei
     function weiToCredits(uint value) public pure returns (uint) {
         return value / creditConversionFactor;
     }
