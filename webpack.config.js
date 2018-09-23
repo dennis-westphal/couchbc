@@ -4,6 +4,7 @@ const {VueLoaderPlugin} = require('vue-loader');
 const ExtractTextPlugin = require('extract-text-webpack-plugin');
 
 module.exports = {
+	devtool: 'source-map',
 	entry:   './app/js/app.js',
 	output:  {
 		path:       path.resolve(__dirname, 'public/bundles'),

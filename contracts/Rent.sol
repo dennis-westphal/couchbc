@@ -4,17 +4,25 @@ import "./Library.sol";
 
 contract Rent {
     uint constant creditConversionFactor = 500000000000000;
+    uint8 constant mediatorFee = 5;
 
     struct Address {
-        uint id;
         string street;
         string zipCode;
         string city;
         string country;
+        string phone;
+    }
+
+    struct Rating {
+        uint8 score;
+        string text;
     }
 
     struct User {
         address addr;
+
+        bool mediator;
 
         string name;
         uint physicalAddress;
@@ -23,10 +31,11 @@ contract Rent {
 
         uint[] apartments;
         uint[] rentals;
+        uint[] ratings;
+        uint totalScore;
     }
 
     struct Apartment {
-        uint id;
         bool disabled;
 
         address owner;
@@ -40,25 +49,56 @@ contract Rent {
         uint128 deposit;
 
         uint[] rentals;
+        uint[] ratings;
     }
 
-    struct Rental {
-        uint id;
+    enum DeductionStatus {
+        Requested,
+        Accepted,
+        Objected,
+        Resolved
+    }
 
+    struct DepositDeduction {
+        uint rental;
+        uint128 amount;
+        string reason;
+        string objection;
+        address mediator;
+        string conclusion;
+
+        DeductionStatus status;
+    }
+
+    enum DepositStatus {
+        Open, // When no claim to the deposit has been made or is valid yet
+        Pending, // When a deduction was requested
+        Claimable, // When the deposit was refunded, but the tenant has not rated yet
+        Processed // When the deposit was processed (possibly refunded)
+    }
+    struct Rental {
         uint apartment;
         address tenant;
 
         uint16 fromDay; // Day as floor(unix timestamp / (60*60*24))
         uint16 tillDay;
+        uint price;
         uint128 deposit;
-        bool depositClaimable;
+
+        bool ownerRated; // When rating + deposit status have been determined
+        bool tenantRated; // When rated
+
+        DepositStatus depositStatus;
+        DepositDeduction depositDeduction;
     }
 
     mapping(address => User) users;
+    address[] public mediators;
 
-    Address[] public addresses;
+    Address[] addresses;
     Apartment[] public apartments;
-    Rental[] public rentals;
+    Rental[] rentals;
+    Rating[] ratings;
 
     event Registered(address indexed userAddress);
 
@@ -71,8 +111,6 @@ contract Rent {
     event ImageRemoved(address indexed userAddress, uint apartmentId, uint imageId);
 
     event Rented(address indexed userAddress, address indexed ownerAddress, uint apartmentId, uint rentalId);
-    event DepositRefunded(address indexed ownerAddress, address indexed tenantAddress, uint rentalId, uint128 deductedAmount);
-    event DepositClaimed(address indexed userAddress, uint rentalId);
 
     event Transferred(address indexed userAddress, uint newBalance);
     event Paidout(address indexed userAddress, uint newBalance);
@@ -81,36 +119,46 @@ contract Rent {
         return users[msg.sender].addr != 0;
     }
 
-    function getBalance() public view returns (uint) {
-        require(users[msg.sender].addr != 0);
-
-        return users[msg.sender].balance;
-    }
-
-    function getUserApartmentsNum() public view returns (uint) {
-        require(users[msg.sender].addr != 0);
-
-        return users[msg.sender].apartments.length;
-    }
-
     function getPhysicalAddress(uint addressIndex) public view returns (
         uint id,
         string street,
         string zipCode,
         string city,
-        string country) {
+        string country,
+        string phone) {
         require(addresses.length > addressIndex);
 
-        Address storage physicalAddress = addresses[addressIndex];
-
-        id = physicalAddress.id;
-        street = physicalAddress.street;
-        zipCode = physicalAddress.zipCode;
-        city = physicalAddress.city;
-        country = physicalAddress.country;
+        id = addressIndex;
+        street = addresses[addressIndex].street;
+        zipCode = addresses[addressIndex].zipCode;
+        city = addresses[addressIndex].city;
+        country = addresses[addressIndex].country;
+        phone = addresses[addressIndex].phone;
     }
 
-    function getUserApartment(uint userApartmentIndex) public view returns (
+    function getUser(address userAddr) public view returns (
+        address addr,
+        bool mediator,
+        string name,
+        uint physicalAddressId,
+        uint balance,
+        uint numApartments,
+        uint numRentals,
+        uint numRatings
+    ) {
+        require(users[userAddr].addr != 0);
+
+        addr = userAddr;
+        mediator = users[userAddr].meditator;
+        name = users[userAddr].name;
+        physicalAddressId = users[userAddr].physicalAddress;
+        balance = users[userAddr].balance;
+        numApartments = users[userAddr].apartments.length;
+        numRentals = users[userAddr].rentals.length;
+        numRatings = users[userAddr].ratings.length;
+    }
+
+    function getUserApartment(address userAddr, uint userApartmentIndex) public view returns (
         uint id,
         bool disabled,
         address owner,
@@ -120,29 +168,21 @@ contract Rent {
         uint physicalAddress,
         uint128 pricePerNight,
         uint128 deposit) {
-        require(users[msg.sender].addr != 0);
-        require(users[msg.sender].apartments.length > userApartmentIndex);
+        require(users[userAddr].addr != 0);
+        require(users[userAddr].apartments.length > userApartmentIndex);
 
-        Apartment storage apartment = apartments[users[msg.sender].apartments[userApartmentIndex]];
-
-        id = apartment.id;
-        disabled = apartment.disabled;
-        owner = apartment.owner;
-        title = apartment.title;
-        primaryImage = apartment.primaryImage;
-        numImages = apartment.images.length;
-        physicalAddress = apartment.physicalAddress;
-        pricePerNight = apartment.pricePerNight;
-        deposit = apartment.deposit;
+        id = users[userAddr].apartments[userApartmentIndex];
+        disabled = apartments[id].disabled;
+        owner = apartments[id].owner;
+        title = apartments[id].title;
+        primaryImage = apartments[id].primaryImage;
+        numImages = apartments[id].images.length;
+        physicalAddress = apartments[id].physicalAddress;
+        pricePerNight = apartments[id].pricePerNight;
+        deposit = apartments[id].deposit;
     }
 
-    function getUserRentalsNum() public view returns (uint) {
-        require(users[msg.sender].addr != 0);
-
-        return users[msg.sender].rentals.length;
-    }
-
-    function getUserRental(uint userRentalIndex) public view returns (
+    function getUserRental(address userAddr, uint userRentalIndex) public view returns (
         uint apartmentId,
         uint rentalId,
         uint16 fromDay,
@@ -150,16 +190,27 @@ contract Rent {
         uint128 deposit,
         bool depositClaimable
     ) {
-        require(users[msg.sender].addr != 0);
+        require(users[userAddr].addr != 0);
+        require(users[userAddr].rentals.length > userRentalIndex);
 
-        Rental storage rental = rentals[users[msg.sender].rentals[userRentalIndex]];
+        rentalId = users[userId].rentals[userRentalIndex];
+        apartmentId = rentals[rentalId].apartment;
+        fromDay = rentals[rentalId].fromDay;
+        tillDay = rentals[rentalId].tillDay;
+        deposit = rentals[rentalId].deposit;
+        depositClaimable = rentals[rentalId].depositClaimable;
+    }
 
-        rentalId = rental.id;
-        apartmentId = rental.apartment;
-        fromDay = rental.fromDay;
-        tillDay = rental.tillDay;
-        deposit = rental.deposit;
-        depositClaimable = rental.depositClaimable;
+    function getUserRating(address userAddr, uint userRatingId) public view returns (
+        uint8 score,
+        string text
+    ) {
+        require(users[userAddr].addr != 0);
+        require(users[userAddr].ratings.length > userRatingId);
+
+        id = users[userId].ratings[userRatingId];
+        score = ratings[id].score;
+        text = ratings[id].text;
     }
 
     function getApartmentsNum() public view returns (uint) {
@@ -175,63 +226,33 @@ contract Rent {
         uint numImages,
         uint physicalAddress,
         uint128 pricePerNight,
-        uint128 deposit) {
-        require(apartments.length > apartmentId);
-
-        Apartment storage apartment = apartments[apartmentId];
-
-        id = apartment.id;
-        disabled = apartment.disabled;
-        owner = apartment.owner;
-        title = apartment.title;
-        primaryImage = apartment.primaryImage;
-        numImages = apartment.images.length;
-        physicalAddress = apartment.physicalAddress;
-        pricePerNight = apartment.pricePerNight;
-        deposit = apartment.deposit;
-    }
-
-    function getApartmentImage(uint apartmentId, uint imageId) public view returns (string)
-    {
-        require(apartments[apartmentId].owner == msg.sender);
-        require(imageId < apartments[apartmentId].images.length);
-
-        return apartments[apartmentId].images[imageId];
-    }
-
-    function getRentalsNum() public view returns (uint) {
-        return rentals.length;
-    }
-
-    function getRental(uint rentalIndex) public view returns (
-        uint apartmentId,
-        uint rentalId,
-        address tenant,
-        uint16 fromDay,
-        uint16 tillDay,
         uint128 deposit,
-        bool depositClaimable
-    ) {
-        Rental storage rental = rentals[rentalIndex];
-
-        rentalId = rental.id;
-        apartmentId = rental.apartment;
-        tenant = rental.tenant;
-        fromDay = rental.fromDay;
-        tillDay = rental.tillDay;
-        deposit = rental.deposit;
-        depositClaimable = rental.depositClaimable;
-    }
-
-    function getApartmentRentalsNum(uint apartmentId) public view returns (uint) {
+        uint numRentals,
+        uint numRatings) {
         require(apartments.length > apartmentId);
 
-        return apartments[apartmentId].rentals.length;
+        id = apartments[apartmentId];
+        disabled = apartments[apartmentId].disabled;
+        owner = apartments[apartmentId].owner;
+        title = apartments[apartmentId].title;
+        primaryImage = apartments[apartmentId].primaryImage;
+        numImages = apartments[apartmentId].images.length;
+        physicalAddress = apartments[apartmentId].physicalAddress;
+        pricePerNight = apartments[apartmentId].pricePerNight;
+        deposit = apartments[apartmentId].deposit;
+        numRentals = apartments[apartmentId].rentals.length;
+        numRatings = apartments[apartmentId].ratings.length;
     }
 
-    function getApartmentRental(uint apartmentIndex, uint rentalIndex) public view returns (
-        uint apartmentId,
-        uint rentalId,
+    function getApartmentImage(uint apartmentId, uint apartmentImageIndex) public view returns (string)
+    {
+        require(apartments[apartmentId].images.length > apartmentImageIndex);
+
+        return apartments[apartmentId].images[apartmentImageIndex];
+    }
+
+    function getApartmentRental(uint apartmentId, uint apartmentRentalIndex) public view returns (
+        uint id,
         address tenant,
         uint16 fromDay,
         uint16 tillDay,
@@ -241,30 +262,66 @@ contract Rent {
         require(apartments.length > apartmentIndex);
         require(apartments[apartmentIndex].rentals.length > rentalIndex);
 
-        Rental storage rental = rentals[apartments[apartmentId].rentals[rentalIndex]];
-
-        rentalId = rental.id;
-        apartmentId = rental.apartment;
-        tenant = rental.tenant;
-        fromDay = rental.fromDay;
-        tillDay = rental.tillDay;
-        deposit = rental.deposit;
-        depositClaimable = rental.depositClaimable;
+        id = apartments[apartmentId].rentals[rentalIndex];
+        apartmentId = rentals[id].apartment;
+        tenant = rentals[id].tenant;
+        fromDay = rentals[id].fromDay;
+        tillDay = rentals[id].tillDay;
+        deposit = rentals[id].deposit;
+        depositClaimable = rentals[id].depositClaimable;
     }
 
-    function register(string name, string street, string zipCode, string city, string country) public payable {
+    function getApartmentRating(uint apartmentId, uint apartmentRatingId) public view returns (
+        uint id,
+        uint8 score,
+        string text
+    ) {
+        require(apartments.length > apartmentId);
+        require(apartments[apartmentId].ratings.length > apartmentRatingId);
+
+        id = apartments[apartmentId].ratings[apartmentRatingId];
+        score = ratings[id].score;
+        text = ratings[id].text;
+    }
+
+    // Register a new user
+    function register(string name, string street, string zipCode, string city, string country, string phone) public {
         require(users[msg.sender].addr == 0);
 
         // Adding this is necessary as apparently struct array members cannot be omitted in the struct constructor
         uint[] memory userApartments;
         uint[] memory userRentals;
-        User memory user = User(msg.sender, name, addAddress(street, zipCode, city, country), weiToCredits(msg.value), userApartments, userRentals);
+        User memory user = User(msg.sender, false, name, addAddress(street, zipCode, city, country, phone), weiToCredits(msg.value), userApartments, userRentals, 0);
 
         users[msg.sender] = user;
 
         emit Registered(msg.sender);
     }
 
+    // Check if the user can become a mediator
+    // The will be true if the user has at least 5 ratings and an average score of at least 4
+    function canBeMediator(address userAddr) public view returns (bool) {
+        require(users[userAddr].addr != 0);
+
+        return users[userAddr].ratings.length > 4 &&
+        users[userAddr].totalScore / users[userAddr].ratings >= 4.0;
+    }
+
+    // Register as a mediator
+    function registerAsMediator() public {
+        require(users[msg.sender].addr != 0);
+        require(!users[msg.sender].mediator);
+
+        // Check if the user can be a mediator
+        if (!canBeMediator(msg.sender)) {
+            return;
+        }
+
+        users[msg.sender].mediator = true;
+        mediators.push(msg.sender);
+    }
+
+    // Transfer balance to the user's account
     function transfer() public payable {
         require(users[msg.sender].addr != 0);
 
@@ -274,6 +331,7 @@ contract Rent {
         emit Transferred(msg.sender, users[msg.sender].balance);
     }
 
+    // Pay out balance from the user's account
     function payout(uint credits) public {
         require(users[msg.sender].addr != 0);
         require(credits > 0);
@@ -294,14 +352,14 @@ contract Rent {
     }
 
     function addAddress(string street, string zipCode, string city, string country) private returns (uint){
-        Address memory newAddress = Address(addresses.length, street, zipCode, city, country);
+        Address memory newAddress = Address(street, zipCode, city, country);
 
         addresses.push(newAddress);
 
         return addresses.length - 1;
     }
 
-    function addApartment(string title, string street, string zipCode, string city, string country, string primaryImage, uint128 pricePerNight, uint128 deposit) public {
+    function addApartment(string title, string street, string zipCode, string city, string country, string phone, string primaryImage, uint128 pricePerNight, uint128 deposit) public {
         require(users[msg.sender].addr != 0);
 
         User storage user = users[msg.sender];
@@ -310,7 +368,7 @@ contract Rent {
         uint[] memory apartmentRentals;
         string[] memory images;
 
-        Apartment memory apartment = Apartment(apartments.length, false, user.addr, title, addAddress(street, zipCode, city, country), primaryImage, images, pricePerNight, deposit, apartmentRentals);
+        Apartment memory apartment = Apartment(false, user.addr, title, addAddress(street, zipCode, city, country, phone), primaryImage, images, pricePerNight, deposit, apartmentRentals);
 
         apartments.push(apartment);
         user.apartments.push(apartments.length - 1);
@@ -337,18 +395,18 @@ contract Rent {
         emit ImageAdded(msg.sender, apartmentId, image);
     }
 
-    function removeImage(uint apartmentId, uint imageId) public
+    function removeImage(uint apartmentId, uint apartmentImageIndex) public
     {
         require(apartments[apartmentId].owner == msg.sender);
-        require(imageId < apartments[apartmentId].images.length);
+        require(apartments[apartmentId].images.length > apartmentImageIndex);
 
-        for (uint i = imageId; i < apartments[apartmentId].images.length - 1; i++) {
+        for (uint i = apartmentImageIndex; i < apartments[apartmentId].images.length - 1; i++) {
             apartments[apartmentId].images[i] = apartments[apartmentId].images[i + 1];
         }
 
         apartments[apartmentId].images.length--;
 
-        emit ImageRemoved(msg.sender, apartmentId, imageId);
+        emit ImageRemoved(msg.sender, apartmentId, apartmentImageIndex);
     }
 
     function enableApartment(uint apartmentId) public {
@@ -393,7 +451,7 @@ contract Rent {
 
         // Add a new rental
         uint rentalId = rentals.length;
-        Rental memory rental = Rental(rentalId, apartmentId, msg.sender, fromDay, tillDay, apartment.deposit, false);
+        Rental memory rental = Rental(apartmentId, msg.sender, fromDay, tillDay, rentalFee, apartment.deposit, false, false, DepositStatus.Open);
 
         // Add the rental to the rentals
         rentals.push(rental);
@@ -413,54 +471,178 @@ contract Rent {
         emit Rented(msg.sender, apartment.owner, apartmentId, rentalId);
     }
 
-    function refundDeposit(uint rentalId, uint128 deductAmount) public {
+    function rateRental(uint rentalId, uint8 score, string text) public {
+        // Check the parameters
+        require(score < 6 && score > 0);
+        require(bytes(text).length > 0);
+
         // Check that the rental exists
-        require(rentals[rentalId].id == rentalId);
+        require(rentals.length > rentalId);
 
-        // Check if the deposit is already claimable => has already been refunded
-        require(rentals[rentalId].depositClaimable == false);
+        Rental storage rental = rentals[rentalId];
 
-        // Check the sender is the owner
-        require(apartments[rentals[rentalId].apartment].owner == msg.sender);
+        // Check that the sender is the tenant
+        require(msg.sender == rental.tenant);
 
-        // Check the requested amount can be deducted from the deposit
-        require(rentals[rentalId].deposit >= deductAmount);
-        require(deductAmount >= 0);
+        // Check that the rental didn't end (=> wasn't rated) from the tenant side yet
+        require(!rental.tenantRated);
 
-        // Increase the owner's balance by the deducted amount
-        users[msg.sender].balance += deductAmount;
+        // Set the ended flag for the tenant
+        rental.tenantRated = true;
 
-        // Reduce the remaining (claimable) deposit by the deducted amount
-        rentals[rentalId].deposit -= deductAmount;
+        // If the deposit is claimable directly, transfer it to the tenant
+        if (depositIsClaimable(rentalId)) {
+            rental.depositStatus = DepositStatus.Processed;
+            users[msg.sender].balance += rental.deposit;
+        }
 
-        // Set the remaining deposit to claimable
-        rentals[rentalId].depositClaimable = true;
-
-        emit DepositRefunded(msg.sender, rentals[rentalId].tenant, rentalId, deductAmount);
+        // Add the rating to the rental
+        rental.ratings.push(Rating(score, text));
     }
 
+    // The deposit is claimable if marked as Claimable or it is Open and
+    // at least 7 days have passed since the rental was over
+    function depositIsClaimable(uint rentalId) public view returns (bool) {
+        // Check that the rental exists
+        require(rentals.length > rentalId);
+
+        return
+        rentals[rentalId].depositStatus == DepositStatus.Claimable ||
+        rentals[rentalId].depositStatus == DepositStatus.Open &&
+        // Calculate the days passed by comparing the tillDay with the block day - 7 days
+        rentals[rentalId].tillDay > block.timestamp * 86400 - 7;
+    }
+
+    function rateTenant(uint rentalId, uint8 score, string text, uint depositDeduction, string deductionReason) public
+    {
+        // Check the parameters
+        require(score < 6 && score > 0);
+        require(bytes(text).length > 0);
+        require(depositDeduction >= 0);
+
+        // Check that the rental exists
+        require(rentals.length > rentalId);
+
+        Rental storage rental = rentals[rentalId];
+
+        // Check that the sender is the owner of the apartment
+        require(msg.sender == apartments[rental.apartment].owner);
+
+        // Check the requested deduction is not higher than the deposit
+        require(depositDeduction <= rental.deposit);
+
+        // Check that if a deduction was requested:
+        // - a reason is also provided and
+        // - at least one mediator is registered
+        // - the deposit is higher than the mediator fee
+        require(depositDeduction == 0 ||
+        bytes(deductionReason).length > 0 &&
+        mediators.length > 0 &&
+        rental.deposit > mediatorFee);
+
+        // Check that the rental didn't end  (=> wasn't rated) from the owner side yet
+        require(!rental.ownerRated);
+
+        // Set the ended flag for the owner
+        rental.ownerRated = true;
+
+        // Add the rating to the user
+        users[rental.tenant].ratings.push(Rating(score, text));
+
+        if (depositDeduction == 0) {
+            // If the tenant has already rated the rental, we can directly refund the deposit
+            if (rental.tenantRated) {
+                rental.depositStatus = DepositStatus.Processed;
+                users[msg.sender].balance += rental.deposit;
+
+                return;
+            }
+
+            // Otherwise, set the deposit status to claimable
+            rental.depositStatus = DepositStatus.Claimable;
+            return;
+        }
+
+        // If there was a deduction requested, we must create a new deduction and save it in the rental
+        rental.depositDeduction = DepositDeduction(
+            rentalId,
+            depositDeduction,
+            deductionReason,
+            "",
+            getRandomMediator(),
+            "",
+            DeductionStatus.Requested
+        );
+        rental.depositStatus = DepositStatus.Pending;
+    }
+
+    // Get a pseudo-random mediator
+    function getRandomMediator() private view returns (address) {
+        // If we only have one mediator, return him
+        if (mediators.length == 1) {
+            return mediators[0];
+        }
+
+        // Get the mediator based on a pseudo-random number generated using the block timestamp and difficulty
+        return mediators[uint256(keccak256(block.timestamp, block.difficulty)) % mediators.length];
+    }
+
+    // Claim the deposit if the tenant has already rated, the owner hasn't rated and 7 days have passed after the rental
     function claimDeposit(uint rentalId) public {
         // Check that the rental exists
-        require(rentals[rentalId].id == rentalId);
+        require(rentals.length > rentalId);
 
-        // Check if the deposit is claimable
-        require(rentals[rentalId].depositClaimable == true);
+        Rental storage rental = rentals[rentalId];
 
-        // Check the sender is the tenant
-        require(rentals[rentalId].tenant == msg.sender);
+        // Check that the sender is the tenant
+        require(msg.sender == rental.tenant);
 
-        // Increase the users balance by deposit
-        users[msg.sender].balance += rentals[rentalId].deposit;
+        // Check that the rental ended (=> was already rated) from the tenant side
+        require(rental.tenantRated);
 
-        // Set the remaining (claimable) deposit to 0
-        rentals[rentalId].deposit = 0;
+        // Check that the deposit is claimable
+        require(depositIsClaimable(rentalId));
 
-        emit DepositClaimed(msg.sender, rentalId);
+        // Transfer the deposit to the tenant
+        rental.depositStatus = DepositStatus.Processed;
+        users[msg.sender].balance += rental.deposit;
+    }
+
+    // TODO: Implement deposit deduction objection
+
+    // Mediate an deposit request that was objected
+    function mediate(uint deductionId, uint128 ownerRefund, uint128 tenantRefund, string conclusion) public {
+        require(depositDeductions.length > deductionId);
+
+        // Check that we have a conclusion
+        require(bytes(conclusion).length > 0);
+
+        DepositDeduction storage deduction = depositDeductions[deductionId];
+        Rental storage rental = rentals[deduction.rental];
+
+        // Check that the sender is also the mediator
+        require(msg.sender == deduction.mediator);
+
+        // Check that the deduction requires mediation
+        require(deduction.status == DeductionStatus.Objected);
+
+        // Check that the total of owner refund, landlord refund and mediator fee matches the total deposit
+        require(ownerRefund + tenantRefund + mediatorFee == rental.deposit);
+
+        // Set the deduction to resolved and the deposit to processed
+        deduction.status = DepositStatus.Resolved;
+        rental.depositStatus = DepositStatus.Processed;
+
+        // Split the deposit among tenant, owner and mediator
+        users[rental.tenant].balance += tenantRefund;
+        users[apartments[rental.apartment].owner].balance += ownerRefund;
+        users[msg.sender].balance += mediatorFee;
     }
 
     function isAvailable(uint apartmentId, uint16 fromDay, uint16 tillDay) public view returns (bool) {
         require(apartments.length > apartmentId);
 
+        // Disabled apartments can never be rented
         if (apartments[apartmentId].disabled) {
             return false;
         }
