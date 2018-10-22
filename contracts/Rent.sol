@@ -42,7 +42,7 @@ contract Rent {
 
     // ------------------------ Rentals ------------------------
     enum RentalStatus {
-        Requested, Withdrawn, Accepted
+        Requested, Withdrawn, Accepted, Reviewed
     }
     enum DeductionStatus {
         Requested, Objected, Resolved
@@ -54,7 +54,6 @@ contract Rent {
     }
 
     struct DepositDeduction {
-        uint rental;        // The rental for this deposit deduction
         uint16 lastChange;  // As a unix timestamp day
         uint128 amount;     // The requested deduction amount in finney
 
@@ -66,11 +65,15 @@ contract Rent {
     }
 
     struct Rental {
-        bytes32 interactionPublicKey;       // Public key used by apartment owner for authentication
+        bytes32 interactionPublicKey;   // Public key used by apartment owner for authentication
 
-        bytes32 detailsIpfsHash;            // Hash part of IPFS address for rental details encrypted with interaction public key
-        bytes32 detailsHash;                // Hash of rental details to allow verifying forwarded rental details
-        bytes32 detailsForMediatorIpfsHash; // Hash of rental details encrypted with mediator public key
+        bytes32 apartmentHash;          // Hash of apartment + nonce to later prove apartment involved in rental
+
+        bytes32 detailsIpfsHash;                // Hash part of IPFS address for rental details encrypted with interaction public key
+        bytes32 detailsHash;                    // Hash of rental details to allow verifying forwarded rental details
+        bytes32 detailsForMediatorIpfsHash;     // Hash part of IPFS address for rental details encrypted with mediator public key
+        bytes32 contactDataIpfsHash;            // Hash part of IPFS address for owner contact details encrypted with tenant public key
+        bytes32 contactDataForMediatorIpfsHash; // Hash part of IPFS address for owner contact details encrypted with mediator public key
 
         uint fee;           // Total fee for this rental in finney
         uint128 deposit;    // Deposit for this rental in finney
@@ -78,8 +81,9 @@ contract Rent {
         address tenant;     // The tenant profile address
         address mediator;   // The mediator determined for this rental (as soon as the rental is accepted)
 
-        RentalStatus status;            // Status for the rental
-        DepositStatus depositStatus;    // Status of the deposit
+        RentalStatus status;                // Status for the rental
+        DepositStatus depositStatus;        // Status of the deposit
+        DepositDeduction depositDeduction;  // Requested deposit deduction for this rental
     }
 
     // ------------------------------------------------------------
@@ -129,17 +133,19 @@ contract Rent {
     // ------------------------- Properties -----------------------
     // ------------------------------------------------------------
     mapping(address => Tenant) tenants;
+    mapping(address => bool) mediators;             // Mapping to check whether a user is already registered as mediator
     mapping(byte32 => bool) tenantPublicKeys;       // Mapping to check whether a public key has been used in a tenant's profile
 
-    Apartment[] apartments;
+    address[] mediators;                            // List of mediators
+
+    Apartment[] apartments;                         // List of apartments
 
     mapping(bytes32 => uint[]) cityApartments;      // Country+City SHA256 hash => apartment ids; to allow fetching apartments of a city
     mapping(address => uint[]) ownerApartments;     // Mapping to get the apartments of an owner
     mapping(byte32 => bool) ownerPublicKeys;        // Mapping to check whether a public key has been used in an apartment
     mapping(byte32 => uint) interactionKeyRentals;  // Mapping to get the rental for a interaction public key and to check whether a key has already been used
 
-    Rental[] rentals;
-    DepositDeduction[] depositDeductions;
+    Rental[] rentals;                               // List of rentals
 
     // ---------------------------------------------------------
     // ------------------------ Getters ------------------------
@@ -363,4 +369,107 @@ contract Rent {
     // ---------------------------------------------------------
     // ------------------------ Methods ------------------------
     // ---------------------------------------------------------
+
+    // ------------------------- Users -------------------------
+
+    // Register as a mediator with the tenant's account associated with the sender.
+    // Registration will fail if tenant is already mediator or doesn't have a sufficient score
+    // (at least 5 reviews and a total review score of at least 4.0 is required)
+    function registerMediator() public {
+
+    }
+
+    // ------------------------ Rentals ------------------------
+
+    // Request a new rental as a tenant
+    function requestRental(
+        uint fee,
+        uint128 deposit,
+        bytes32 interactionKey,
+        bytes32 detailsIpfsHash,
+        bytes32 detailsHash
+    ) public payable {
+
+    }
+
+    // Withdraw a rental request as a tenant
+    function withdrawRentalRequest(
+        uint rentalId
+    ) public {
+
+    }
+
+    // Refuse a rental request as an apartment owner.
+    // Uses the supplied signature to authenticate against the rentals interaction public key.
+    function refuseRental(
+        uint rentalId,
+        bytes32 signature // Signature for 'refuse:' + rentalId
+    ) public {
+
+    }
+
+    // Accept a rental request.
+    // Uses the supplied signature to authenticate against the rentals interaction public key.
+    function acceptRental(
+        uint rentalId,
+        bytes32 contactDataIpfsHash,
+        bytes32 signature  // Signature for 'accept:' + rentalId + contactDataIpfsHash
+    ) public {
+
+    }
+
+    // --------------------- Owner review ---------------------
+
+    // End a rental as an apartment owner.
+    // Uses the supplied signature to authenticate against the rentals interaction public key.
+    function endRental(
+        uint rentalId,
+        uint8 reviewScore,
+        bytes32 reviewTextIpfsHash,
+        uint128 deductionAmount, // Requested deposit deduction; can be 0
+        bytes32 deductionReasonIpfsHash, // Reason for deposit deduction; can be empty if no deduction requested
+        bytes32 contactDetailsIpfsHash      // Contact details for the mediator
+    ) public {
+
+    }
+
+    // ---------------------- Deductions ----------------------
+
+    // Accept the requested deduction as a tenant
+    function acceptDeduction(
+        uint rentalId
+    ) {
+
+    }
+
+    // Object to the requested deduction as a tenant
+    function refuseDeduction(
+        uint rentalId,
+        bytes32 objectionIpfsHash,
+        bytes32 rentalDetailsIpfsHash // Rental details for mediator, encrypted with mediator public key
+    ) {
+
+    }
+
+    // Mediate in a deduction request dispute
+    function mediate(
+        uint rentalId,
+        uint128 deductionAmount,
+        bytes32 conclusionIpfsHash // Conclusion encrypted with tenant and interaction public key
+    ) {
+
+    }
+
+    // -------------------- Tenant review --------------------
+
+    // Review an apartment, revealing the rented apartment in the process
+    function review(
+        uint rentalId,
+        uint apartmentId,
+        uint nonce, // Nonce involved in created apartmentHash
+        uint8 score,
+        bytes32 textIpfsHash // Hash of unencrypted review
+    ) {
+
+    }
 }
