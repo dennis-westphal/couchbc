@@ -1,4 +1,4 @@
-pragma solidity ^0.4.25;
+pragma solidity ^0.4.24;
 
 import "./Library.sol";
 
@@ -10,13 +10,25 @@ contract Rent {
     // -------------------------------------------------------------
 
     // ------------------------ Tenants ------------------------
+    enum MediatorStatus {
+        Unregistered, // Tenant has not registered as mediator yet
+        Registered, // Tenant is registered as mediator
+        Revoked // Mediator status has been revoked (after timeout for mediation)
+    }
+
     struct Tenant {
         bytes32 publicKey;
 
-        uint totalScore;    // Total score in sum of all rating points. The average score has to be determined totalScore / reviews.length
+        MediatorStatus mediatorStatus;
+
+        uint totalScore;    // Total score in sum of all rating points. The average score has to be determined totalScore / numReviews
         uint[] rentals;     // Ids of the rentals (array indices)
 
-        TenantReview[] reviews;
+        // Using an dynamically sized array instead of a mapping would be more elegant, but is not supported by solidity compiler yet
+        // (can not be initialized due to "Copying of type struct Rent.TenantReview memory[] memory to storage not yet supported")
+        uint numReviews;
+        mapping(uint => TenantReview) reviews;
+        //  TenantReview[] reviews;
     }
 
     struct TenantReview {
@@ -32,7 +44,10 @@ contract Rent {
 
         bytes32 ipfsHash;   // Hash part of IPFS address
 
-        ApartmentReview[] apartmentReviews;
+        // Again, a dynamically sized array would be more elegant, but not supported by solidity compiler
+        uint numReviews;
+        mapping(uint => ApartmentReview) reviews;
+        //ApartmentReview[] reviews;
     }
 
     struct ApartmentReview {
@@ -42,15 +57,18 @@ contract Rent {
 
     // ------------------------ Rentals ------------------------
     enum RentalStatus {
-        Requested, Withdrawn, Accepted, Reviewed
-    }
-    enum DeductionStatus {
-        Requested, Objected, Resolved
+        Requested, Accepted, Reviewed
     }
     enum DepositStatus {
         Open, // When no claim to the deposit has been made or is valid yet
         Pending, // When a deduction was requested
         Processed // When the deposit was processed => (partly) refunded / deduction transferred
+    }
+    enum DeductionStatus {
+        None, // When no deduction has been requested
+        Requested, // When a deduction has been requested, but the tenant hasn't responded
+        Objected, // When the tenant has objected to the deduction
+        Resolved // When the deduction has been resolved by mediation or timeout
     }
 
     struct DepositDeduction {
@@ -83,7 +101,6 @@ contract Rent {
 
         RentalStatus status;                // Status for the rental
         DepositStatus depositStatus;        // Status of the deposit
-        DepositDeduction depositDeduction;  // Requested deposit deduction for this rental
     }
 
     // ------------------------------------------------------------
@@ -95,16 +112,19 @@ contract Rent {
         if (status == RentalStatus.Requested) {
             return "requested";
         }
-        if (status == RentalStatus.Withdrawn) {
-            return "withdrawn";
-        }
         if (status == RentalStatus.Accepted) {
             return "accepted";
+        }
+        if (status == RentalStatus.Reviewed) {
+            return "reviewed";
         }
     }
 
     // Get the string representation for the deduction status, lowercase
     function getDeductionStatusString(DeductionStatus status) private pure returns (string) {
+        if (status == DeductionStatus.None) {
+            return "none";
+        }
         if (status == DeductionStatus.Requested) {
             return "requested";
         }
@@ -132,20 +152,21 @@ contract Rent {
     // ------------------------------------------------------------
     // ------------------------- Properties -----------------------
     // ------------------------------------------------------------
-    mapping(address => Tenant) tenants;
-    mapping(address => bool) mediators;             // Mapping to check whether a user is already registered as mediator
-    mapping(byte32 => bool) tenantPublicKeys;       // Mapping to check whether a public key has been used in a tenant's profile
+    mapping(address => Tenant) private tenants;
+    mapping(bytes32 => bool) private tenantPublicKeys;              // Mapping to check whether a public key has been used in a tenant's profile
 
-    address[] mediators;                            // List of mediators
+    address[] private mediators;                                    // List of mediators
 
-    Apartment[] apartments;                         // List of apartments
+    Apartment[] private apartments;                                 // List of apartments
 
-    mapping(bytes32 => uint[]) cityApartments;      // Country+City SHA256 hash => apartment ids; to allow fetching apartments of a city
-    mapping(address => uint[]) ownerApartments;     // Mapping to get the apartments of an owner
-    mapping(byte32 => bool) ownerPublicKeys;        // Mapping to check whether a public key has been used in an apartment
-    mapping(byte32 => uint) interactionKeyRentals;  // Mapping to get the rental for a interaction public key and to check whether a key has already been used
+    mapping(bytes32 => uint[]) private cityApartments;              // Country+City SHA256 hash => apartment ids; to allow fetching apartments of a city
+    mapping(address => uint[]) private ownerApartments;             // Mapping to get the apartments of an owner
+    mapping(bytes32 => bool) private ownerPublicKeys;               // Mapping to check whether a public key has been used in an apartment
+    mapping(bytes32 => uint) private interactionKeyRentals;         // Mapping to get the rental for a interaction public key and to check whether a key has already been used
 
-    Rental[] rentals;                               // List of rentals
+    Rental[] private rentals;                                       // List of rentals
+
+    mapping(uint => DepositDeduction) private depositDeductions;    // Deposit deductions for a rental (id => deduction)
 
     // ---------------------------------------------------------
     // ------------------------ Getters ------------------------
@@ -159,12 +180,12 @@ contract Rent {
         require(tenants[tenantAddr].publicKey != 0);
 
         // Get the tenant from storage
-        Tenant tenant = tenants[tenantAddr];
+        Tenant storage tenant = tenants[tenantAddr];
 
         // Assign the return variables
         publicKey = tenant.publicKey;
         totalScore = tenant.totalScore;
-        numReviews = tenant.reviews.length;
+        numReviews = tenant.numReviews;
     }
 
     // Get the review for the tenant with the specified id
@@ -174,13 +195,13 @@ contract Rent {
         bytes32 ipfsHash
     ) {
         // Check that the tenant exists
-        require(tenants[addr].publicKey != 0);
+        require(tenants[tenantAddr].publicKey != 0);
 
         // Check that the review exists
-        require(tenants[addr].reviews.length > reviewId);
+        require(tenants[tenantAddr].numReviews > reviewId);
 
         // Get the review from the tenant
-        TenantReview review = tenants[addr].reviews[reviewId];
+        TenantReview storage review = tenants[tenantAddr].reviews[reviewId];
 
         // Assign the return variables
         score = review.score;
@@ -203,17 +224,17 @@ contract Rent {
         // Check that the apartment exists
         require(apartments.length > apartmentId);
 
-        ownerPublicKey = apartments[apartmentId].ownerPublicKey;
-        ipfsHash = apartments[apartmentId].ipfsHash;
-        numReviews = apartments[apartmentId].reviews.length;
+        // Get the apartment from storage
+        Apartment storage apartment = apartments[apartmentId];
+
+        // Assign the return variables
+        ownerPublicKey = apartment.ownerPublicKey;
+        ipfsHash = apartment.ipfsHash;
+        numReviews = apartment.numReviews;
     }
 
     // Get the number of apartments available in a city
     function getNumCityApartments(bytes32 cityHash) public view returns (uint) {
-        if (cityApartments[cityHash] == 0) {
-            return 0;
-        }
-
         return cityApartments[cityHash].length;
     }
 
@@ -235,15 +256,11 @@ contract Rent {
         // Assign the return variables
         ownerPublicKey = apartment.ownerPublicKey;
         ipfsHash = apartment.ipfsHash;
-        numReviews = apartment.reviews.length;
+        numReviews = apartment.numReviews;
     }
 
     // Get the number of apartments created by the owner
     function getNumOwnerApartments(address ownerAddr) public view returns (uint) {
-        if (ownerApartments[ownerAddr] == 0) {
-            return 0;
-        }
-
         return ownerApartments[ownerAddr].length;
     }
 
@@ -254,13 +271,10 @@ contract Rent {
         bytes32 ipfsHash,
         uint numReviews
     ) {
-        // Check that the owner exists
-        require(ownerApartments[ownerAddr] != 0);
-
         // Check that the apartment exists
         require(ownerApartments[ownerAddr].length > ownerApartmentId);
 
-        id = ownerApartments[ownerAddr][apartmentId];
+        id = ownerApartments[ownerAddr][ownerApartmentId];
 
         // Get the apartment from storage
         Apartment storage apartment = apartments[id];
@@ -268,7 +282,7 @@ contract Rent {
         // Assign the return variables
         ownerPublicKey = apartment.ownerPublicKey;
         ipfsHash = apartment.ipfsHash;
-        numReviews = apartment.reviews.length;
+        numReviews = apartment.numReviews;
     }
 
     // -------------------- Apartment reviews ------------------
@@ -280,10 +294,10 @@ contract Rent {
         require(apartments.length > apartmentId);
 
         // Check that the review exists
-        require(apartments[apartmentId].reviews[reviewId].length > reviewId);
+        require(apartments[apartmentId].numReviews > reviewId);
 
         // Get the review from storage
-        ApartmentReview review = apartments[apartmentId].reviews[reviewId];
+        ApartmentReview storage review = apartments[apartmentId].reviews[reviewId];
 
         // Assign the return variables
         score = review.score;
@@ -343,7 +357,15 @@ contract Rent {
     }
 
     // Get the rental for the specified interaction public key
-    function getInteractionKeyRental(bytes32 key) public view returns (uint) {
+    function getInteractionKeyRental(bytes32 key) public view returns (
+        uint id,
+        bytes32 interactionPublicKey,
+        bytes32 detailsIpfsHash,
+        uint fee,
+        uint deposit,
+        string status,
+        string depositStatus
+    ) {
         // Check that we have a rental for the interaction key
         require(hasInteractionKeyRental(key));
 
@@ -364,7 +386,23 @@ contract Rent {
     // --------------------------------------------------------
     // ------------------------ Events ------------------------
     // --------------------------------------------------------
+    event MediatorRegistered(address indexed tenantAddress);
 
+    event ApartmentAdded(address indexed owner, uint apartmentId);
+
+    event RentalRequested(address indexed tenant, bytes32 indexed interactionKey, uint rentalId);
+    event RentalRequestWithdrawn(address indexed tenant, bytes32 indexed interactionKey, uint rentalId);
+    event RentalRequestApproved(address indexed tenant, bytes32 indexed interactionKey, uint rentalId);
+    event RentalRequestRefused(address indexed tenant, bytes32 indexed interactionKey, uint rentalId);
+
+    event DeductionRequested(address indexed tenant, bytes32 indexed interactionKey, uint rentalId);
+    event DeductionAccepted(address indexed tenant, bytes32 indexed interactionKey, uint rentalId);
+    event DeductionRefused(address indexed tenant, bytes32 indexed interactionKey, uint rentalId);
+
+    event DeductionMediated(address indexed tenant, bytes32 indexed interactionKey, uint rentalId);
+
+    event TenantReviewCreated(address indexed tenant, uint rentalId);
+    event ApartmentReviewCreated(address indexed tenant, address indexed owner, uint apartmentId, uint rentalId);
 
     // ---------------------------------------------------------
     // ------------------------ Methods ------------------------
@@ -376,7 +414,48 @@ contract Rent {
     // Registration will fail if tenant is already mediator or doesn't have a sufficient score
     // (at least 5 reviews and a total review score of at least 4.0 is required)
     function registerMediator() public {
+        // Check if the sender has a tenant account
+        require(tenants[msg.sender].publicKey != 0);
 
+        Tenant storage tenant = tenants[msg.sender];
+
+        // Check that the tenant isn't a mediator yet (and hasn't been revoked mediator status yet)
+        require(tenant.mediatorStatus == MediatorStatus.Unregistered);
+
+        // Check that the tenant has at least 5 reviews with a score of at least 4.0
+        require(tenant.numReviews > 4 && tenant.totalScore / tenant.numReviews >= 4);
+
+        // Set the tenant as mediator and add him to the list of mediators
+        tenant.mediatorStatus == MediatorStatus.Registered;
+        mediators.push(msg.sender);
+
+        // Emit a mediator registered event
+        emit MediatorRegistered(msg.sender);
+    }
+
+    // Create a tenant with the specified publicKey
+    function createTenant(address addr, bytes32 publicKey) private returns (Tenant) {
+        // Check that the public key is not empty
+        require(publicKey.length > 0);
+
+        // Check that the public key has not been used yet
+        require(tenantPublicKeys[publicKey] == false);
+        require(ownerPublicKeys[publicKey] == false);
+
+        // Initialize empty arrays. This is necessary for struct members and for some reaon cannot be done in the constructor call
+        uint[] memory tenantRentals;
+
+        // Add a new tenant
+        tenants[addr] = Tenant(
+            publicKey,
+            MediatorStatus.Unregistered,
+            0,              // Initial score
+            tenantRentals,  // Rental ids
+            0               // Number of reviews
+        );
+
+        // Set the public key as used tenant public key
+        tenantPublicKeys[publicKey] = true;
     }
 
     // ------------------------ Rentals ------------------------
@@ -386,11 +465,53 @@ contract Rent {
         uint fee,
         uint128 deposit,
         bytes32 interactionKey,
+        bytes32 apartmentHash,
         bytes32 detailsIpfsHash,
-        bytes32 detailsHash
+        bytes32 detailsHash,
+        bytes32 tenantPublicKey
     ) public payable {
+        // Check that the fee is not 0
+        require(fee > 0);
 
+        // Check if the transferred value matches the fee and deposit
+        require(fee + deposit == Library.weiToFinney(msg.value));
+
+        // Check that the interaction key is not empty and does not match an owner or tenant key
+        require(interactionKey.length > 0);
+        require(tenantPublicKeys[interactionKey] == false);
+        require(ownerPublicKeys[interactionKey] == false);
+
+        // Check the hashes are not empty
+        require(apartmentHash.length > 0);
+        require(detailsIpfsHash.length > 0);
+        require(detailsHash.length > 0);
+
+        // Check if the tenant exists; create him otherwise
+        if(tenants[msg.sender].publicKey == 0) {
+            createTenant(msg.sender, tenantPublicKey);
+        }
+
+        // Construct empty deposit deduction as this is
+
+        // Add the rental
+        rentals.push(Rental(
+            interactionKey,
+            apartmentHash,
+            detailsIpfsHash,
+            detailsHash,
+            0,
+            0,
+            0,
+            fee,
+            deposit,
+            msg.sender,
+            0x0,
+            RentalStatus.Requested,
+            DepositStatus.Open
+        ));
     }
+
+
 
     // Withdraw a rental request as a tenant
     function withdrawRentalRequest(
