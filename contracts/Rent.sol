@@ -416,6 +416,33 @@ contract Rent {
 	// ------------------------ Methods ------------------------
 	// ---------------------------------------------------------
 
+	// Add a new apartment
+	function addApartment(
+		bytes32 ownerPublicKey,
+		bytes32 ipfsHash, // Hash part of IPFS address for apartment details
+		bytes32 cityHash // Hash of city + country, used for searching
+	) public {
+		// Check that the owner isn't a tenant too
+		require(!tenants[msg.sender].initialized);
+
+		// Check that the ownerPublicKey does not match a tenant's public key
+		require(!tenantPublicKeys[ownerPublicKey]);
+
+		// Add the apartment to the list of apartments
+		apartments.push(Apartment(
+				msg.sender,
+				ownerPublicKey,
+				ipfsHash,
+				0
+			));
+
+		// Add the apartment to the city's apartments
+		cityApartments[cityHash].push(apartments.length - 1);
+
+		// Add the apartment to the owner's apartments
+		ownerApartments[msg.sender].push(apartments.length - 1);
+	}
+
 	// ------------------------- Users -------------------------
 
 	// Register as a mediator with the tenant's account associated with the sender.
@@ -448,8 +475,8 @@ contract Rent {
 		//require(publicKey.length > 0);
 
 		// Check that the public key has not been used yet
-		require(tenantPublicKeys[publicKey] == false);
-		require(ownerPublicKeys[publicKey] == false);
+		require(!tenantPublicKeys[publicKey]);
+		require(!ownerPublicKeys[publicKey]);
 
 		// Initialize empty arrays. This is necessary for struct members and for some reaon cannot be done in the constructor call
 		uint[] memory tenantRentals;
@@ -487,23 +514,17 @@ contract Rent {
 		// Check if the transferred value matches the fee and deposit
 		require(fee + deposit == Library.weiToFinney(msg.value));
 
-		// Check that the interaction key is not empty and does not match an owner or tenant key
-		require(interactionKey.length > 0);
-		require(tenantPublicKeys[interactionKey] == false);
-		require(ownerPublicKeys[interactionKey] == false);
+		// Check that the interaction key does not match an owner or tenant key
+		require(!tenantPublicKeys[interactionKey]);
+		require(!ownerPublicKeys[interactionKey]);
 
 		// Check that the interaction address is not empty and does not match a tenant address
 		// TODO: Also check it doesn't match owner address
 		require(interactionAddress != 0x0);
 		require(!tenants[interactionAddress].initialized);
 
-		// Check the hashes are not empty
-		require(apartmentHash.length > 0);
-		require(detailsIpfsHash.length > 0);
-		require(detailsHash.length > 0);
-
 		// Check if the tenant exists; create him otherwise
-		if (tenants[msg.sender].publicKey == 0) {
+		if (!tenants[msg.sender].initialized) {
 			createTenant(msg.sender, tenantPublicKey);
 		}
 

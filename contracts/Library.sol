@@ -1,4 +1,4 @@
-pragma solidity ^0.4.22;
+pragma solidity ^0.4.24;
 
 library Library {
 	// Convert finney to wei
@@ -13,34 +13,34 @@ library Library {
 
 	// Convert an uint to a string
 	function uintToString(uint integer) public pure returns (string) {
-		// Create a bytes array that can fit the maximum size of an uint (2^256 = ~1.16e77)
-		bytes memory reversedChars = new bytes(78);
+		// Return "0" if we have 0
+		if (integer == 0) {
+			return "0";
+		}
 
-		// Determine the actual int length
-		uint8 strLength = 0;
+		uint length;
+		uint copy = integer;
 
-		// Perform as long as the integer is not empty
-		while (integer != 0) {
-			// Get the digit with modulo
-			uint remainder = integer % 10;
-
-			// Strip off the last digit by dividing by 10
-			integer = integer / 10;
-
-			// Add the char to the reversedChars and increase the string length
-			reversedChars[strLength] = byte(48 + remainder);
+		// Determine the length of the integer
+		while (copy != 0) {
+			length++;
+			copy /= 10;
 		}
 
 		// Create a new bytes array with the right length
-		bytes memory resultBytes = new bytes(i);
+		bytes memory chars = new bytes(length);
 
-		// Reverse iterate through the array and add the chars to the result array
-		for (uint8 i = strLength; i > 0; i--) {
-			resultBytes[strLength - i] = reversedChars[i - 1];
+		// Add all elements from the integer
+		while (integer != 0) {
+			// Add chars from the end using the module
+			chars[--length] = byte(48 + integer % 10);
+
+			// Drop the last digit
+			integer /= 10;
 		}
 
-		// Return a string from the bytes array
-		return string(resultBytes);
+		// Return a string from the chars array
+		return string(chars);
 	}
 
 	// Convert a fixed-size bytes32 array to a string

@@ -10,7 +10,16 @@
 	<nav>
 		<div class="top-bar">
 			<div class="top-bar-left">
-				<a href="#" class="left" v-on:click.stop="page = 'start'">CouchBC</a>
+				<a href="#" v-on:click.stop="page = 'start'" class="logo">CouchBC</a>
+
+				<autoaddress
+						id="search-address"
+						classname="form-control"
+						placeholder="Where do you want to go?"
+						types="(cities)"
+						v-on:placechanged="changeAddress"
+				>
+				</autoaddress>
 			</div>
 			<div class="top-bar-right">
 				<ul id="menu" class="dropdown menu" data-dropdown-menu>
@@ -55,7 +64,7 @@
 
 	<div class="page start" v-if="page == 'start'">
 		<div class="header">
-			<img src="https://ipfs.io/ipfs/Qma2jcNZYJ9FTUY5xA2iS6arL39usU5mg8fiLy3DseLiJz">
+			<img v-bind:src="getImageUrl('Qma2jcNZYJ9FTUY5xA2iS6arL39usU5mg8fiLy3DseLiJz')">
 			<div class="text">
 				<h1>Time for a retreat</h1>
 				<h2>Rent an apartment on CouchBC using blockchain technology</h2>
@@ -310,6 +319,7 @@
 	</div>
 </div>
 
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBpuJvuXMUnbkZjS0XIQz_8hhZDdjNRvBE&libraries=places"></script>
 <script src="/bundles/app.js"></script>
 </body>
 </html>
