@@ -47,7 +47,7 @@ contract Rent {
 		address owner;
 		bytes32 ownerPublicKey;
 
-		bytes32 ipfsHash;   // Hash part of IPFS address
+		bytes32 ipfsHash;           // Hash part of IPFS address
 
 		// Again, a dynamically sized array would be more elegant, but not supported by solidity compiler
 		uint numReviews;
@@ -91,7 +91,7 @@ contract Rent {
 		bytes32 interactionPublicKey;   // Public key used for private data exchange
 		address interactionAddress;     // Address used by apartment owner for authentication
 
-		bytes32 apartmentHash;          // Hash of apartment + nonce to later prove apartment involved in rental
+		bytes32 apartmentHash;                  // Hash of apartment + nonce to later prove apartment involved in rental
 
 		bytes32 detailsIpfsHash;                // Hash part of IPFS address for rental details encrypted with interaction public key
 		bytes32 detailsHash;                    // Hash of rental details to allow verifying forwarded rental details
@@ -179,6 +179,11 @@ contract Rent {
 	// ---------------------------------------------------------
 
 	// ------------------------ Tenants ------------------------
+
+	// Check whether a tenant for the address already exists
+	function hasTenant() public view returns (bool) {
+		return tenants[msg.sender].initialized;
+	}
 
 	// Get the tenant at the specified address
 	function getTenant(address tenantAddr) public view returns (bytes32 publicKey, uint totalScore, uint numReviews) {
@@ -442,6 +447,9 @@ contract Rent {
 
 		// Add the apartment to the owner's apartments
 		ownerApartments[msg.sender].push(apartments.length - 1);
+
+		// Emit an event for the added apartment
+		emit ApartmentAdded(msg.sender, apartments.length - 1);
 	}
 
 	// ------------------------- Users -------------------------
@@ -578,10 +586,7 @@ contract Rent {
 	// Uses the supplied signature to authenticate against the rentals interaction public key.
 	function refuseRental(
 		uint rentalId,
-		string signature, // Signature for 'refuse:' + rentalId
-
-		bytes32 publicKey_x, // Test
-		bytes32 publicKey_y // Test
+		string signature // Signature for 'refuse:' + rentalId
 	) public {
 		string memory message = "refuse:".toSlice().concat(Library.uintToString(rentalId).toSlice());
 

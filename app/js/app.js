@@ -11,7 +11,7 @@ import '../scss/app.scss';
 import {default as $} from 'jquery';
 import {default as Vue} from 'vue';
 import {default as Web3} from 'web3';
-import {default as Buffer} from 'buffer';
+import {default as NodeBuffer} from 'buffer';
 import {default as IpfsApi} from 'ipfs-api';
 import Toasted from 'vue-toasted';
 import VueGoogleAutocomplete from 'vue-google-autocomplete';
@@ -31,6 +31,9 @@ require('foundation-sites');
 // Elliptic for elliptic curve cryptography
 const EC = require('elliptic').ec;
 const ec = new EC('secp256k1');
+
+// Eccrypto for ECIES
+const eccrypto = require('eccrypto');
 
 // Save the rent contract
 let rentContract;
@@ -59,16 +62,13 @@ Vue.filter('formatDateTime', function(date) {
 let app = new Vue({
 	el:         '#app',
 	data:       () => ({
-		accounts:         [],
-		account:          null,
-		page:             'start',
-		registered:       false,
-		balance:          0,
-		ethBalance:       0,
-		transferEth:      0,
-		transferCredits:  0,
-		payoutEth:        0,
-		payoutCredits:    0,
+		accounts:             [],
+		rentalAccount:        null,
+		ownerAccount:         null,
+		interactionOwnerKeys: [],
+
+		page: 'start',
+
 		newUserData:      {
 			name:    '',
 			street:  '',
@@ -99,44 +99,16 @@ let app = new Vue({
 		},
 	}),
 	watch:      {
-		accounts:       () => {
-			app.redrawMenu();
-		},
-		registered:     () => {
-			app.redrawMenu();
-		},
-		rentals:        () => {
-			app.redrawMenu();
-		},
+
 		apartmentsFrom: () => {
 			app.changeApartmentFilter();
 		},
 		apartmentsTill: () => {
 			app.changeApartmentFilter();
 		},
-		transferEth:    (eth) => {
-			rentContract.methods.weiToCredits(app.ethToWei(eth)).call((error, credits) => {
-				if (error) {
-					console.error(error);
-					return;
-				}
-
-				app.transferCredits = credits;
-			});
-		},
-		payoutCredits:  (credits) => {
-			rentContract.methods.creditsToWei(credits).call((error, wei) => {
-				if (error) {
-					console.error(error);
-					return;
-				}
-
-				app.payoutEth = app.weiToEth(wei);
-			});
-		},
-		account:        (account) => {
-			web3.eth.defaultAccount = app.account;
-			rentContract.options.from = app.account;
+		rentalAccount:  (rentalAccount) => {
+			web3.eth.defaultAccount = app.rentalAccount;
+			rentContract.options.from = app.rentalAccount;
 
 			// Check if the eth account has an account
 			//app.checkAccount();
@@ -178,8 +150,6 @@ let app = new Vue({
 			let params = [
 				testId,
 				testSign.signature,
-				'0x' + key.getPublic().x.toString(16),
-				'0x' + key.getPublic().y.toString(16),
 			];
 
 			console.log(params);
@@ -187,8 +157,8 @@ let app = new Vue({
 
 			let method = rentContract.methods.refuseRental(...params);
 
-			method.estimateGas().then(gasAmount => {
-				method.send({gas: gasAmount});
+			method.estimateGas({from: app.accounts[0]}).then(gasAmount => {
+				method.send({from: app.accounts[0], gas: gasAmount});
 			});
 		},
 
@@ -237,7 +207,29 @@ let app = new Vue({
 						app.refreshBalance();
 					});
 		},
-		uploadImage:           (inputElement) => {
+		uploadString:          async str => {
+			// Get an IPFS connection
+			let ipfsConnection = new IpfsApi(ipfsAddr, ipfsPort);
+
+			// Fill a file buffer with the string
+			let filledBuffer = NodeBuffer.from(str);
+
+			// Add the file to IPFS
+			ipfsConnection.files.add(filledBuffer, (err, result) => {
+				if (err) {
+					console.error(err);
+					showMessage('Could not upload string to IPFS');
+
+					reject();
+					return;
+				}
+
+				console.log('String uploaded to ' + result[0].hash);
+
+				resolve(result[0].hash);
+			});
+		},
+		uploadImage:           async inputElement => {
 			// Return a promise that is resolved if the image upload succeeded
 			return new Promise((resolve, reject) => {
 				let reader = new FileReader();
@@ -246,7 +238,7 @@ let app = new Vue({
 					let ipfsConnection = new IpfsApi(ipfsAddr, ipfsPort);
 
 					// Fill a file buffer
-					let filledBuffer = Buffer.Buffer(reader.result);
+					let filledBuffer = NodeBuffer.Buffer(reader.result);
 
 					// Add the file to IPFS
 					ipfsConnection.files.add(filledBuffer, (err, result) => {
@@ -267,20 +259,54 @@ let app = new Vue({
 				reader.readAsArrayBuffer(inputElement.files[0]);
 			});
 		},
-		addApartment:          clickEvent => {
-			clickEvent.preventDefault();
+		addApartment:          async clickEvent => {
+			let keyPairA = ec.genKeyPair();
+			let keyPairB = ec.genKeyPair();
+
+			let privateKeyA = keyPairA.getPrivate().toBuffer();
+			let publicKeyA = eccrypto.getPublic(privateKeyA);
+			let privateKeyB = keyPairB.getPrivate().toBuffer();
+			let publicKeyB = eccrypto.getPublic(privateKeyB);
+
+// Encrypting the message for B.
+			eccrypto.encrypt(publicKeyB, Buffer('msg to b')).then(function(encrypted) {
+				// B decrypting the message.
+				eccrypto.decrypt(privateKeyB, encrypted).then(function(plaintext) {
+					console.log('Message to part B:', plaintext.toString());
+				});
+			});
+
+// Encrypting the message for A.
+			eccrypto.encrypt(publicKeyA, Buffer('msg to a')).then(function(encrypted) {
+				// A decrypting the message.
+				eccrypto.decrypt(privateKeyA, encrypted).then(function(plaintext) {
+					console.log('Message to part A:', plaintext.toString());
+				});
+			});
+
+			return;
 
 			let inputElement = document.getElementById('add-apartment-image');
 
-			// Check if we need to upload an image to IPFS
-			if (inputElement.files[0]) {
-				app.uploadImage(inputElement).then(app.addApartmentToBc);
+			let imageHash = (inputElement.files[0])
+					? await app.uploadImage(inputElement)
+					: '';
 
-				return;
-			}
+			let details = {
+				'title':         app.newApartmentData.title,
+				'street':        app.newApartmentData.street,
+				'zip':           app.newApartmentData.zip,
+				'city':          app.newApartmentData.city,
+				'country':       app.newApartmentData.country,
+				'primaryImage':  imageHash,
+				'pricePerNight': app.newApartmentData.pricePerNight,
+				'deposit':       app.newApartmentData.deposit,
+			};
 
-			// Otherwise, we can directly add the apartment
-			app.addApartmentToBc();
+			let detailsHash = await app.uploadString(JSON.stringify(details));
+
+			let apartmentParameters = [];
+
 		},
 		addApartmentToBc:      (image) => {
 			// Using the ES2015 spread operator does not work on vue data objects
@@ -672,6 +698,8 @@ let app = new Vue({
 				app.account = accounts[params.get('a') || 0];
 
 				app.registerEvents();
+
+				app.addApartment();
 
 				$(document).foundation();
 			});

@@ -23,42 +23,29 @@
 			</div>
 			<div class="top-bar-right">
 				<ul id="menu" class="dropdown menu" data-dropdown-menu>
-					<li v-if="registered">
-						<a href="#">Apartments</a>
-						<ul>
-							<li><a href="#" v-on:click.stop="page = 'apartments'">Show apartments</a></li>
-							<li><a href="#" v-on:click.stop="page = 'add-apartment'" v-if="registered">Add
-									apartments</a>
-							</li>
-							<li v-if="userApartments.length > 0">
-								<a href="#" v-on:click.stop="page = 'user-apartments'" v-if="registered">
-									Show my apartments</a>
-							</li>
-						</ul>
-					</li>
-					<li v-if="registered && rentals.length > 0">
-						<a href="#" v-on:click.stop="page = 'rentals'" v-if="registered">Show my rentals</a>
-					</li>
-					<li v-if="!registered">
-						<a href="#" v-on:click.stop="page = 'register'">Register</a>
-					</li>
 					<li>
 						<a href="#">Account</a>
-						<ul id="account-select">
-							<li v-bind:class="{account: true, active: account == currentAccount}" v-for="(currentAccount, index) in accounts" v-on:click="switchAccount(index)">
-								<span v-bind:style="getBlockie(currentAccount)"></span>
-								{{currentAccount.substr(0, 10)}}...
+						<ul>
+							<li>
+								<a href="#" v-on:click.stop="page = 'add-apartment'">
+									Add apartment
+								</a>
+							</li>
+							<li v-if="userApartments.length > 0">
+								<a href="#" v-on:click.stop="page = 'user-apartments'">
+									My apartments
+								</a>
+							</li>
+
+							<li v-if="rentals.length > 0">
+								<a href="#" v-on:click.stop="page = 'rentals'">
+									My rentals
+								</a>
 							</li>
 						</ul>
 					</li>
 				</ul>
 			</div>
-			<span class="balance" v-if="registered">
-				{{ balance }} credits
-				<a href="#" v-on:click.stop="page = 'transfer'" class="transfer mdi mdi-arrow-expand-left" v-if="ethBalance > 0"></a>
-				<a href="#" v-on:click.stop="page = 'payout'" class="payout mdi mdi-arrow-expand-right" v-if="balance > 0"></a>
-				~{{ ethBalance }} eth
-			</span>
 		</div>
 	</nav>
 
