@@ -2,7 +2,7 @@ pragma solidity ^0.4.24;
 
 import "./Library.sol";
 import "./strings/src/strings.sol";
-import "./ECTools.sol";
+import "./Verifier.sol";
 
 contract Rent {
 	using strings for *;
@@ -411,6 +411,7 @@ contract Rent {
 	event ApartmentReviewCreated(address indexed tenant, address indexed owner, uint apartmentId, uint rentalId);
 
 	event Test(string title, string text);
+	event TestAddr(string title, address addr);
 
 	// ---------------------------------------------------------
 	// ------------------------ Methods ------------------------
@@ -577,14 +578,21 @@ contract Rent {
 	// Uses the supplied signature to authenticate against the rentals interaction public key.
 	function refuseRental(
 		uint rentalId,
-		string signature // Signature for 'refuse:' + rentalId
+		string signature, // Signature for 'refuse:' + rentalId
+
+		bytes32 publicKey_x, // Test
+		bytes32 publicKey_y // Test
 	) public {
-		bytes32 hashedMessage = ECTools.toEthereumSignedMessage(
-			"refuse:".toSlice().concat(Library.uintToString(rentalId).toSlice())
+		string memory message = "refuse:".toSlice().concat(Library.uintToString(rentalId).toSlice());
+
+		address recovered = Verifier.verifyString(
+			message,
+			signature
 		);
 
-		emit Test("Concat", "refuse:".toSlice().concat(Library.uintToString(rentalId).toSlice()));
-		emit Test("Hashed", Library.bytes32ToString(hashedMessage));
+		emit Test("Concat", message);
+		emit Test("Signature", signature);
+		emit TestAddr("Recovered signer address", recovered);
 	}
 
 	// Accept a rental request.

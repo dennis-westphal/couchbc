@@ -42,15 +42,4 @@ library Library {
 		// Return a string from the chars array
 		return string(chars);
 	}
-
-	// Convert a fixed-size bytes32 array to a string
-	function bytes32ToString(bytes32 input) public pure returns (string) {
-		bytes memory bytesArray = new bytes(32);
-
-		for (uint8 i; i < 32; i++) {
-			bytesArray[i] = input[i];
-		}
-
-		return string(bytesArray);
-	}
 }

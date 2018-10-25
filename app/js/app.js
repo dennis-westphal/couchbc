@@ -8,11 +8,11 @@ const ipfsGatewayUrl = '/ipfs/';
 import '../scss/app.scss';
 
 // Import libraries we need.
-import { default as $ } from 'jquery';
-import { default as Vue } from 'vue';
-import { default as Web3 } from 'web3';
-import { default as Buffer } from 'buffer';
-import { default as IpfsApi } from 'ipfs-api';
+import {default as $} from 'jquery';
+import {default as Vue} from 'vue';
+import {default as Web3} from 'web3';
+import {default as Buffer} from 'buffer';
+import {default as IpfsApi} from 'ipfs-api';
 import Toasted from 'vue-toasted';
 import VueGoogleAutocomplete from 'vue-google-autocomplete';
 
@@ -22,8 +22,15 @@ import rent_artifacts from '../../build/contracts/Rent.json';
 import Datepicker from 'vuejs-datepicker';
 import moment from 'moment';
 
+// Blockies for account icons
 require('./blockies.min.js');
+
+// Foundation for site style and layout
 require('foundation-sites');
+
+// Elliptic for elliptic curve cryptography
+const EC = require('elliptic').ec;
+const ec = new EC('secp256k1');
 
 // Save the rent contract
 let rentContract;
@@ -32,7 +39,7 @@ const defaultToastOptions = {
 	duration: 3000,
 };
 
-function showMessage (message, options) {
+function showMessage(message, options) {
 	Vue.toasted.show(message, $.extend({}, defaultToastOptions, options));
 }
 
@@ -153,16 +160,34 @@ let app = new Vue({
 		},
 
 		refuseRental: (rental) => {
+
+			let testId = 25;
+
+			let key = ec.genKeyPair();
+
+			// TODO: Sometimes this is just 65 chars long instead of 66. Find out why.
+			let testPrivateKey = '0x' + key.getPrivate().toString(16);
+
+			let data = 'refuse:' + testId;
+
+			let testAccount = web3.eth.accounts.privateKeyToAccount(testPrivateKey);
+			let testSign = web3.eth.accounts.sign(data, testPrivateKey);
+
+			console.log(testAccount);
+
 			let params = [
-				25,
-				'abc'
+				testId,
+				testSign.signature,
+				'0x' + key.getPublic().x.toString(16),
+				'0x' + key.getPublic().y.toString(16),
 			];
+
+			console.log(params);
+			console.log(web3.eth.accounts.recover(data, testSign.v, testSign.r, testSign.s));
 
 			let method = rentContract.methods.refuseRental(...params);
 
 			method.estimateGas().then(gasAmount => {
-				console.log('send');
-
 				method.send({gas: gasAmount});
 			});
 		},
@@ -193,24 +218,24 @@ let app = new Vue({
 			});
 
 			rentContract.once('Registered', {filter: {userAddress: app.account}},
-				(error, event) => {
-					if (error) {
-						showMessage('Could not process registration');
-						console.error(error);
-						return;
-					}
+					(error, event) => {
+						if (error) {
+							showMessage('Could not process registration');
+							console.error(error);
+							return;
+						}
 
-					showMessage('Registered successfully');
+						showMessage('Registered successfully');
 
-					app.registered = true;
+						app.registered = true;
 
-					// Change the page if we're currently on the registration page
-					if (app.page === 'register') {
-						app.page = 'apartments';
-					}
+						// Change the page if we're currently on the registration page
+						if (app.page === 'register') {
+							app.page = 'apartments';
+						}
 
-					app.refreshBalance();
-				});
+						app.refreshBalance();
+					});
 		},
 		uploadImage:           (inputElement) => {
 			// Return a promise that is resolved if the image upload succeeded
@@ -276,23 +301,23 @@ let app = new Vue({
 			});
 
 			rentContract.once('ApartmentAdded',
-				{filter: {userAddress: app.account}}, (error, event) => {
-					if (error) {
-						showMessage('Could not add apartment');
-						console.error(error);
-						return;
-					}
+					{filter: {userAddress: app.account}}, (error, event) => {
+						if (error) {
+							showMessage('Could not add apartment');
+							console.error(error);
+							return;
+						}
 
-					showMessage('Apartment added');
+						showMessage('Apartment added');
 
-					// Change the page if we're currently on the add apartment page
-					if (app.page === 'add-apartment') {
-						app.page = 'apartments';
-					}
+						// Change the page if we're currently on the add apartment page
+						if (app.page === 'add-apartment') {
+							app.page = 'apartments';
+						}
 
-					// Clear the form
-					Object.assign(app.$data.newApartmentData, app.$options.data.call(app).newApartmentData);
-				});
+						// Clear the form
+						Object.assign(app.$data.newApartmentData, app.$options.data.call(app).newApartmentData);
+					});
 		},
 		addApartmentImage:     (apartment) => {
 			let inputElement = document.getElementById('add-apartment-image');
@@ -344,14 +369,14 @@ let app = new Vue({
 		changeApartmentFilter: (apartmentsFrom, apartmentsTill) => {
 			// Only apply filter if we have dates
 			if (typeof(app.apartmentsFrom) !== 'object' ||
-				typeof(app.apartmentsTill) !== 'object') {
+					typeof(app.apartmentsTill) !== 'object') {
 				app.loadApartments();
 				return;
 			}
 
 			app.loadApartments(
-				app.getUnixDay(app.apartmentsFrom),
-				app.getUnixDay(app.apartmentsTill),
+					app.getUnixDay(app.apartmentsFrom),
+					app.getUnixDay(app.apartmentsTill),
 			);
 		},
 		loadApartments:        (fromDay, tillDay) => {
@@ -636,7 +661,7 @@ let app = new Vue({
 
 				if (accounts.length === 0) {
 					showMessage(
-						'Couldn\'t get any accounts! Make sure your Ethereum client is configured correctly.');
+							'Couldn\'t get any accounts! Make sure your Ethereum client is configured correctly.');
 					return;
 				}
 
@@ -653,7 +678,10 @@ let app = new Vue({
 		},
 		registerEvents: function() {
 			rentContract.events.Test({}, (error, event) => {
-				console.log(error, event);
+				console.log(event.returnValues);
+			});
+			rentContract.events.TestAddr({}, (error, event) => {
+				console.log(event.returnValues);
 			});
 
 			return;
@@ -757,7 +785,7 @@ let app = new Vue({
 				}
 
 				showMessage('Deposit claimable for rental ' + event.returnValues.rentalId + ' (' +
-					event.returnValues.deductedAmount + ' credits have been deducted)');
+						event.returnValues.deductedAmount + ' credits have been deducted)');
 
 				app.deductAmount = 0;
 
@@ -819,7 +847,7 @@ let app = new Vue({
 	},
 	components: {
 		'datepicker':  Datepicker,
-		'autoaddress': VueGoogleAutocomplete
+		'autoaddress': VueGoogleAutocomplete,
 	},
 });
 
@@ -830,11 +858,11 @@ window.addEventListener('load', () => {
 		window.web3 = new Web3(web3.currentProvider);
 	} else {
 		console.warn(
-			'No web3 detected. Falling back to ' + websocketAddress +
-			'. You should remove this fallback when you deploy live, as it\'s inherently insecure. Consider switching to Metamask for development. More info here: http://truffleframework.com/tutorials/truffle-and-metamask');
+				'No web3 detected. Falling back to ' + websocketAddress +
+				'. You should remove this fallback when you deploy live, as it\'s inherently insecure. Consider switching to Metamask for development. More info here: http://truffleframework.com/tutorials/truffle-and-metamask');
 		// fallback - use your fallback strategy (local node / hosted node + in-dapp id mgmt / fail)
 		window.web3 = new Web3(
-			new Web3.providers.WebsocketProvider(websocketAddress));
+				new Web3.providers.WebsocketProvider(websocketAddress));
 	}
 
 	app.start();
