@@ -1,38 +1,6 @@
 nav {
 	ul {
 		list-style: none;
-		&#account-select {
-			min-width: 160px;
-			li.account {
-				cursor: pointer;
-				min-height: auto;
-				height: 28px;
-				line-height: 28px;
-				border-bottom: #efefef 1px solid;
 
-				&:last-child {
-					border-bottom: none;
-				}
-				&.active {
-					background-color: #dceddb;
-					cursor: default;
-				}
-				> span {
-					float: left;
-					display: inline-block;
-					margin-right: 2px;
-					width: 40px;
-					height: 28px;
-					background-repeat: no-repeat;
-					background-position: left center;
-				}
-			}
-		}
-	}
-	span.balance {
-		border-left: #CCC 1px solid;
-		display: inline-block;
-		padding-left: .5rem;
-		margin-left: .5rem;
 	}
 }

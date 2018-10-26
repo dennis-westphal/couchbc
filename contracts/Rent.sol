@@ -22,7 +22,8 @@ contract Rent {
 
 	struct Tenant {
 		bool initialized;
-		bytes32 publicKey;
+		bytes32 publicKey_x;
+		bytes32 publicKey_y;
 
 		MediatorStatus mediatorStatus;
 
@@ -45,7 +46,8 @@ contract Rent {
 	// ------------------------ Apartments ------------------------
 	struct Apartment {
 		address owner;
-		bytes32 ownerPublicKey;
+		bytes32 ownerPublicKey_x;
+		bytes32 ownerPublicKey_y;
 
 		bytes32 ipfsHash;           // Hash part of IPFS address
 
@@ -88,7 +90,8 @@ contract Rent {
 	}
 
 	struct Rental {
-		bytes32 interactionPublicKey;   // Public key used for private data exchange
+		bytes32 interactionPublicKey_x; // X point for interaction public key used for private data exchange
+		bytes32 interactionPublicKey_y; // Y point for interaction public key
 		address interactionAddress;     // Address used by apartment owner for authentication
 
 		bytes32 apartmentHash;                  // Hash of apartment + nonce to later prove apartment involved in rental
@@ -159,24 +162,43 @@ contract Rent {
 	// ------------------------- Properties -----------------------
 	// ------------------------------------------------------------
 	mapping(address => Tenant) private tenants;
-	mapping(bytes32 => bool) private tenantPublicKeys;              // Mapping to check whether a public key has been used in a tenant's profile
+	mapping(bytes32 => mapping(bytes32 => bool)) private tenantPublicKeys;      // Mapping to check whether a public key has been used in a tenant's profile
+	mapping(bytes32 => bool) private tenantPublicKeys_y;                        // Mapping to check whether a public key has been used in a tenant's profile
 
-	address[] private mediators;                                    // List of mediators
+	address[] private mediators;                                                // List of mediators
 
-	Apartment[] private apartments;                                 // List of apartments
+	Apartment[] private apartments;                                             // List of apartments
 
-	mapping(bytes32 => uint[]) private cityApartments;              // Country+City SHA256 hash => apartment ids; to allow fetching apartments of a city
-	mapping(address => uint[]) private ownerApartments;             // Mapping to get the apartments of an owner
-	mapping(bytes32 => bool) private ownerPublicKeys;               // Mapping to check whether a public key has been used in an apartment
-	mapping(bytes32 => uint) private interactionKeyRentals;         // Mapping to get the rental for a interaction public key and to check whether a key has already been used
+	mapping(bytes32 => uint[]) private cityApartments;                          // Country+City SHA256 hash => apartment ids; to allow fetching apartments of a city
+	mapping(address => uint[]) private ownerApartments;                         // Mapping to get the apartments of an owner
+	mapping(bytes32 => mapping(bytes32 => bool)) private ownerPublicKeys;       // Mapping to check whether a public key has been used in an apartment
+	mapping(bytes32 => mapping(bytes32 => uint)) private interactionKeyRental;  // Mapping to get the rental for a interaction public key and to check whether a key has already been used
+	mapping(address => bool) private rentalAddresses;                           // Mapping to check if an address has already been used in an interaction and prevent it from other uses
 
-	Rental[] private rentals;                                       // List of rentals
+	Rental[] private rentals;                                                   // List of rentals
 
-	mapping(uint => DepositDeduction) private depositDeductions;    // Deposit deductions for a rental (id => deduction)
+	mapping(uint => DepositDeduction) private depositDeductions;                // Deposit deductions for a rental (id => deduction)
 
 	// ---------------------------------------------------------
 	// ------------------------ Getters ------------------------
 	// ---------------------------------------------------------
+
+	// ----------------------- Addresses -----------------------
+	// Check whether the address is known to the app, and retrieve user type
+	function getAddressType() public view returns (string) {
+		if (hasTenant()) {
+			return "tenant";
+		}
+		if (ownsApartments()) {
+			return "owner";
+		}
+		// TODO: Determine if address has been used by an owner in a rental
+		if (false) {
+			return "rental";
+		}
+
+		return "unknown";
+	}
 
 	// ------------------------ Tenants ------------------------
 
@@ -186,7 +208,12 @@ contract Rent {
 	}
 
 	// Get the tenant at the specified address
-	function getTenant(address tenantAddr) public view returns (bytes32 publicKey, uint totalScore, uint numReviews) {
+	function getTenant(address tenantAddr) public view returns (
+		bytes32 publicKey_x,
+		bytes32 publicKey_y,
+		uint totalScore,
+		uint numReviews
+	) {
 		// Check that the tenant exists
 		require(tenants[tenantAddr].initialized);
 
@@ -194,7 +221,8 @@ contract Rent {
 		Tenant storage tenant = tenants[tenantAddr];
 
 		// Assign the return variables
-		publicKey = tenant.publicKey;
+		publicKey_x = tenant.publicKey_x;
+		publicKey_y = tenant.publicKey_y;
 		totalScore = tenant.totalScore;
 		numReviews = tenant.numReviews;
 	}
@@ -221,6 +249,12 @@ contract Rent {
 	}
 
 	// ------------------------ Apartments ------------------------
+
+	// Check whether the sender owns any apartments
+	function ownsApartments() public view returns (bool) {
+		return ownerApartments[msg.sender].length > 0;
+	}
+
 	// Get the number of all available apartments
 	function getNumApartments() public view returns (uint) {
 		return apartments.length;
@@ -228,7 +262,8 @@ contract Rent {
 
 	// Get the apartment at the specified id
 	function getApartment(uint apartmentId) public view returns (
-		bytes32 ownerPublicKey,
+		bytes32 ownerPublicKey_x,
+		bytes32 ownerPublicKey_y,
 		bytes32 ipfsHash,
 		uint numReviews
 	) {
@@ -239,7 +274,8 @@ contract Rent {
 		Apartment storage apartment = apartments[apartmentId];
 
 		// Assign the return variables
-		ownerPublicKey = apartment.ownerPublicKey;
+		ownerPublicKey_x = apartment.ownerPublicKey_x;
+		ownerPublicKey_y = apartment.ownerPublicKey_y;
 		ipfsHash = apartment.ipfsHash;
 		numReviews = apartment.numReviews;
 	}
@@ -252,7 +288,8 @@ contract Rent {
 	// Get a city apartment at the specified id
 	function getCityApartment(bytes32 cityHash, uint cityApartmentId) public view returns (
 		uint id,
-		bytes32 ownerPublicKey,
+		bytes32 ownerPublicKey_x,
+		bytes32 ownerPublicKey_y,
 		bytes32 ipfsHash,
 		uint numReviews
 	) {
@@ -265,7 +302,8 @@ contract Rent {
 		Apartment storage apartment = apartments[id];
 
 		// Assign the return variables
-		ownerPublicKey = apartment.ownerPublicKey;
+		ownerPublicKey_x = apartment.ownerPublicKey_x;
+		ownerPublicKey_y = apartment.ownerPublicKey_y;
 		ipfsHash = apartment.ipfsHash;
 		numReviews = apartment.numReviews;
 	}
@@ -278,7 +316,8 @@ contract Rent {
 	// Get the apartment of the owner with the specified id
 	function getOwnerApartment(address ownerAddr, uint ownerApartmentId) public view returns (
 		uint id,
-		bytes32 ownerPublicKey,
+		bytes32 ownerPublicKey_x,
+		bytes32 ownerPublicKey_y,
 		bytes32 ipfsHash,
 		uint numReviews
 	) {
@@ -291,7 +330,8 @@ contract Rent {
 		Apartment storage apartment = apartments[id];
 
 		// Assign the return variables
-		ownerPublicKey = apartment.ownerPublicKey;
+		ownerPublicKey_x = apartment.ownerPublicKey_x;
+		ownerPublicKey_y = apartment.ownerPublicKey_y;
 		ipfsHash = apartment.ipfsHash;
 		numReviews = apartment.numReviews;
 	}
@@ -321,7 +361,7 @@ contract Rent {
 	// Get the number of rentals by the tenant
 	function getNumTenantRentals(address tenantAddr) public view returns (uint) {
 		// Check that the tenant exists
-		require(tenants[tenantAddr].publicKey != 0);
+		require(tenants[tenantAddr].initialized);
 
 		return tenants[tenantAddr].rentals.length;
 	}
@@ -329,7 +369,8 @@ contract Rent {
 	// Get a tenant's rental with the specified id
 	function getTenantRental(address tenantAddr, uint tenantRentalId) public view returns (
 		uint id,
-		bytes32 interactionPublicKey,
+		bytes32 interactionPublicKey_x,
+		bytes32 interactionPublicKey_y,
 		bytes32 detailsIpfsHash,
 		uint fee,
 		uint deposit,
@@ -348,7 +389,8 @@ contract Rent {
 		Rental storage rental = rentals[id];
 
 		// Assign the return variables
-		interactionPublicKey = rental.interactionPublicKey;
+		interactionPublicKey_x = rental.interactionPublicKey_x;
+		interactionPublicKey_y = rental.interactionPublicKey_y;
 		detailsIpfsHash = rental.detailsIpfsHash;
 		fee = rental.fee;
 		deposit = rental.deposit;
@@ -357,20 +399,22 @@ contract Rent {
 	}
 
 	// Check whether a rental exists for the interaction public key
-	function hasInteractionKeyRental(bytes32 key) public view returns (bool) {
+	function hasInteractionKeyRental(bytes32 key_x, bytes32 key_y) public view returns (bool) {
 		return
 		// If the mapping has a (not 0) value for the interaction key, we got a rental for it
-		interactionKeyRentals[key] != 0 ||
+		interactionKeyRental[key_x][key_y] != 0 ||
 
 		// Otherwise, check if we have rentals and the rental at id 0 has the key as interactionPublicKey
 		rentals.length != 0 &&
-		rentals[0].interactionPublicKey == key;
+		rentals[0].interactionPublicKey_x == key_x &&
+		rentals[0].interactionPublicKey_y == key_y;
 	}
 
 	// Get the rental for the specified interaction public key
-	function getInteractionKeyRental(bytes32 key) public view returns (
+	function getInteractionKeyRental(bytes32 key_x, bytes32 key_y) public view returns (
 		uint id,
-		bytes32 interactionPublicKey,
+		bytes32 interactionPublicKey_x,
+		bytes32 interactionPublicKey_y,
 		bytes32 detailsIpfsHash,
 		uint fee,
 		uint deposit,
@@ -378,15 +422,16 @@ contract Rent {
 		string depositStatus
 	) {
 		// Check that we have a rental for the interaction key
-		require(hasInteractionKeyRental(key));
+		require(hasInteractionKeyRental(key_x, key_y));
 
-		id = interactionKeyRentals[key];
+		id = interactionKeyRental[key_x][key_y];
 
 		// Fetch the rental from the storage using the id
 		Rental storage rental = rentals[id];
 
 		// Assign the return variables
-		interactionPublicKey = rental.interactionPublicKey;
+		interactionPublicKey_x = rental.interactionPublicKey_x;
+		interactionPublicKey_y = rental.interactionPublicKey_y;
 		detailsIpfsHash = rental.detailsIpfsHash;
 		fee = rental.fee;
 		deposit = rental.deposit;
@@ -401,16 +446,16 @@ contract Rent {
 
 	event ApartmentAdded(address indexed owner, uint apartmentId);
 
-	event RentalRequested(address indexed tenant, bytes32 indexed interactionKey, uint rentalId);
-	event RentalRequestWithdrawn(address indexed tenant, bytes32 indexed interactionKey, uint rentalId);
-	event RentalRequestApproved(address indexed tenant, bytes32 indexed interactionKey, uint rentalId);
-	event RentalRequestRefused(address indexed tenant, bytes32 indexed interactionKey, uint rentalId);
+	event RentalRequested(address indexed tenant, address interactionAddress, uint rentalId);
+	event RentalRequestWithdrawn(address indexed tenant, address interactionAddress, uint rentalId);
+	event RentalRequestApproved(address indexed tenant, address interactionAddress, uint rentalId);
+	event RentalRequestRefused(address indexed tenant, address interactionAddress, uint rentalId);
 
-	event DeductionRequested(address indexed tenant, bytes32 indexed interactionKey, uint rentalId);
-	event DeductionAccepted(address indexed tenant, bytes32 indexed interactionKey, uint rentalId);
-	event DeductionRefused(address indexed tenant, bytes32 indexed interactionKey, uint rentalId);
+	event DeductionRequested(address indexed tenant, address interactionAddress, uint rentalId);
+	event DeductionAccepted(address indexed tenant, address interactionAddress, uint rentalId);
+	event DeductionRefused(address indexed tenant, address interactionAddress, uint rentalId);
 
-	event DeductionMediated(address indexed tenant, bytes32 indexed interactionKey, uint rentalId);
+	event DeductionMediated(address indexed tenant, address interactionAddress, uint rentalId);
 
 	event TenantReviewCreated(address indexed tenant, uint rentalId);
 	event ApartmentReviewCreated(address indexed tenant, address indexed owner, uint apartmentId, uint rentalId);
@@ -424,7 +469,8 @@ contract Rent {
 
 	// Add a new apartment
 	function addApartment(
-		bytes32 ownerPublicKey,
+		bytes32 ownerPublicKey_x,
+		bytes32 ownerPublicKey_y,
 		bytes32 ipfsHash, // Hash part of IPFS address for apartment details
 		bytes32 cityHash // Hash of city + country, used for searching
 	) public {
@@ -432,12 +478,16 @@ contract Rent {
 		require(!tenants[msg.sender].initialized);
 
 		// Check that the ownerPublicKey does not match a tenant's public key
-		require(!tenantPublicKeys[ownerPublicKey]);
+		require(!tenantPublicKeys[ownerPublicKey_x][ownerPublicKey_y]);
+
+		// Check that the address has not been used in a rental
+		require(!rentalAddresses[msg.sender]);
 
 		// Add the apartment to the list of apartments
 		apartments.push(Apartment(
 				msg.sender,
-				ownerPublicKey,
+				ownerPublicKey_x,
+				ownerPublicKey_y,
 				ipfsHash,
 				0
 			));
@@ -478,14 +528,18 @@ contract Rent {
 	}
 
 	// Create a tenant with the specified publicKey
-	function createTenant(address addr, bytes32 publicKey) private returns (Tenant) {
-		// Check that the public key is not empty
-		// TODO: Can't be done like this is fixed size byte array is always length 32
-		//require(publicKey.length > 0);
+	function createTenant(
+		address addr,
+		bytes32 publicKey_x,
+		bytes32 publicKey_y
+	) private returns (Tenant) {
+		// Check that the address has not been used by an owner or in an interaction
+		require(ownerApartments[msg.sender].length == 0);
+		require(!rentalAddresses[msg.sender]);
 
 		// Check that the public key has not been used yet
-		require(!tenantPublicKeys[publicKey]);
-		require(!ownerPublicKeys[publicKey]);
+		require(!tenantPublicKeys[publicKey_x][publicKey_y]);
+		require(!ownerPublicKeys[publicKey_x][publicKey_y]);
 
 		// Initialize empty arrays. This is necessary for struct members and for some reaon cannot be done in the constructor call
 		uint[] memory tenantRentals;
@@ -493,7 +547,8 @@ contract Rent {
 		// Add a new tenant
 		tenants[addr] = Tenant(
 			true,
-			publicKey,
+			publicKey_x,
+			publicKey_y,
 			MediatorStatus.Unregistered,
 			0, // Initial score
 			tenantRentals, // Rental ids
@@ -501,7 +556,7 @@ contract Rent {
 		);
 
 		// Set the public key as used tenant public key
-		tenantPublicKeys[publicKey] = true;
+		tenantPublicKeys[publicKey_x][publicKey_y] = true;
 	}
 
 	// ------------------------ Rentals ------------------------
@@ -510,12 +565,14 @@ contract Rent {
 	function requestRental(
 		uint fee,
 		uint128 deposit,
-		bytes32 interactionKey,
-		address interactionAddress,
+		bytes32 interactionKey_x, // Public key for encryption
+		bytes32 interactionKey_y, // Public key for encryption
+		address interactionAddress, // Address for authentication, NOT the owner/sender address (as this is unknown)
 		bytes32 apartmentHash,
 		bytes32 detailsIpfsHash,
 		bytes32 detailsHash,
-		bytes32 tenantPublicKey
+		bytes32 tenantPublicKey_x,
+		bytes32 tenantPublicKey_y
 	) public payable {
 		// Check that the fee is not 0
 		require(fee > 0);
@@ -524,24 +581,32 @@ contract Rent {
 		require(fee + deposit == Library.weiToFinney(msg.value));
 
 		// Check that the interaction key does not match an owner or tenant key
-		require(!tenantPublicKeys[interactionKey]);
-		require(!ownerPublicKeys[interactionKey]);
+		require(!tenantPublicKeys[interactionKey_x][interactionKey_y]);
+		require(!ownerPublicKeys[interactionKey_x][interactionKey_y]);
 
-		// Check that the interaction address is not empty and does not match a tenant address
-		// TODO: Also check it doesn't match owner address
+		// Check that the interaction address isn't empty
 		require(interactionAddress != 0x0);
+
+		// Check that the interactionAddress does not match a tenant's address
 		require(!tenants[interactionAddress].initialized);
+
+		// Check that the interactionAddress isn't the current address
+		require(interactionAddress != msg.sender);
+
+		// Check that the interactionKey isn't the same as the tenantPublicKey
+		require(interactionKey_x != tenantPublicKey_x || interactionKey_y != tenantPublicKey_y);
+
+		// TODO: Also check it doesn't match owner address
 
 		// Check if the tenant exists; create him otherwise
 		if (!tenants[msg.sender].initialized) {
-			createTenant(msg.sender, tenantPublicKey);
+			createTenant(msg.sender, tenantPublicKey_x, tenantPublicKey_y);
 		}
-
-		// Construct empty deposit deduction as this is
 
 		// Add the rental
 		rentals.push(Rental(
-				interactionKey,
+				interactionKey_x,
+				interactionKey_y,
 				interactionAddress,
 				apartmentHash,
 				detailsIpfsHash,
@@ -556,6 +621,11 @@ contract Rent {
 				RentalStatus.Requested,
 				DepositStatus.Open
 			));
+
+		// Link the rental to the interaction key
+		interactionKeyRental[interactionKey_x][interactionKey_y] = rentals.length - 1;
+
+		emit RentalRequested(msg.sender, interactionAddress, rentals.length - 1);
 	}
 
 	// Withdraw a rental request as a tenant
@@ -576,7 +646,7 @@ contract Rent {
 		);
 
 		// Emit an event to notify about the withdrawn rental request
-		emit RentalRequestWithdrawn(rental.tenant, rental.interactionPublicKey, rentalId);
+		emit RentalRequestWithdrawn(rental.tenant, rental.interactionAddress, rentalId);
 
 		// Delete the rental
 		delete rentals[rentalId];

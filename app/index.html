@@ -14,14 +14,13 @@
 
 				<autoaddress
 						id="search-address"
-						classname="form-control"
 						placeholder="Where do you want to go?"
 						types="(cities)"
-						v-on:placechanged="changeAddress"
+						v-on:placechanged="changeSearchAddress"
 				>
 				</autoaddress>
 			</div>
-			<div class="top-bar-right">
+			<div class="top-bar-right align-middle">
 				<ul id="menu" class="dropdown menu" data-dropdown-menu>
 					<li>
 						<a href="#">Account</a>
@@ -51,7 +50,7 @@
 
 	<div class="page start" v-if="page == 'start'">
 		<div class="header">
-			<img v-bind:src="getImageUrl('Qma2jcNZYJ9FTUY5xA2iS6arL39usU5mg8fiLy3DseLiJz')">
+			<img :src="getImageUrl('Qma2jcNZYJ9FTUY5xA2iS6arL39usU5mg8fiLy3DseLiJz')">
 			<div class="text">
 				<h1>Time for a retreat</h1>
 				<h2>Rent an apartment on CouchBC using blockchain technology</h2>
@@ -74,8 +73,8 @@
 		</div>
 
 		<div class="col">
-			<div class="apartment" v-for="apartment in apartments" v-on:click="showDetails(apartment)" v-bind:style="getApartmentStyle(apartment)">
-				<img v-if="apartment.primaryImage" v-bind:src="getImageUrl(apartment.primaryImage)">
+			<div class="apartment" v-for="apartment in apartments" v-on:click="showDetails(apartment)" :style="getApartmentStyle(apartment)">
+				<img v-if="apartment.primaryImage" :src="getImageUrl(apartment.primaryImage)">
 				<div class="text">
 					<p class="title">{{ apartment.title }}</p>
 					<p>
@@ -103,7 +102,7 @@
 			</tr>
 
 			<tr v-for="apartment in apartments">
-				<td><img v-bind:src="ipfsShowUrl + apartment.image"></td>
+				<td><img :src="ipfsShowUrl + apartment.image"></td>
 				<td>{{ apartment.title }}</td>
 				<td>{{ apartment.address.country }}</td>
 				<td>{{ apartment.address.city }}</td>
@@ -117,41 +116,74 @@
 		</table>
 		-->
 	</div>
-	<div class="container" v-if="page == 'add-apartment'">
+	<div class="page add-apartment" v-if="page == 'add-apartment'">
 		<form>
-			<div class="input-field">
-				<label for="add-apartment-title">Title</label>
-				<input id="add-apartment-title" type="text" name="title" v-model="newApartmentData.title">
+			<div class="grid-container">
+				<h1>Add new apartment</h1>
+				<div class="grid-x grid-padding-x">
+					<div class="cell large-9 grid-x grid-padding-x">
+						<div class="form-control cell">
+							<label for="add-apartment-title">Title</label>
+							<input id="add-apartment-title" type="text" name="title" v-model="newApartmentData.title">
+						</div>
+						<div class="form-control cell">
+							<label for="add-apartment-description">Description</label>
+							<textarea id="add-apartment-description" name="description" v-model="newApartmentData.description"></textarea>
+						</div>
+						<div class="form-control cell">
+							<label for="apartment-address">Address</label>
+							<autoaddress
+									id="apartment-address"
+									placeholder=""
+									v-on:placechanged="changeApartmentAddress">
+							</autoaddress>
+						</div>
+						<div class="form-control cell large-6">
+							<label for="add-apartment-pricePerNight">Price per night in finney</label>
+							<input id="add-apartment-pricePerNight" type="number" name="pricePerNight" v-model="newApartmentData.pricePerNight">
+						</div>
+						<div class="form-control cell large-6">
+							<label for="add-apartment-deposit">Deposit in finney</label>
+							<input id="add-apartment-deposit" type="number" name="deposit" v-model="newApartmentData.deposit">
+						</div>
+
+						<div class="form-control cell image medium-6 large-4">
+							<label for="add-apartment-primary-image">Primary image</label>
+							<input id="add-apartment-primary-image" type="file" name="primaryImage" v-on:change="changeImageSrc">
+							<img class="preview" src="">
+						</div>
+						<div
+								class="form-control cell image medium-6 large-4"
+								v-for="(image, index) in newApartmentData.images">
+							<label :for="'add-apartment-image-' + index">Image {{index + 2}}</label>
+							<input :id="'add-apartment-image-' + index" class="add-image" type="file" :name="'image-' + index" :data-index="index" v-on:change="changeImageSrc">
+							<img class="preview" src="">
+						</div>
+
+						<div class="form-control cell">
+							<div class="button add" v-on:click="newApartmentData.images.push('')">
+								<span class="mdi mdi-plus-box"></span>
+								Add image
+							</div>
+						</div>
+					</div>
+					<div id="account-selection" class="cell large-3">
+						<h3>Account selection</h3>
+
+						<div
+								v-for="(account, index) in accounts"
+								:class="{account: true, active: account == newApartmentData.account, tenant: account.type == 'tenant', owner: account.type == 'owner', rental: account.type == 'rental'}"
+								:for="'account-' + index" class="account"
+								v-on:click="newApartmentData.account = account"
+						>
+							<span :style="getBlockie(account.address)"></span>
+							{{account.address.substr(0, 16)}}...{{account.address.substr(36)}}
+						</div>
+					</div>
+				</div>
+
+				<a class="button" v-on:click.stop="addApartment">Add apartment</a>
 			</div>
-			<div class="input-field">
-				<label for="add-apartment-street">Street</label>
-				<input id="add-apartment-street" type="text" name="street" v-model="newApartmentData.street">
-			</div>
-			<div class="input-field">
-				<label for="add-apartment-zip">Zip code</label>
-				<input id="add-apartment-zip" type="text" name="zip" v-model="newApartmentData.zip">
-			</div>
-			<div class="input-field">
-				<label for="add-apartment-city">City</label>
-				<input id="add-apartment-city" type="text" name="city" v-model="newApartmentData.city">
-			</div>
-			<div class="input-field">
-				<label for="add-apartment-country">Country</label>
-				<input id="add-apartment-country" type="text" name="country" v-model="newApartmentData.country">
-			</div>
-			<div class="input-field">
-				<label for="add-apartment-pricePerNight">Price per night</label>
-				<input id="add-apartment-pricePerNight" type="number" name="pricePerNight" v-model="newApartmentData.pricePerNight">
-			</div>
-			<div class="input-field">
-				<label for="add-apartment-deposit">Deposit</label>
-				<input id="add-apartment-deposit" type="number" name="deposit" v-model="newApartmentData.deposit">
-			</div>
-			<div class="input-field">
-				<label for="add-apartment-image">Image</label>
-				<input id="add-apartment-image" type="file" name="image">
-			</div>
-			<a class="waves-effect waves-light btn" v-on:click.stop="addApartment">Add apartment</a>
 		</form>
 	</div>
 	<div class="container" v-if="page == 'add-apartment-image'">
@@ -249,7 +281,7 @@
 		<form>
 			<div class="input-field">
 				<label for="deduct">Deduct from deposit (max. {{ currentRental.deposit }})</label>
-				<input id="deduct" type="number" min="0" v-bind:max="currentRental.deposit" step="1" name="deduct" v-model="deductAmount">
+				<input id="deduct" type="number" min="0" :max="currentRental.deposit" step="1" name="deduct" v-model="deductAmount">
 			</div>
 			<p>=> Refund {{ currentRental.deposit - deductAmount}} credits</p>
 			<a class="waves-effect waves-light btn" v-on:click.stop="doRefundDeposit()">Refund deposit</a>
@@ -298,7 +330,7 @@
 		<form>
 			<div class="input-field">
 				<label for="payout-credits">Credits</label>
-				<input id="payout-credits" type="number" min="1" v-bind:max="balance" name="credits" v-model="payoutCredits">
+				<input id="payout-credits" type="number" min="1" :max="balance" name="credits" v-model="payoutCredits">
 			</div>
 			<p>=> {{payoutEth}} eth</p>
 			<a class="waves-effect waves-light btn" v-on:click.stop="doPayout">Payout</a>

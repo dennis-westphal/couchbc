@@ -1,0 +1,19 @@
+html {
+	input, select, [type='text'], [type='password'], [type='date'], [type='datetime'], [type='datetime-local'], [type='month'], [type='week'], [type='email'], [type='number'], [type='search'], [type='tel'], [type='time'], [type='url'], [type='color'], textarea {
+		margin-bottom: 0;
+	}
+}
+
+.form-control {
+	margin-bottom: 1rem;
+}
+
+.button {
+	&.add {
+		background-color: #279b23;
+
+		&:hover {
+			background-color: #1f7120;
+		}
+	}
+}
