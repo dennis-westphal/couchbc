@@ -14,7 +14,10 @@
 			background-color: #dceddb;
 			cursor: default;
 		}
-		> span {
+		&.forbidden {
+			cursor: not-allowed;
+		}
+		> span.blockie {
 			float: left;
 			display: inline-block;
 			margin-right: 2px;
@@ -22,6 +25,15 @@
 			height: 28px;
 			background-repeat: no-repeat;
 			background-position: left center;
+		}
+		> span.mdi {
+			float: right;
+			cursor: help;
+
+			&::before {
+				font-size: 1.4rem;
+				line-height: 1;
+			}
 		}
 	}
 }

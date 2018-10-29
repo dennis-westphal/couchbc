@@ -16,8 +16,7 @@
 						id="search-address"
 						placeholder="Where do you want to go?"
 						types="(cities)"
-						v-on:placechanged="changeSearchAddress"
-				>
+						v-on:placechanged="changeSearchAddress">
 				</autoaddress>
 			</div>
 			<div class="top-bar-right align-middle">
@@ -57,32 +56,19 @@
 			</div>
 		</div>
 	</div>
-	<div class="page" v-if="page == 'apartments'">
-		<div class="container">
-			<div class="col s12 m6">
-				Search for apartments available at:
-				<div class="col s12 m6">
-					<span>From</span>
-					<datepicker v-model="apartmentsFrom" :disabled-dates="disabledDates" :monday-first="true"></datepicker>
-				</div>
-				<div class="col s12 m6">
-					<span>Till</span>
-					<datepicker v-model="apartmentsTill" :disabled-dates="disabledDates" :monday-first="true"></datepicker>
-				</div>
-			</div>
-		</div>
-
-		<div class="col">
+	<div class="page apartments" v-if="page == 'apartments'">
+		<div class="grid-container">
+			<p>Found {{apartments.length}} apartments in {{searchData.city}}, {{searchData.country}}</p>
 			<div class="apartment" v-for="apartment in apartments" v-on:click="showDetails(apartment)" :style="getApartmentStyle(apartment)">
 				<img v-if="apartment.primaryImage" :src="getImageUrl(apartment.primaryImage)">
 				<div class="text">
-					<p class="title">{{ apartment.title }}</p>
+					<p class="title">{{apartment.title}}</p>
 					<p>
-						<span v-if="apartmentsFrom && apartmentsTill">{{ getTotalPrice(apartment) }}
-							 per night</span>
-						<span v-if="!(apartmentsFrom && apartmentsTill)">{{ apartment.pricePerNight }}
-							 per night</span>
-						/ {{ apartment.deposit }} deposit</p>
+						<span v-if="apartmentsFrom && apartmentsTill">{{getTotalPrice(apartment)}}
+							per night</span>
+						<span v-if="!(apartmentsFrom && apartmentsTill)">{{apartment.pricePerNight}}
+							per night</span>
+						/ {{apartment.deposit}} deposit</p>
 				</div>
 				<!--<a class="waves-effect waves-light btn" v-if="apartmentsFrom && apartmentsTill && registered" v-on:click.stop="rent(apartment)">book</a>-->
 			</div>
@@ -172,12 +158,14 @@
 
 						<div
 								v-for="(account, index) in accounts"
-								:class="{account: true, active: account == newApartmentData.account, tenant: account.type == 'tenant', owner: account.type == 'owner', rental: account.type == 'rental'}"
+								:class="{account: true, active: account == newApartmentData.account, forbidden: account.type == 'tenant' || account.type == 'interaction', rental: account.type == 'rental'}"
 								:for="'account-' + index" class="account"
-								v-on:click="newApartmentData.account = account"
-						>
-							<span :style="getBlockie(account.address)"></span>
-							{{account.address.substr(0, 16)}}...{{account.address.substr(36)}}
+								v-on:click="selectNewApartmentAccount(account)">
+							<span class="blockie" :style="getBlockie(account.address)"></span>
+							<span v-if="account.type == 'owner'" class="mdi mdi-home-account tooltip" title="This account is used for managing apartments"></span>
+							<span v-if="account.type == 'tenant'" class="mdi mdi-account-card-details tooltip" title="This account is used for managing rentals and thus cannot be used to add an apartment"></span>
+							<span v-if="account.type == 'interaction'" class="mdi mdi-account-switch tooltip" title="This account has been used in a rental and thus cannot be used for adding an apartment"></span>
+							{{account.address.substr(0, 12)}}...{{account.address.substr(36)}}
 						</div>
 					</div>
 				</div>

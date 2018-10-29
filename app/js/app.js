@@ -1,6 +1,6 @@
 // Define the server address (for now)
 const websocketAddress = 'wss://couchbc.com';
-const ipfsAddr = {'host': 'couchbc.com', 'port': 443, 'protocol': 'https'};
+const ipfsHost = {'host': 'couchbc.com', 'port': 443, 'protocol': 'https'};
 const ipfsGatewayUrl = '/ipfs/';
 
 // Import the page's SCSS. Webpack will know what to do with it.
@@ -27,13 +27,15 @@ require('./blockies.min.js');
 // Foundation for site style and layout
 require('foundation-sites');
 
+// jQuery UI tooltips
+require('webpack-jquery-ui/css.js');
+require('webpack-jquery-ui/tooltip.js');
+
 // Elliptic for elliptic curve cryptography
 const EC = require('elliptic').ec;
 const ec = new EC('secp256k1');
 
 // Eccrypto for ECIES
-// Will also include Buffer.Buffer as Buffer
-const crypto = require('crypto'); //
 const eccrypto = require('eccrypto');
 
 // Save the rent contract
@@ -65,22 +67,22 @@ let app = new Vue({
 	data:       () => ({
 		wallet: null,
 
-		accounts:             [],
-		defaultTenantAccount: null,
-		defaultOwnerAccount:  null,
+		accounts: [],
 
 		page: 'start',
 
-		newUserData:      {
+		rentalRequestData: {
+			account: null,
 			name:    '',
 			street:  '',
 			zip:     '',
 			city:    '',
 			country: '',
 		},
-		newApartmentData: {
-			account:       '',
+		newApartmentData:  {
+			account:       null,
 			title:         '',
+			description:   '',
 			street:        '',
 			zip:           '',
 			city:          '',
@@ -90,16 +92,22 @@ let app = new Vue({
 			primaryImage:  '',
 			images:        [],
 		},
-		apartments:       [],
-		userApartments:   [],
-		rentals:          [],
-		currentApartment: null,
-		currentRental:    null,
-		deductAmount:     0,
-		apartmentRentals: [],
-		apartmentsFrom:   '',
-		apartmentsTill:   '',
-		disabledDates:    {
+		searchData:        {
+			country:  null,
+			city:     null,
+			fromDate: null,
+			tillDate: null,
+		},
+		apartments:        [],
+		userApartments:    [],
+		rentals:           [],
+		currentApartment:  null,
+		currentRental:     null,
+		deductAmount:      0,
+		apartmentRentals:  [],
+		apartmentsFrom:    '',
+		apartmentsTill:    '',
+		disabledDates:     {
 			to: new Date(),
 		},
 	}),
@@ -128,11 +136,26 @@ let app = new Vue({
 			}
 		},
 
-		searchApartment: (country, city) => {
+		searchApartment: async (country, city) => {
+			app.searchData.country = country;
+			app.searchData.city = city;
 
+			let cityHash = app.getCountryCityHash(country, city);
 
-			// Test
-			app.refuseRental();
+			let numApartments = await rentContract.methods.getNumCityApartments(cityHash).call();
+
+			app.apartments = [];
+
+			for (let i = 0; i < numApartments; i++) {
+				rentContract.methods.getCityApartment(cityHash, i).call().then(async apartment => {
+					let details = await app.downloadDataFromHexHash(apartment.ipfsHash);
+
+					let fullApartmentData = $.extend(apartment, details);
+					app.apartments.push(fullApartmentData);
+				});
+			}
+
+			app.page = 'apartments';
 		},
 
 		refuseRental: (rental) => {
@@ -166,7 +189,7 @@ let app = new Vue({
 			});
 		},
 
-		redrawMenu:             () => {
+		redrawMenu: () => {
 			let menu = $('#menu');
 
 			menu.foundation('_destroy');
@@ -174,7 +197,7 @@ let app = new Vue({
 				new Foundation.DropdownMenu(menu);
 			});
 		},
-		register:               clickEvent => {
+		register:   clickEvent => {
 			clickEvent.preventDefault();
 
 			// Using the ES2015 spread operator does not work on vue data objects
@@ -211,9 +234,15 @@ let app = new Vue({
 						app.refreshBalance();
 					});
 		},
-		uploadString:           str => {
+
+		/**
+		 * Upload a string to IPFS. Returns the IPFS address of the string.
+		 * @param str
+		 * @return {Promise<string>}
+		 */
+		uploadString: async str => {
 			// Get an IPFS connection
-			let ipfsConnection = IpfsApi(ipfsAddr);
+			let ipfsConnection = IpfsApi(ipfsHost);
 
 			// Fill a file buffer with the string
 			let filledBuffer = Buffer(str);
@@ -223,10 +252,9 @@ let app = new Vue({
 				ipfsConnection.files.add(filledBuffer, (err, result) => {
 					if (err) {
 						console.error(err);
-						showMessage('Could not upload string to IPFS');
 
 						reject();
-						return;
+						throw('Could not upload image to IPFS: ' + err);
 					}
 
 					console.log('String uploaded to ' + result[0].hash);
@@ -235,13 +263,20 @@ let app = new Vue({
 				});
 			});
 		},
-		uploadImage:            inputElement => {
+
+		/**
+		 * Upload an image to IPFS. Returns the IPFS address of the image.
+		 *
+		 * @param inputElement
+		 * @return {Promise<string>}
+		 */
+		uploadImage:    async inputElement => {
 			// Return a promise that is resolved if the image upload succeeded
 			return new Promise((resolve, reject) => {
 				let reader = new FileReader();
 				reader.onloadend = () => {
 					// Get an IPFS connection
-					let ipfsConnection = IpfsApi(ipfsAddr);
+					let ipfsConnection = IpfsApi(ipfsHost);
 
 					// Fill a file buffer
 					let filledBuffer = Buffer(reader.result);
@@ -250,10 +285,9 @@ let app = new Vue({
 					ipfsConnection.files.add(filledBuffer, (err, result) => {
 						if (err) {
 							console.error(err);
-							showMessage('Could not upload file to apartment image');
 
 							reject();
-							return;
+							throw('Could not upload image to IPFS: ' + err);
 						}
 
 						console.log('Image uploaded to ' + result[0].hash);
@@ -265,35 +299,100 @@ let app = new Vue({
 				reader.readAsArrayBuffer(inputElement.files[0]);
 			});
 		},
+		/**
+		 * Download a string from an IPFS address
+		 *
+		 * @param ipfsAddr
+		 * @return {Promise<string>}
+		 */
+		downloadString: async ipfsAddr => {
+			// Return a promise that is resolved with the ipfs string downloaded
+			return new Promise((resolve, reject) => {
+				let ipfsConnection = IpfsApi(ipfsHost);
+
+				// Get the string from IPFS
+				ipfsConnection.files.get(ipfsAddr, (err, files) => {
+					if (err) {
+						console.error(err);
+
+						reject();
+						// TODO: Catch exceptions in user initiated root function (problem: async/Promise!)
+						throw('Could not download data from IPFS: ' + err);
+					}
+
+					resolve(files[0].content);
+				});
+			});
+		},
+
+		/**
+		 * Upload data, optionally encrypting it in the process. Returns the prefixed SHA256 hex hash part of IPFS address.
+		 *
+		 * @param data   Data that will be JSON-encoded and uploaded (encrypted)
+		 * @param publicKeyBuffer Buffer containing the public key to be used for encryption, if any
+		 * @return {Promise<str>}
+		 */
+		uploadData: async (data, publicKeyBuffer) => {
+			let str = JSON.stringify(data);
+
+			if (publicKeyBuffer) {
+				str = await app.encryptString(str, publicKeyBuffer);
+			}
+
+			let ipfsAddress = await app.uploadString(str);
+
+			return app.ipfsAddrToHash(ipfsAddress);
+		},
+
+		/**
+		 * Download JSON encoded from the supplied SHA256 hex hash referencing an IPFS address, optionally decrypting it in the process
+		 *
+		 * @param hexHash   SHA256 hex encoded 0x prefixed hash
+		 * @param ecAccount EC account used for decryption or null
+		 * @return {Promise<object>}
+		 */
+		downloadDataFromHexHash: async (hexHash, ecAccount) => {
+			let ipfsAddress = app.hexHashToIpfsAddr(hexHash);
+
+			console.log(ipfsAddress);
+
+			let str = await app.downloadString(ipfsAddress);
+
+			if (ecAccount) {
+				str = await app.decryptString(str, ecAccount.private.buffer);
+			}
+
+			return JSON.parse(str);
+		},
+
 		changeApartmentAddress: (addressData, placeResultData, id) => {
 			app.newApartmentData.street = addressData.route;
 			app.newApartmentData.number = addressData.street_number;
 			app.newApartmentData.city = addressData.locality;
 			app.newApartmentData.country = addressData.country;
 		},
-		addApartment:           async clickEvent => {
+
+		selectNewApartmentAccount: account => {
+			// Ignore selected accounts if they have been used by a tenant or interaction
+			if (account.type === 'tenant' || account.type === 'interaction') {
+				return;
+			}
+			app.newApartmentData.account = account;
+		},
+
+		addApartment: async clickEvent => {
+			/*
+			Test code for generating private / public keys
+
 			let keyPairA = ec.genKeyPair();
 			let keyPairB = ec.genKeyPair();
 
-			/*let privateKeyA = keyPairA.getPrivate().toBuffer();
-			let publicKeyA = keyPairA.getPublic();
-			let privateKeyB = keyPairB.getPrivate().toBuffer();
-			let publicKeyB = keyPairB.getPublic();*/
-
 			var privateKeyA = keyPairA.getPrivate().toBuffer(); // Uint8Array(32)
-			var publicKeyA = app.getUint8ArrayFromPoint(keyPairA.getPublic());  // Uint8Array(32)
-			//var publicKeyA = app.getUint8ArrayFromPoint(keyPairA.getPublic());  // Uint8Array(32)
+			var publicKeyA = app.getUint8ArrayBufferFromPoint(keyPairA.getPublic());  // Uint8Array(32)
 			var privateKeyB = keyPairB.getPrivate().toBuffer();  // Uint8Array(32)
-			var publicKeyB = app.getUint8ArrayFromPoint(keyPairB.getPublic());  // Uint8Array(32)
+			var publicKeyB = app.getUint8ArrayBufferFromPoint(keyPairB.getPublic());  // Uint8Array(32)
 
-			console.log(eccrypto.getPublic(privateKeyA));
-			console.log(app.getUint8ArrayFromPoint(keyPairA.getPublic()));
-
-			// This is the same: (eccrypto always adds 04 in front of x and y point of public key)
-			console.log('0x' + Buffer(eccrypto.getPublic(privateKeyA)).toString('hex'));
-			console.log('0x' + app.getUint8ArrayFromPoint(keyPairA.getPublic()).toString('hex'));
-
-// Encrypting the message for B.
+			// Encrypting the message for B.
 			eccrypto.encrypt(publicKeyB, Buffer('msg to b')).then(function(encrypted) {
 				// B decrypting the message.
 				eccrypto.decrypt(privateKeyB, encrypted).then(function(plaintext) {
@@ -301,15 +400,16 @@ let app = new Vue({
 				});
 			});
 
-// Encrypting the message for A.
+			// Encrypting the message for A.
 			eccrypto.encrypt(publicKeyA, Buffer('msg to a')).then(function(encrypted) {
 				// A decrypting the message.
 				eccrypto.decrypt(privateKeyA, encrypted).then(function(plaintext) {
 					console.log('Message to part A:', plaintext.toString());
 				});
 			});
+			*/
 
-			return;
+			let account = app.newApartmentData.account;
 
 			let details = {
 				title:         app.newApartmentData.title,
@@ -339,7 +439,7 @@ let app = new Vue({
 			}
 
 			// Upload other images
-			$('.page.add-apartment image.add-image').each((index, element) => {
+			$('.page.add-apartment input.add-image').each((index, element) => {
 				if (element.files[0]) {
 					let index = $(element).data('index');
 
@@ -358,14 +458,12 @@ let app = new Vue({
 
 			// Upload the details
 			let detailsAddress = await app.uploadString(JSON.stringify(details));
-			let cityHash = web3.utils.keccak256(JSON.stringify({
-				'city':    app.newApartmentData.city,
-				'country': app.newApartmentData.country,
-			}));
+			let cityHash = app.getCountryCityHash(app.newApartmentData.country, app.newApartmentData.city);
+			let ownerPublicKey = await app.getOrCreateOwnerPublicKey(account);
 
 			let parameters = [
-				'0x' + (keyPairA.getPublic().x.toString(16)),
-				'0x' + (keyPairA.getPublic().y.toString(16)),
+				ownerPublicKey.x,
+				ownerPublicKey.y,
 				app.ipfsAddrToHash(detailsAddress),
 				cityHash,
 			];
@@ -373,7 +471,7 @@ let app = new Vue({
 			// Estimate gas and call the addApartment function
 			let method = rentContract.methods.addApartment(...parameters);
 			method.estimateGas().then(gasAmount => {
-				method.send({from: app.newApartmentData.account.address, gas: gasAmount});
+				method.send({from: account.address, gas: gasAmount});
 			});
 
 			rentContract.once('ApartmentAdded',
@@ -388,34 +486,33 @@ let app = new Vue({
 
 						showMessage('Apartment added');
 
-						// Change the page if we're currently on the add apartment page
-						//if (app.page === 'add-apartment') {
-						//	app.page = 'apartments';
-						//}
+						// Show the apartment listing for the city
+						app.searchApartment(app.newApartmentData.country, app.newApartmentData.city);
 
 						// Clear the form
+						let account = app.newApartmentData.account;
 						Object.assign(app.$data.newApartmentData, app.$options.data.call(app).newApartmentData);
+						document.getElementById('apartment-address').value = '';
+						document.getElementById('add-apartment-primary-image').value = '';
+						app.newApartmentData.account = account;
 					});
 		},
-		addApartmentImage:      (apartment) => {
-			let inputElement = document.getElementById('add-apartment-image');
 
-			// Check if we need to upload an image to IPFS
-			app.uploadImage(inputElement).then(hash => {
-				if (error) {
-					console.error(error);
-					showMessage('Could not upload image');
-					return;
-				}
-
-				let method = rentContract.methods.addApartmentImage(apartment.id, hash);
-
-				method.estimateGas().then(gasAmount => {
-					method.send({gas: gasAmount});
-				});
-			});
+		/**
+		 * Get the hash for county and city by which apartments can be searched for
+		 *
+		 * @param country
+		 * @param city
+		 * @return string
+		 */
+		getCountryCityHash: (country, city) => {
+			return web3.utils.keccak256(JSON.stringify({
+				'country': country,
+				'city':    city,
+			}));
 		},
-		getTotalPrice:          (apartment) => {
+
+		getTotalPrice:         (apartment) => {
 			let days = app.getUnixDay(app.apartmentsTill) - app.getUnixDay(app.apartmentsFrom);
 
 			if (days > 0) {
@@ -424,10 +521,15 @@ let app = new Vue({
 
 			return null;
 		},
-		getImageUrl:            (image) => {
+		getImageUrl:           (image) => {
+			// Check if we need to decode an IPFS hex hash
+			if (image.substr(0, 2) === '0x') {
+				return ipfsGatewayUrl + app.hexHashToIpfsAddr(image);
+			}
+
 			return ipfsGatewayUrl + image;
 		},
-		getBlockie:             account => {
+		getBlockie:            account => {
 			if (account) {
 				return {
 					'background-image': 'url(\'' + blockies.create({
@@ -439,7 +541,7 @@ let app = new Vue({
 				return {};
 			}
 		},
-		getRandomColor:         () => {
+		getRandomColor:        () => {
 			let oneBlack = Math.random() * 10;
 
 			let r = oneBlack <= 0.3333 ? 0 : Math.floor(Math.random() * 255);
@@ -448,7 +550,7 @@ let app = new Vue({
 
 			return 'rgba(' + r + ', ' + g + ', ' + b + ', 0.15';
 		},
-		getApartmentStyle:      (apartment) => {
+		getApartmentStyle:     (apartment) => {
 			// Don't apply a specific style if we have an image
 			if (apartment.primaryImage) {
 				return '';
@@ -456,7 +558,7 @@ let app = new Vue({
 
 			return 'background-color: ' + app.getRandomColor();
 		},
-		changeApartmentFilter:  (apartmentsFrom, apartmentsTill) => {
+		changeApartmentFilter: (apartmentsFrom, apartmentsTill) => {
 			// Only apply filter if we have dates
 			if (typeof(app.apartmentsFrom) !== 'object' ||
 					typeof(app.apartmentsTill) !== 'object') {
@@ -469,7 +571,7 @@ let app = new Vue({
 					app.getUnixDay(app.apartmentsTill),
 			);
 		},
-		loadApartments:         (fromDay, tillDay) => {
+		loadApartments:        (fromDay, tillDay) => {
 			rentContract.methods.getApartmentsNum().call((error, result) => {
 				if (error) {
 					console.error(error);
@@ -501,7 +603,7 @@ let app = new Vue({
 				}
 			});
 		},
-		loadApartmentData:      (apartment) => {
+		loadApartmentData:     (apartment) => {
 			// Load the address data for the apartment
 			rentContract.methods.getPhysicalAddress(apartment.physicalAddress).call((error, physicalAddress) => {
 				// Ensure we add an apartment to the list twice by checking if it already exists in the apartments
@@ -524,7 +626,7 @@ let app = new Vue({
 				}
 			});
 		},
-		loadUserApartments:     () => {
+		loadUserApartments:    () => {
 			// TODO: images
 
 			rentContract.methods.getUserApartmentsNum().call((error, result) => {
@@ -551,14 +653,14 @@ let app = new Vue({
 				}
 			});
 		},
-		disableApartment:       apartment => {
+		disableApartment:      apartment => {
 			// Estimate gas and call the disableApartment function
 			let method = rentContract.methods.disableApartment(apartment.id);
 			method.estimateGas().then(gasAmount => {
 				method.send({gas: gasAmount});
 			});
 		},
-		showApartmentRentals:   apartment => {
+		showApartmentRentals:  apartment => {
 			app.currentApartment = apartment;
 			app.apartmentRentals = [];
 
@@ -747,17 +849,31 @@ let app = new Vue({
 				app.registerEvents();
 
 				$(document).foundation();
+
+				// Enable tooltips
+				$(document).tooltip({
+					selector:  '.tooltip[title]',
+					container: 'body',
+				});
 			});
 		},
 
 		// Check all accounts for existing owner / tenant profiles and interaction keys
-		determineAccounts: accounts => {
-			for (let account of accounts) {
-				rentContract.methods.getAddressType().call({from: account}, (error, type) => {
-					app.accounts.push({
-						'address': account,
+		determineAccounts: bcAccounts => {
+			for (let bcAccount of bcAccounts) {
+				rentContract.methods.getAddressType().call({from: bcAccount}, (error, type) => {
+					let account = {
+						'address': bcAccount,
 						'type':    type,
-					});
+					};
+
+					app.accounts.push(account);
+
+					if (app.newApartmentData.account === null && type === 'owner') {
+						app.newApartmentData.account = account;
+					} else if (app.rentalRequestData.account === null && type === 'tenant') {
+						app.rentalRequestData.account = account;
+					}
 
 					// TODO: Determine accounts with interaction keys (locally)
 				});
@@ -953,7 +1069,7 @@ let app = new Vue({
 		 */
 		getWallet: async () => {
 			if (app.wallet) {
-				return wallet;
+				return app.wallet;
 			}
 
 			// Check if we have a wallet; if so, ask user for password
@@ -980,13 +1096,17 @@ let app = new Vue({
 			return app.wallet;
 		},
 
-		// Get or create a public key to be used for an owner account
-		getOrCreateOwnerPublicKey: account => {
-			let publicKey = app.getPublicKeyForAddress(account.address);
+		/**
+		 * Get or create a public key to be used for an owner account
+		 * Returns a public key in the format {x: '0x000...00', y: '0x000..00', buffer: Buffer<Uint8Array>}
+		 */
+		getOrCreateOwnerPublicKey: async account => {
+			// Try to catch the ec account associated with the address
+			let ecAccount = await app.getEcAccountForBcAccount(account);
 
-			// Check if we have a public key in local storage; if we do, return it
-			if (publicKey != null) {
-				return publicKey;
+			// Check if we found an EC account; if we did, return the public key
+			if (ecAccount != null) {
+				return ecAccount.public;
 			}
 
 			// Check if the account is already registered at the blockchain as owner account;
@@ -997,34 +1117,60 @@ let app = new Vue({
 				return null;
 			}
 
-			let keyPair = app.generateKeyPair();
+			// Otherwise, generate an EC account
+			ecAccount = await app.generateEcAccount();
 
-			// Store the account in the localStorage; for now unencrypted
-		},
+			// Store the EC account address in local storage to associate it with the current bc account
+			window.localStorage.setItem('ecAccounts.' + account, ecAccount.address);
 
-		// Get the public key for the account from secure storage
-		// Returns null if no public key exists
-		getPublicKeyForAccount: account => {
-			// Local storage is acting as hashmap: account address => keypair wallet address
-			// (Keypair may already have been added to wallet, but not to
-
-			// The account address is used to find the key; the address contained within is NOT the same as the account address
-			let keyPair = window.localStorage.getItem('keyPairs.' + account.address);
-
+			// Return the public key
+			return ecAccount.public;
 		},
 
 		/**
-		 * Get an Ec account for the given address from the wallet
+		 * Get the EC account associated with the specified blockchain address in local storage.
+		 * Returns null if no account is associated with the address or an object with:
+		 * {
+		 *   private: {
+		 *       hex:       "0x0000...",     (0x + 64 hex encoded bytes) = 130 chars
+		 *       buffer:    Uint8Array(129)  Buffer to be used with eccrypto
+		 *   }
+		 *   public: {
+		 *       x:         "0x0000...",     (0x + 32x hex encoded bytes = 66 chars)
+		 *       y:         "0x0000...",     (0x + 32y bytes hex = 66 chars)
+		 *       buffer:    Uint8Array(65)   Buffer to be used with eccrypto
+		 *   }
+		 *   address:     "0x0000..."        (0x + 32 bytes hex address as would be used in blockchain account and can be used for signature validation)
+		 * }
+		 */
+		getEcAccountForBcAccount: async bcAddress => {
+			// Local storage is acting as hashmap: BC account address => EC account address
+
+			// The account address is used to find the key; the address contained within is NOT the same as the account address
+			let ecAccountAddress = window.localStorage.getItem('ecAccounts.' + bcAddress);
+
+			if (ecAccountAddress) {
+				return await app.getEcAccount(ecAccountAddress);
+			}
+
+			return null;
+		},
+
+		/**
+		 * Get an EC account for the given EC account address from the wallet
 		 *
 		 * Returns null if no Ec account was found or an object with:
 		 * {
-		 *   private: "0x0000...",
-		 *   public: {
-		 *     x:         "0x0000...",    (0x + 32x hex encoded bytes = 66 chars)
-		 *     y:         "0x0000...",    (0x + 32y bytes hex = 66 chars)
-		 *     combined:  "0x0400000..."  (0x04 + 32x bytes hex 32y bytes hex = 135 chars)
+		 *   private: {
+		 *       hex:       "0x0000...",     (0x + 64 hex encoded bytes) = 130 chars
+		 *       buffer:    Uint8Array(129)  Buffer to be used with eccrypto
 		 *   }
-		 *   address:     "0x0000..."     (0x + 32 bytes hex address as would be used in blockchain account and can be used for signature validation)
+		 *   public: {
+		 *       x:         "0x0000...",     (0x + 32x hex encoded bytes = 66 chars)
+		 *       y:         "0x0000...",     (0x + 32y bytes hex = 66 chars)
+		 *       buffer:    Uint8Array(65)   Buffer to be used with eccrypto
+		 *   }
+		 *   address:     "0x0000..."        (0x + 32 bytes hex address as would be used in blockchain account and can be used for signature validation)
 		 * }
 		 */
 		getEcAccount: async address => {
@@ -1040,18 +1186,21 @@ let app = new Vue({
 		},
 
 		/**
-		 * Generate an account used for ec cryptography.
+		 * Generate a new account used for EC cryptography.
 		 * Stores the generated account in the user's encrypted wallet.
 		 *
 		 * Returns an object with:
 		 * {
-		 *   private: "0x0000...",
-		 *   public: {
-		 *     x:         "0x0000...",    (0x + 32x hex encoded bytes = 66 chars)
-		 *     y:         "0x0000...",    (0x + 32y bytes hex = 66 chars)
-		 *     combined:  "0x0400000..."  (0x04 + 32x bytes hex 32y bytes hex = 135 chars)
+		 *   private: {
+		 *       hex:       "0x0000...",     (0x + 64 hex encoded bytes) = 130 chars
+		 *       buffer:    Uint8Array(129)  Buffer to be used with eccrypto
 		 *   }
-		 *   address:     "0x0000..."     (0x + 32 bytes hex address as would be used in blockchain account and can be used for signature validation)
+		 *   public: {
+		 *       x:         "0x0000...",     (0x + 32x hex encoded bytes = 66 chars)
+		 *       y:         "0x0000...",     (0x + 32y bytes hex = 66 chars)
+		 *       buffer:    Uint8Array(65)   Buffer to be used with eccrypto
+		 *   }
+		 *   address:     "0x0000..."        (0x + 32 bytes hex address as would be used in blockchain account and can be used for signature validation)
 		 * }
 		 */
 		generateEcAccount: async () => {
@@ -1067,7 +1216,7 @@ let app = new Vue({
 			//console.log('0x' + Buffer(eccrypto.getPublic(privateKey)).toString('hex'));
 			//console.log('0x04' + (keyPair.getPublic().x.toString(16)) + (keyPair.getPublic().y.toString(16)));
 
-			let pkHex = privateKey.toString(16);
+			let pkHex = privateKey.toString('hex');
 			let xHex = publicKey.x.toString(16);
 			let yHex = publicKey.y.toString(16);
 			let account = web3.eth.accounts.privateKeyToAccount('0x' + pkHex);
@@ -1079,26 +1228,30 @@ let app = new Vue({
 			return {
 				private: '0x' + pkHex,
 				public:  {
-					x:        '0x' + xHex,
-					y:        '0x' + yHex,
-					combined: '0x04' + xHex + yHex,
+					x:      '0x' + xHex,
+					y:      '0x' + yHex,
+					buffer: app.getUint8ArrayBufferFromXY(xHex, yHex),
 				},
 				address: account.address,
 			};
 		},
 
 		/**
-		 * Get an account to the specified private key.
+		 * Get an EC account for the specified private key.
+		 * Does not save or fetch the account from the wallet; the EC account is purely generated in memory.
 		 *
 		 * Returns an object with:
 		 * {
-		 *   private: "0x0000...",
-		 *   public: {
-		 *     x:         "0x0000...",    (0x + 32x hex encoded bytes = 66 chars)
-		 *     y:         "0x0000...",    (0x + 32y bytes hex = 66 chars)
-		 *     combined:  "0x0400000..."  (0x04 + 32x bytes hex 32y bytes hex = 135 chars)
+		 *   private: {
+		 *       hex:       "0x0000...",     (0x + 64 hex encoded bytes) = 130 chars
+		 *       buffer:    Uint8Array(129)  Buffer to be used with eccrypto
 		 *   }
-		 *   address:     "0x0000..."     (0x + 32 bytes hex address as would be used in blockchain account and can be used for signature validation)
+		 *   public: {
+		 *       x:         "0x0000...",     (0x + 32x hex encoded bytes = 66 chars)
+		 *       y:         "0x0000...",     (0x + 32y bytes hex = 66 chars)
+		 *       buffer:    Uint8Array(65)   Buffer to be used with eccrypto
+		 *   }
+		 *   address:     "0x0000..."        (0x + 32 bytes hex address as would be used in blockchain account and can be used for signature validation)
 		 * }
 		 *
 		 * @param account
@@ -1115,43 +1268,68 @@ let app = new Vue({
 			let yHex = publicKeyHex.substr(66);
 
 			return {
-				private: '0x' + pkHex,
+				private: {
+					hex:    '0x' + pkHex,
+					buffer: Buffer(privateKeyArray),
+				},
 				public:  {
-					x:        '0x' + xHex,
-					y:        '0x' + yHex,
-					combined: '0x04' + xHex + yHex,
+					x:      '0x' + xHex,
+					y:      '0x' + yHex,
+					buffer: app.getUint8ArrayBufferFromXY(xHex, yHex),
 				},
 				address: account.address,
 			};
 		},
 
 		/**
-		 * Get an uint8array to use with eccrypto from a public point
+		 * Encrypt the string using the supplied public key buffer
+		 *
+		 * @param str
+		 * @param publicKeyBuffer
+		 * @return {Promise<Buffer>}
+		 */
+		encryptString: async (str, publicKeyBuffer) => {
+			return await eccrypto.encrypt(publicKeyBuffer, Buffer(str));
+		},
+
+		/**
+		 * Decrypt the string using the supplied private key buffer
+		 *
+		 * @param str
+		 * @param privateKeyBuffer
+		 * @return {Promise<Buffer>}
+		 */
+		decryptString: async (str, privateKeyBuffer) => {
+			return await eccrypto.decrypt(privateKeyBuffer, Buffer(str));
+		},
+
+		/**
+		 * Get an uint8array buffer to use with eccrypto from a public point
 		 * @param point
 		 * @return {Uint8Array}
 		 */
-		getUint8ArrayFromPoint: point => {
+		getUint8ArrayBufferFromPoint: point => {
 			let arr = new Uint8Array(65);
 			arr[0] = 4;
 			arr.set(point.x.toBuffer(), 1);
 			arr.set(point.y.toBuffer(), 33);
 
-			return new Uint8Array(arr);
+			return Buffer(new Uint8Array(arr));
 		},
 
 		/**
-		 * Get an uint8array to use with eccrypto from a x and y hex coordinates (without 0x prefix)
+		 * Get an uint8array buffer to use with eccrypto from a x and y hex coordinates (without 0x prefix)
 		 * @param x
 		 * @param y
 		 * @return {Uint8Array}
 		 */
-		getUint8ArrayFromXY: (x, y) => {
+		getUint8ArrayBufferFromXY: (x, y) => {
 			let arr = new Uint8Array(65);
 			arr[0] = 4;
 			arr.set(app.hexToUint8Array(x), 1);
 			arr.set(app.hexToUint8Array(y), 33);
 
-			return arr;
+			return Buffer(arr);
 		},
 
 		/**
@@ -1161,9 +1339,7 @@ let app = new Vue({
 		 * @return {Uint8Array}
 		 */
 		hexToUint8Array: (hex) => {
-			let arr = new Uint8Array(hex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
-
-			return arr;
+			return new Uint8Array(hex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
 		},
 
 		// Date
@@ -1186,8 +1362,24 @@ let app = new Vue({
 		},
 
 		// IPFS utilities
+		/**
+		 * Get a hex 0x prefixed hash from an IPFS address. Should only be used with SHA256 addresses.
+		 *
+		 * @param address
+		 * @return {string}
+		 */
 		ipfsAddrToHash: address => {
-			return '0x' + (bs58.decode(address).toString('hex')).substr(4);
+			return '0x' + (bs58.decode(address).slice(2).toString('hex'));
+		},
+
+		/**
+		 * Get an IPFS address from an hex 0x prefixed hash. Should only be used with SHA256 hashes.
+		 *
+		 * @param hexHash
+		 * @return {string}
+		 */
+		hexHashToIpfsAddr: hexHash => {
+			return bs58.encode(Buffer.from('1220' + hexHash.substr(2), 'hex'));
 		},
 	},
 	components: {
