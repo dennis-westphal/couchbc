@@ -63,13 +63,14 @@
 				<p>Found {{apartments.length}} apartment<span v-if="apartments.length != 1">s</span>
 					in {{searchData.city}}, {{searchData.country}}</p>
 
-				<div class="apartment" :id="'apartment-' + apartment.id" v-for="apartment in apartments" v-on:click="showApartment(apartment)" :style="getApartmentStyle(apartment)">
+				<div class="apartment" :id="'apartment-' + apartment.id" v-for="apartment in apartments"
+				     v-on:click="showApartment(apartment)" :style="getApartmentStyle(apartment)">
 					<div class="img">
 						<img v-if="apartment.primaryImage" :src="getImageUrl(apartment.primaryImage)">
 					</div>
 					<div class="text">
 						<p class="title">
-							{{apartment.title|escape|truncate(20)}}
+							{{apartment.title|truncate(20)}}
 							<span v-if="apartment.reviews.length > 0"
 							      class="stars"
 							      :style="{backgroundImage: getImageUrl('QmepT6MmHFZTuhtaA7esu7GtD476UQUdXk3K2bWRi2Hmid'), width: getStarsWidth(apartment.averageScore, 122)}">
@@ -117,8 +118,8 @@
 					Request form
 				</div>
 			</header>
-			<h1>{{currentApartment.title|escape}}</h1>
-			{{currentApartment.description|escape|nl2br}}
+			<h1>{{currentApartment.title}}</h1>
+			<nl2br tag="p" :text="currentApartment.description"/>
 		</div>
 	</div>
 
@@ -161,7 +162,8 @@
 						</div>
 						<div class="form-control cell">
 							<label for="add-apartment-description">Description</label>
-							<textarea id="add-apartment-description" name="description" v-model="newApartmentData.description"></textarea>
+							<textarea id="add-apartment-description" name="description"
+							          v-model="newApartmentData.description"></textarea>
 						</div>
 						<div class="form-control cell">
 							<label for="apartment-address">Address</label>
@@ -173,23 +175,27 @@
 						</div>
 						<div class="form-control cell large-6">
 							<label for="add-apartment-pricePerNight">Price per night in finney</label>
-							<input id="add-apartment-pricePerNight" type="number" name="pricePerNight" v-model="newApartmentData.pricePerNight">
+							<input id="add-apartment-pricePerNight" type="number" name="pricePerNight"
+							       v-model="newApartmentData.pricePerNight">
 						</div>
 						<div class="form-control cell large-6">
 							<label for="add-apartment-deposit">Deposit in finney</label>
-							<input id="add-apartment-deposit" type="number" name="deposit" v-model="newApartmentData.deposit">
+							<input id="add-apartment-deposit" type="number" name="deposit"
+							       v-model="newApartmentData.deposit">
 						</div>
 
 						<div class="form-control cell image medium-6 large-4">
 							<label for="add-apartment-primary-image">Primary image</label>
-							<input id="add-apartment-primary-image" type="file" name="primaryImage" v-on:change="changeImageSrc">
+							<input id="add-apartment-primary-image" type="file" name="primaryImage"
+							       v-on:change="changeImageSrc">
 							<img class="preview" src="">
 						</div>
 						<div
 								class="form-control cell image medium-6 large-4"
 								v-for="(image, index) in newApartmentData.images">
 							<label :for="'add-apartment-image-' + index">Image {{index + 2}}</label>
-							<input :id="'add-apartment-image-' + index" class="add-image" type="file" :name="'image-' + index" :data-index="index" v-on:change="changeImageSrc">
+							<input :id="'add-apartment-image-' + index" class="add-image" type="file"
+							       :name="'image-' + index" :data-index="index" v-on:change="changeImageSrc">
 							<img class="preview" src="">
 						</div>
 
@@ -209,9 +215,12 @@
 								:for="'account-' + index" class="account"
 								v-on:click="selectNewApartmentAccount(account)">
 							<span class="blockie" :style="getBlockie(account.address)"></span>
-							<span v-if="account.type == 'owner'" class="mdi mdi-home-account tooltip" title="This account is used for managing apartments"></span>
-							<span v-if="account.type == 'tenant'" class="mdi mdi-account-card-details tooltip" title="This account is used for managing rentals and thus cannot be used to add an apartment"></span>
-							<span v-if="account.type == 'interaction'" class="mdi mdi-account-switch tooltip" title="This account has been used in a rental and thus cannot be used for adding an apartment"></span>
+							<span v-if="account.type == 'owner'" class="mdi mdi-home-account tooltip"
+							      title="This account is used for managing apartments"></span>
+							<span v-if="account.type == 'tenant'" class="mdi mdi-account-card-details tooltip"
+							      title="This account is used for managing rentals and thus cannot be used to add an apartment"></span>
+							<span v-if="account.type == 'interaction'" class="mdi mdi-account-switch tooltip"
+							      title="This account has been used in a rental and thus cannot be used for adding an apartment"></span>
 							{{account.address.substr(0, 12)}}...{{account.address.substr(36)}}
 						</div>
 					</div>
@@ -250,8 +259,10 @@
 					<a href="#" v-on:click.stop="showApartmentRentals(apartment)">{{ apartment.rentals }}</a>
 				</td>
 				<td>
-					<a class="waves-effect waves-light btn" v-if="apartment.disabled" v-on:click.stop="enableApartment(apartment)">Enable</a>
-					<a class="waves-effect waves-light btn" v-if="!apartment.disabled" v-on:click.stop="disableApartment(apartment)">Disable</a>
+					<a class="waves-effect waves-light btn" v-if="apartment.disabled"
+					   v-on:click.stop="enableApartment(apartment)">Enable</a>
+					<a class="waves-effect waves-light btn" v-if="!apartment.disabled"
+					   v-on:click.stop="disableApartment(apartment)">Disable</a>
 				</td>
 			</tr>
 			</thead>
@@ -278,7 +289,8 @@
 				<td>{{ rental.till | formatDate }}</td>
 				<td>{{ rental.deposit }}</td>
 				<td>
-					<a class="waves-effect waves-light btn" v-if="rental.depositClaimable" v-on:click.stop="claimDeposit(rental)">claim
+					<a class="waves-effect waves-light btn" v-if="rental.depositClaimable"
+					   v-on:click.stop="claimDeposit(rental)">claim
 						deposit</a>
 				</td>
 			</tr>
@@ -302,7 +314,8 @@
 				<td>{{ rental.till | formatDate }}</td>
 				<td>{{ rental.deposit }}</td>
 				<td>
-					<a class="waves-effect waves-light btn" v-if="!rental.depositClaimable" v-on:click.stop="refundDeposit(rental)">refund
+					<a class="waves-effect waves-light btn" v-if="!rental.depositClaimable"
+					   v-on:click.stop="refundDeposit(rental)">refund
 						deposit</a>
 				</td>
 			</tr>
@@ -316,7 +329,8 @@
 		<form>
 			<div class="input-field">
 				<label for="deduct">Deduct from deposit (max. {{ currentRental.deposit }})</label>
-				<input id="deduct" type="number" min="0" :max="currentRental.deposit" step="1" name="deduct" v-model="deductAmount">
+				<input id="deduct" type="number" min="0" :max="currentRental.deposit" step="1" name="deduct"
+				       v-model="deductAmount">
 			</div>
 			<p>=> Refund {{ currentRental.deposit - deductAmount}} credits</p>
 			<a class="waves-effect waves-light btn" v-on:click.stop="doRefundDeposit()">Refund deposit</a>

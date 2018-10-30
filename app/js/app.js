@@ -3,25 +3,40 @@ const websocketAddress = 'wss://couchbc.com';
 const ipfsHost = {'host': 'couchbc.com', 'port': 443, 'protocol': 'https'};
 const ipfsGatewayUrl = '/ipfs/';
 
+// Constants used for google api requests
+const googleApiKey = 'AIzaSyBpuJvuXMUnbkZjS0XIQz_8hhZDdjNRvBE';
+const googleApiProject = 'couchbc-1540415979753';
+
+// Requires that the topic has already been created in Google API (for example using API explorer)
+const googlePublishUrl = 'https://pubsub.googleapis.com/v1/projects/' + googleApiProject + '/topics/{topic}:publish?key=' + googleApiKey;
+// TODO: Send data with POST messages [{data: base64 encoded data}]
+
+const googleSubscribeUrl = 'https://pubsub.googleapis.com/v1/projects/' + googleApiProject + '/subscriptions/{subscription}:pull?key=' + googleApiKey;
+// TODO: Send along topic as PUT topic: projects/{project}/topics/{topic}
+
+const googlePullUrl = 'https://pubsub.googleapis.com/v1/projects/' + googleApiProject + '/subscriptions/{subscription}:pull?key=' + googleApiKey;
+// TODO: Send along maxMessages; decode receivedMessages[{message{data}}]
+
 // Import the page's SCSS. Webpack will know what to do with it.
 import '../scss/app.scss';
 
 // Import libraries we need.
-import {default as $} from 'jquery';
-import {default as Vue} from 'vue';
-import {default as Web3} from 'web3';
-import {default as IpfsApi} from 'ipfs-api';
-import {default as bs58} from 'bs58';
+import { default as $ } from 'jquery';
+import { default as Vue } from 'vue';
+import { default as Web3 } from 'web3';
+import { default as IpfsApi } from 'ipfs-api';
+import { default as bs58 } from 'bs58';
 
 // Vue elements
 import Toasted from 'vue-toasted';
 import VueFilter from 'vue-filter';
+import Nl2br from 'vue-nl2br';
 
 // Vue google map
 import * as VueGoogleMaps from 'vue2-google-maps';
 
 // Vue slideshow
-import {VueFlux, FluxPagination, Transitions} from 'vue-flux';
+import { VueFlux, FluxPagination, Transitions } from 'vue-flux';
 
 // Import our contract artifacts and turn them into usable abstractions.
 import rent_artifacts from '../../build/contracts/Rent.json';
@@ -53,7 +68,7 @@ const defaultToastOptions = {
 	duration: 3000,
 };
 
-function showMessage(message, options) {
+function showMessage (message, options) {
 	Vue.toasted.show(message, $.extend({}, defaultToastOptions, options));
 }
 
@@ -72,7 +87,7 @@ Vue.use(Toasted);
 Vue.use(VueFilter);
 Vue.use(VueGoogleMaps, {
 	load:              {
-		key:       'AIzaSyBpuJvuXMUnbkZjS0XIQz_8hhZDdjNRvBE',
+		key:       googleApiKey,
 		libraries: 'places',
 	},
 	installComponents: true,
@@ -206,10 +221,10 @@ let app = new Vue({
 
 			if (addressData.country && addressData.city) {
 				app.searchApartment(
-						addressData.country,
-						addressData.city,
-						addressData.latitude,
-						addressData.longitude,
+					addressData.country,
+					addressData.city,
+					addressData.latitude,
+					addressData.longitude,
 				);
 			}
 		},
@@ -240,19 +255,18 @@ let app = new Vue({
 						for (let j = 0; j < apartment.numReviews; j++) {
 							// Add a promise that will only resolve when we have the review (with text)
 							promises.push(
-									new Promise(async (resolve, reject) => {
-										let review = await rentContract.methods.getApartmentReview(apartment.id, j).
-												call();
-										let reviewText = await app.downloadDataFromHexHash(review.ipfsHash);
+								new Promise(async (resolve, reject) => {
+									let review = await rentContract.methods.getApartmentReview(apartment.id, j).call();
+									let reviewText = await app.downloadDataFromHexHash(review.ipfsHash);
 
-										apartment.totalScore += review.score;
-										apartment.reviews.push({
-											score: review.score,
-											text:  reviewText,
-										});
+									apartment.totalScore += review.score;
+									apartment.reviews.push({
+										score: review.score,
+										text:  reviewText,
+									});
 
-										resolve();
-									}),
+									resolve();
+								}),
 							);
 						}
 					}
@@ -261,16 +275,16 @@ let app = new Vue({
 					apartment.reviews.push({
 						score: 4,
 						text:  'Donec ullamcorper nulla non metus auctor fringilla. Etiam porta sem malesuada magna mollis euismod. Vivamus sagittis lacus vel augue laoreet rutrum faucibus dolor auctor. Etiam porta sem malesuada magna mollis euismod. Curabitur blandit tempus porttitor. Cras mattis consectetur purus sit amet fermentum.\n' +
-								       '\n' +
-								       'Aenean eu leo quam. Pellentesque ornare sem lacinia quam venenatis vestibulum. Maecenas sed diam eget risus varius blandit sit amet non magna. Vivamus sagittis lacus vel augue laoreet rutrum faucibus dolor auctor. Praesent commodo cursus magna, vel scelerisque nisl consectetur et. Nullam quis risus eget urna mollis ornare vel eu leo. Aenean lacinia bibendum nulla sed consectetur. Vestibulum id ligula porta felis euismod semper.',
+							       '\n' +
+							       'Aenean eu leo quam. Pellentesque ornare sem lacinia quam venenatis vestibulum. Maecenas sed diam eget risus varius blandit sit amet non magna. Vivamus sagittis lacus vel augue laoreet rutrum faucibus dolor auctor. Praesent commodo cursus magna, vel scelerisque nisl consectetur et. Nullam quis risus eget urna mollis ornare vel eu leo. Aenean lacinia bibendum nulla sed consectetur. Vestibulum id ligula porta felis euismod semper.',
 					});
 					apartment.reviews.push({
 						score: 3,
 						text:  'Fusce dapibus, tellus ac cursus commodo, tortor mauris condimentum nibh, ut fermentum massa justo sit amet risus. Aenean eu leo quam. Pellentesque ornare sem lacinia quam venenatis vestibulum. Aenean eu leo quam. Pellentesque ornare sem lacinia quam venenatis vestibulum. Praesent commodo cursus magna, vel scelerisque nisl consectetur et. Cras mattis consectetur purus sit amet fermentum. Integer posuere erat a ante venenatis dapibus posuere velit aliquet. Duis mollis, est non commodo luctus, nisi erat porttitor ligula, eget lacinia odio sem nec elit.\n' +
-								       '\n' +
-								       'Duis mollis, est non commodo luctus, nisi erat porttitor ligula, eget lacinia odio sem nec elit. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Aenean eu leo quam. Pellentesque ornare sem lacinia quam venenatis vestibulum. Maecenas sed diam eget risus varius blandit sit amet non magna.\n' +
-								       '\n' +
-								       'Nullam quis risus eget urna mollis ornare vel eu leo. Integer posuere erat a ante venenatis dapibus posuere velit aliquet. Donec ullamcorper nulla non metus auctor fringilla. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Vestibulum id ligula porta felis euismod semper.',
+							       '\n' +
+							       'Duis mollis, est non commodo luctus, nisi erat porttitor ligula, eget lacinia odio sem nec elit. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Aenean eu leo quam. Pellentesque ornare sem lacinia quam venenatis vestibulum. Maecenas sed diam eget risus varius blandit sit amet non magna.\n' +
+							       '\n' +
+							       'Nullam quis risus eget urna mollis ornare vel eu leo. Integer posuere erat a ante venenatis dapibus posuere velit aliquet. Donec ullamcorper nulla non metus auctor fringilla. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Vestibulum id ligula porta felis euismod semper.',
 					});
 					apartment.reviews.push({
 						score: 3,
@@ -279,14 +293,14 @@ let app = new Vue({
 					apartment.reviews.push({
 						score: 5,
 						text:  'Nulla vitae elit libero, a pharetra augue. Aenean lacinia bibendum nulla sed consectetur. Donec id elit non mi porta gravida at eget metus. Duis mollis, est non commodo luctus, nisi erat porttitor ligula, eget lacinia odio sem nec elit. Donec id elit non mi porta gravida at eget metus.\n' +
-								       '\n' +
-								       'Duis mollis, est non commodo luctus, nisi erat porttitor ligula, eget lacinia odio sem nec elit. Donec sed odio dui. Donec sed odio dui. Integer posuere erat a ante venenatis dapibus posuere velit aliquet. Aenean eu leo quam. Pellentesque ornare sem lacinia quam venenatis vestibulum.',
+							       '\n' +
+							       'Duis mollis, est non commodo luctus, nisi erat porttitor ligula, eget lacinia odio sem nec elit. Donec sed odio dui. Donec sed odio dui. Integer posuere erat a ante venenatis dapibus posuere velit aliquet. Aenean eu leo quam. Pellentesque ornare sem lacinia quam venenatis vestibulum.',
 					});
 					apartment.totalScore = 15;
 
 					let details = await app.downloadDataFromHexHash(apartment.ipfsHash);
 					apartment.position = await app.getMapsAddressPosition(
-							details.street + ' ' + details.number + ', ' + details.city + ', ' + details.country,
+						details.street + ' ' + details.number + ', ' + details.city + ', ' + details.country,
 					);
 
 					// Add the apartment details to the apartment
@@ -296,8 +310,8 @@ let app = new Vue({
 					await Promise.all(promises);
 
 					apartment.averageScore = (apartment.reviews.length > 0)
-							? apartment.totalScore / apartment.reviews.length
-							: 0;
+						? apartment.totalScore / apartment.reviews.length
+						: 0;
 					app.apartments.push(apartment);
 				});
 			}
@@ -435,24 +449,24 @@ let app = new Vue({
 			});
 
 			rentContract.once('Registered', {filter: {userAddress: app.account}},
-					(error, event) => {
-						if (error) {
-							showMessage('Could not process registration');
-							console.error(error);
-							return;
-						}
+				(error, event) => {
+					if (error) {
+						showMessage('Could not process registration');
+						console.error(error);
+						return;
+					}
 
-						showMessage('Registered successfully');
+					showMessage('Registered successfully');
 
-						app.registered = true;
+					app.registered = true;
 
-						// Change the page if we're currently on the registration page
-						if (app.page === 'register') {
-							app.page = 'apartments';
-						}
+					// Change the page if we're currently on the registration page
+					if (app.page === 'register') {
+						app.page = 'apartments';
+					}
 
-						app.refreshBalance();
-					});
+					app.refreshBalance();
+				});
 		},
 
 		/**
@@ -699,28 +713,26 @@ let app = new Vue({
 			});
 
 			rentContract.once('ApartmentAdded',
-					{filter: {owner: app.newApartmentData.account.address}}, (error, event) => {
-						console.log(event.returnValues);
+				{filter: {owner: app.newApartmentData.account.address}}, (error, event) => {
+					if (error) {
+						showMessage('Could not add apartment');
+						console.error(error);
+						return;
+					}
 
-						if (error) {
-							showMessage('Could not add apartment');
-							console.error(error);
-							return;
-						}
+					showMessage('Apartment added');
 
-						showMessage('Apartment added');
+					// Show the apartment listing for the city
+					app.searchApartment(app.newApartmentData.country, app.newApartmentData.city,
+						app.newApartmentData.latitude, app.newApartmentData.longitude);
 
-						// Show the apartment listing for the city
-						app.searchApartment(app.newApartmentData.country, app.newApartmentData.city,
-								app.newApartmentData.latitude, app.newApartmentData.longitude);
-
-						// Clear the form
-						let account = app.newApartmentData.account;
-						Object.assign(app.$data.newApartmentData, app.$options.data.call(app).newApartmentData);
-						document.getElementById('apartment-address').value = '';
-						document.getElementById('add-apartment-primary-image').value = '';
-						app.newApartmentData.account = account;
-					});
+					// Clear the form
+					let account = app.newApartmentData.account;
+					Object.assign(app.$data.newApartmentData, app.$options.data.call(app).newApartmentData);
+					document.getElementById('apartment-address').value = '';
+					document.getElementById('add-apartment-primary-image').value = '';
+					app.newApartmentData.account = account;
+				});
 		},
 
 		/**
@@ -823,14 +835,14 @@ let app = new Vue({
 		changeApartmentFilter: (apartmentsFrom, apartmentsTill) => {
 			// Only apply filter if we have dates
 			if (typeof(app.apartmentsFrom) !== 'object' ||
-					typeof(app.apartmentsTill) !== 'object') {
+				typeof(app.apartmentsTill) !== 'object') {
 				app.loadApartments();
 				return;
 			}
 
 			app.loadApartments(
-					app.getUnixDay(app.apartmentsFrom),
-					app.getUnixDay(app.apartmentsTill),
+				app.getUnixDay(app.apartmentsFrom),
+				app.getUnixDay(app.apartmentsTill),
 			);
 		},
 		loadApartments:        (fromDay, tillDay) => {
@@ -1059,7 +1071,11 @@ let app = new Vue({
 				showMessage('Deposit claim started...');
 			});
 		},
-		rent:              apartment => {
+
+		requestRental: apartment => {
+
+			return;
+
 			let fromDay = app.getUnixDay(app.apartmentsFrom);
 			let tillDay = app.getUnixDay(app.apartmentsTill);
 			let cost = apartment.pricePerNight * (tillDay - fromDay) + parseInt(apartment.deposit);
@@ -1102,7 +1118,7 @@ let app = new Vue({
 
 				if (accounts.length === 0) {
 					showMessage(
-							'Couldn\'t get any accounts! Make sure your Ethereum client is configured correctly.');
+						'Couldn\'t get any accounts! Make sure your Ethereum client is configured correctly.');
 					return;
 				}
 
@@ -1117,6 +1133,8 @@ let app = new Vue({
 					selector:  '.tooltip[title]',
 					container: 'body',
 				});
+
+				app.requestRental('');
 			});
 		},
 
@@ -1251,7 +1269,7 @@ let app = new Vue({
 				}
 
 				showMessage('Deposit claimable for rental ' + event.returnValues.rentalId + ' (' +
-						event.returnValues.deductedAmount + ' credits have been deducted)');
+					event.returnValues.deductedAmount + ' credits have been deducted)');
 
 				app.deductAmount = 0;
 
@@ -1320,6 +1338,16 @@ let app = new Vue({
 			};
 
 			reader.readAsDataURL(input.files[0]);
+		},
+
+		// Messaging
+
+		publishMessage: async (message, topic, publicKey) => {
+			return $.post();
+		},
+
+		subscribeToTopic: async (topic, callback, ecAccount) => {
+
 		},
 
 		// Cryptography
@@ -1648,6 +1676,7 @@ let app = new Vue({
 		'datepicker':      Datepicker,
 		'vue-flux':        VueFlux,
 		'flux-pagination': FluxPagination,
+		'nl2br':           Nl2br
 	},
 });
 
@@ -1658,11 +1687,10 @@ window.addEventListener('load', () => {
 		window.web3 = new Web3(web3.currentProvider);
 	} else {
 		console.warn(
-				'No web3 detected. Falling back to ' + websocketAddress +
-				'. You should remove this fallback when you deploy live, as it\'s inherently insecure. Consider switching to Metamask for development. More info here: http://truffleframework.com/tutorials/truffle-and-metamask');
+			'No web3 detected. Falling back to ' + websocketAddress +
+			'. You should remove this fallback when you deploy live, as it\'s inherently insecure. Consider switching to Metamask for development. More info here: http://truffleframework.com/tutorials/truffle-and-metamask');
 		// fallback - use your fallback strategy (local node / hosted node + in-dapp id mgmt / fail)
-		window.web3 = new Web3(
-				new Web3.providers.WebsocketProvider(websocketAddress));
+		window.web3 = new Web3(websocketAddress);
 	}
 
 	app.start();
