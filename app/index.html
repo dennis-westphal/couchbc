@@ -12,12 +12,13 @@
 			<div class="top-bar-left">
 				<a href="#" v-on:click.stop="page = 'start'" class="logo">CouchBC</a>
 
-				<autoaddress
+				<gmap-autocomplete
 						id="search-address"
-						placeholder="Where do you want to go?"
-						types="(cities)"
-						v-on:placechanged="changeSearchAddress">
-				</autoaddress>
+						:value="''"
+						:placeholder="'Where do you want to go?'"
+						:types="['(cities)']"
+						@place_changed="changeSearchAddress">
+				</gmap-autocomplete>
 			</div>
 			<div class="top-bar-right align-middle">
 				<ul id="menu" class="dropdown menu" data-dropdown-menu>
@@ -48,33 +49,80 @@
 	</nav>
 
 	<div class="page start" v-if="page == 'start'">
-		<div class="header">
+		<header>
 			<img :src="getImageUrl('Qma2jcNZYJ9FTUY5xA2iS6arL39usU5mg8fiLy3DseLiJz')">
 			<div class="text">
 				<h1>Time for a retreat</h1>
 				<h2>Rent an apartment on CouchBC using blockchain technology</h2>
 			</div>
-		</div>
+		</header>
 	</div>
 	<div class="page apartments" v-if="page == 'apartments'">
-		<div class="grid-container">
-			<p>Found {{apartments.length}} apartments in {{searchData.city}}, {{searchData.country}}</p>
-			<div class="apartment" v-for="apartment in apartments" v-on:click="showDetails(apartment)" :style="getApartmentStyle(apartment)">
-				<img v-if="apartment.primaryImage" :src="getImageUrl(apartment.primaryImage)">
-				<div class="text">
-					<p class="title">{{apartment.title}}</p>
-					<p>
-						<span v-if="apartmentsFrom && apartmentsTill">{{getTotalPrice(apartment)}}
-							per night</span>
-						<span v-if="!(apartmentsFrom && apartmentsTill)">{{apartment.pricePerNight}}
-							per night</span>
-						/ {{apartment.deposit}} deposit</p>
+		<div class="grid-x grid-padding-x">
+			<div id="apartments" class="cell medium-7">
+				<p>Found {{apartments.length}} apartment<span v-if="apartments.length != 1">s</span>
+					in {{searchData.city}}, {{searchData.country}}</p>
+
+				<div class="apartment" :id="'apartment-' + apartment.id" v-for="apartment in apartments" v-on:click="showApartment(apartment)" :style="getApartmentStyle(apartment)">
+					<div class="img">
+						<img v-if="apartment.primaryImage" :src="getImageUrl(apartment.primaryImage)">
+					</div>
+					<div class="text">
+						<p class="title">
+							{{apartment.title|escape|truncate(20)}}
+							<span v-if="apartment.reviews.length > 0"
+							      class="stars"
+							      :style="{backgroundImage: getImageUrl('QmepT6MmHFZTuhtaA7esu7GtD476UQUdXk3K2bWRi2Hmid'), width: getStarsWidth(apartment.averageScore, 122)}">
+							</span>
+						</p>
+						<p>
+							<span v-if="apartmentsFrom && apartmentsTill">{{getTotalPrice(apartment)}}
+								per night</span>
+							<span v-if="!(apartmentsFrom && apartmentsTill)">{{apartment.pricePerNight}}
+								per night</span>
+							/ {{apartment.deposit}} deposit</p>
+					</div>
+					<!--<a class="waves-effect waves-light btn" v-if="apartmentsFrom && apartmentsTill && registered" v-on:click.stop="rent(apartment)">book</a>-->
 				</div>
-				<!--<a class="waves-effect waves-light btn" v-if="apartmentsFrom && apartmentsTill && registered" v-on:click.stop="rent(apartment)">book</a>-->
+			</div>
+			<div class="cell medium-5">
+				<gmap-map
+						:center="{lat: searchData.latitude, lng: searchData.longitude}"
+						:zoom="11"
+						map-type-id="terrain"
+						style="width: 100%; height: 100%; min-height: 300px; max-height:800px">
+					<gmap-marker
+							v-for="apartment in apartments"
+							:key="apartment.id"
+							:position="apartment.position"
+							:clickable="true"
+							@mouseover="highlightApartment(apartment)"
+							@mouseout="unhighlightApartment(apartment)"
+							@click="showApartment(apartment)"
+					></gmap-marker>
+				</gmap-map>
 			</div>
 		</div>
+	</div>
+	<div class="page apartment" v-if="page == 'apartment'">
+		<div class="grid-container">
+			<header>
+				<vue-flux
+						:options="fluxOptions"
+						:images="getApartmentImages(currentApartment)"
+						:transitions="fluxTransitions"
+						ref="slider">
+				</vue-flux>
+				<div class="text">
+					Request form
+				</div>
+			</header>
+			<h1>{{currentApartment.title|escape}}</h1>
+			{{currentApartment.description|escape|nl2br}}
+		</div>
+	</div>
 
-		<!--
+	<!--
 		<table>
 			<thead>
 			<tr>
@@ -101,7 +149,6 @@
 			</thead>
 		</table>
 		-->
-	</div>
 	<div class="page add-apartment" v-if="page == 'add-apartment'">
 		<form>
 			<div class="grid-container">
@@ -118,11 +165,11 @@
 						</div>
 						<div class="form-control cell">
 							<label for="apartment-address">Address</label>
-							<autoaddress
+							<gmap-autocomplete
 									id="apartment-address"
-									placeholder=""
-									v-on:placechanged="changeApartmentAddress">
-							</autoaddress>
+									:value="''"
+									@place_changed="changeApartmentAddress">
+							</gmap-autocomplete>
 						</div>
 						<div class="form-control cell large-6">
 							<label for="add-apartment-pricePerNight">Price per night in finney</label>
@@ -326,7 +373,6 @@
 	</div>
 </div>
 
-<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBpuJvuXMUnbkZjS0XIQz_8hhZDdjNRvBE&libraries=places"></script>
 <script src="/bundles/app.js"></script>
 </body>
 </html>

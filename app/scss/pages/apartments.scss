@@ -1,23 +1,38 @@
 div.page.apartments {
 	div.apartment {
 		position: relative;
-		width: 20rem;
-		height: 14rem;
+		width: 18rem;
+		height: 13rem;
 		margin: 0 1rem 1rem 0;
 		float: left;
 		border: #ccc 1px solid;
 		border-radius: .4rem;
 		cursor: pointer;
-		transition: width .3s, height .3s, margin .3s;
+		transition: opacity .3s;
 		overflow: hidden;
-		&:hover {
-			width: 19.2rem;
-			height: 13.4rem;
-			margin: .3rem 1.4rem 1.4rem .3rem;
-		}
-		img {
+
+		div.img {
+			position: absolute;
+			left: 0;
+			top: 0;
 			width: 100%;
+			height: 100%;
+
+			img {
+				width: 100%;
+			}
+
+			transition: width .3s, height .3s, left .3s, top .3s;
 		}
+		&:hover {
+			div.img {
+				width: 22.15rem;
+				height: 16rem;
+				top: -1.5rem;
+				left: -2.0775rem;
+			}
+		}
+
 		div.text {
 			position: absolute;
 			bottom: 0;
@@ -25,13 +40,31 @@ div.page.apartments {
 			width: 100%;
 			background: rgba(255, 255, 255, 0.7);
 			padding: .4rem;
+			z-index: 2;
 
+			p {
+				margin: 0;
+				&.title {
+					font-weight: bold;
+					margin-bottom: .4rem;
+
+					span.stars {
+						float: right;
+						display: inline-block;
+						height: 23px;
+					}
+				}
+			}
 		}
-		p {
-			margin: 0;
-			&.title {
-				font-weight: bold;
-				margin-bottom: .4rem;
+	}
+	#apartments {
+		&.highlighting {
+			div.apartment {
+				opacity: .2;
+
+				&.highlighted {
+					opacity: 1;
+				}
 			}
 		}
 	}

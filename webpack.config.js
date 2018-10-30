@@ -47,7 +47,7 @@ module.exports = {
 				],
 			},
 			{
-				test: /\.json/,
+				test: /\.json$/,
 				use:  [
 					{
 						loader: 'json5-loader',
@@ -55,7 +55,7 @@ module.exports = {
 				],
 			},
 			{
-				test: /\.vue/,
+				test: /\.vue$/,
 				use:  [
 					{
 						loader: 'vue-loader',

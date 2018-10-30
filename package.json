@@ -59,8 +59,10 @@
 		"moment": "^2.22.2",
 		"npm-font-open-sans": "^1.1.0",
 		"vue": "^2.5.17",
-		"vue-google-autocomplete": "^1.1.0",
+		"vue-filter": "^0.2.5",
+		"vue-flux": "^5.1.5",
 		"vue-toasted": "^1.1.25",
+		"vue2-google-maps": "^0.10.2",
 		"vuejs-datepicker": "^1.5.3",
 		"web3": "^1.0.0-beta.36",
 		"webpack-jquery-ui": "^1.0.0"

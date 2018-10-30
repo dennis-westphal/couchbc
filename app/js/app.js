@@ -12,8 +12,16 @@ import {default as Vue} from 'vue';
 import {default as Web3} from 'web3';
 import {default as IpfsApi} from 'ipfs-api';
 import {default as bs58} from 'bs58';
+
+// Vue elements
 import Toasted from 'vue-toasted';
-import VueGoogleAutocomplete from 'vue-google-autocomplete';
+import VueFilter from 'vue-filter';
+
+// Vue google map
+import * as VueGoogleMaps from 'vue2-google-maps';
+
+// Vue slideshow
+import {VueFlux, FluxPagination, Transitions} from 'vue-flux';
 
 // Import our contract artifacts and turn them into usable abstractions.
 import rent_artifacts from '../../build/contracts/Rent.json';
@@ -49,8 +57,6 @@ function showMessage(message, options) {
 	Vue.toasted.show(message, $.extend({}, defaultToastOptions, options));
 }
 
-Vue.use(Toasted);
-
 Vue.filter('formatDate', function(date) {
 	if (date) {
 		return moment(date).format('DD.MM.YYYY');
@@ -62,9 +68,27 @@ Vue.filter('formatDateTime', function(date) {
 	}
 });
 
+Vue.use(Toasted);
+Vue.use(VueFilter);
+Vue.use(VueGoogleMaps, {
+	load:              {
+		key:       'AIzaSyBpuJvuXMUnbkZjS0XIQz_8hhZDdjNRvBE',
+		libraries: 'places',
+	},
+	installComponents: true,
+});
+
 let app = new Vue({
 	el:         '#app',
 	data:       () => ({
+		fluxOptions:        {
+			autoplay: true,
+		},
+		fluxTransitions:    {
+			transitionFade: Transitions.transitionFade,
+		},
+		googleMapsGeocoder: null,
+
 		wallet: null,
 
 		accounts: [],
@@ -84,30 +108,36 @@ let app = new Vue({
 			title:         '',
 			description:   '',
 			street:        '',
+			number:        '',
 			zip:           '',
-			city:          '',
 			country:       '',
+			city:          '',
+			latitude:      0,
+			longitude:     0,
 			pricePerNight: 0,
 			deposit:       0,
 			primaryImage:  '',
 			images:        [],
 		},
 		searchData:        {
-			country:  null,
-			city:     null,
-			fromDate: null,
-			tillDate: null,
+			country:   null,
+			city:      null,
+			fromDate:  null,
+			tillDate:  null,
+			latitude:  0,
+			longitude: 0,
 		},
 		apartments:        [],
-		userApartments:    [],
-		rentals:           [],
 		currentApartment:  null,
-		currentRental:     null,
-		deductAmount:      0,
-		apartmentRentals:  [],
-		apartmentsFrom:    '',
-		apartmentsTill:    '',
-		disabledDates:     {
+
+		userApartments:   [],
+		rentals:          [],
+		currentRental:    null,
+		deductAmount:     0,
+		apartmentRentals: [],
+		apartmentsFrom:   '',
+		apartmentsTill:   '',
+		disabledDates:    {
 			to: new Date(),
 		},
 	}),
@@ -130,15 +160,65 @@ let app = new Vue({
 		},
 	},
 	methods:    {
-		changeSearchAddress: (addressData, placeResultData, id) => {
-			if (typeof(addressData.locality) !== 'undefined' && typeof(addressData.country) !== 'undefined') {
-				app.searchApartment(addressData.country, addressData.locality);
+		/**
+		 * Extract address data from a gmaps places result
+		 * @param placesResult
+		 * @return {{latitude: number, longitude: number, country: string, zip: string, city: string, street: string, number: string}}
+		 */
+		extractAddressData: placesResult => {
+			let addressData = {
+				latitude:  placesResult.geometry.location.lat(),
+				longitude: placesResult.geometry.location.lng(),
+			};
+
+			for (let component of placesResult.address_components) {
+				if (component.types.indexOf('country') !== -1) {
+					addressData.country = component.long_name;
+					continue;
+				}
+				if (component.types.indexOf('postal_code') !== -1) {
+					addressData.zip = component.long_name;
+					continue;
+				}
+				if (component.types.indexOf('locality') !== -1) {
+					addressData.city = component.long_name;
+					continue;
+				}
+				if (component.types.indexOf('route') !== -1) {
+					addressData.street = component.long_name;
+					continue;
+				}
+				if (component.types.indexOf('street_number') !== -1) {
+					addressData.number = component.long_name;
+				}
+			}
+
+			return addressData;
+		},
+
+		/**
+		 * Function called when user searches for apartments at an address
+		 *
+		 * @param placesResult
+		 */
+		changeSearchAddress: (placesResult) => {
+			let addressData = app.extractAddressData(placesResult);
+
+			if (addressData.country && addressData.city) {
+				app.searchApartment(
+						addressData.country,
+						addressData.city,
+						addressData.latitude,
+						addressData.longitude,
+				);
 			}
 		},
 
-		searchApartment: async (country, city) => {
+		searchApartment: async (country, city, latitude, longitude) => {
 			app.searchData.country = country;
 			app.searchData.city = city;
+			app.searchData.latitude = latitude;
+			app.searchData.longitude = longitude;
 
 			let cityHash = app.getCountryCityHash(country, city);
 
@@ -146,19 +226,167 @@ let app = new Vue({
 
 			app.apartments = [];
 
+			// Fetch all apartments for the city
 			for (let i = 0; i < numApartments; i++) {
+				// Get the apartment for the city hash
 				rentContract.methods.getCityApartment(cityHash, i).call().then(async apartment => {
-					let details = await app.downloadDataFromHexHash(apartment.ipfsHash);
+					let promises = [];
 
-					let fullApartmentData = $.extend(apartment, details);
-					app.apartments.push(fullApartmentData);
+					apartment.reviews = [];
+					apartment.totalScore = 0;
+
+					// If the apartment has reviews, fetch them
+					if (apartment.numReviews > 0) {
+						for (let j = 0; j < apartment.numReviews; j++) {
+							// Add a promise that will only resolve when we have the review (with text)
+							promises.push(
+									new Promise(async (resolve, reject) => {
+										let review = await rentContract.methods.getApartmentReview(apartment.id, j).
+												call();
+										let reviewText = await app.downloadDataFromHexHash(review.ipfsHash);
+
+										apartment.totalScore += review.score;
+										apartment.reviews.push({
+											score: review.score,
+											text:  reviewText,
+										});
+
+										resolve();
+									}),
+							);
+						}
+					}
+
+					// Test reviews
+					apartment.reviews.push({
+						score: 4,
+						text:  'Donec ullamcorper nulla non metus auctor fringilla. Etiam porta sem malesuada magna mollis euismod. Vivamus sagittis lacus vel augue laoreet rutrum faucibus dolor auctor. Etiam porta sem malesuada magna mollis euismod. Curabitur blandit tempus porttitor. Cras mattis consectetur purus sit amet fermentum.\n' +
+								       '\n' +
+								       'Aenean eu leo quam. Pellentesque ornare sem lacinia quam venenatis vestibulum. Maecenas sed diam eget risus varius blandit sit amet non magna. Vivamus sagittis lacus vel augue laoreet rutrum faucibus dolor auctor. Praesent commodo cursus magna, vel scelerisque nisl consectetur et. Nullam quis risus eget urna mollis ornare vel eu leo. Aenean lacinia bibendum nulla sed consectetur. Vestibulum id ligula porta felis euismod semper.',
+					});
+					apartment.reviews.push({
+						score: 3,
+						text:  'Fusce dapibus, tellus ac cursus commodo, tortor mauris condimentum nibh, ut fermentum massa justo sit amet risus. Aenean eu leo quam. Pellentesque ornare sem lacinia quam venenatis vestibulum. Aenean eu leo quam. Pellentesque ornare sem lacinia quam venenatis vestibulum. Praesent commodo cursus magna, vel scelerisque nisl consectetur et. Cras mattis consectetur purus sit amet fermentum. Integer posuere erat a ante venenatis dapibus posuere velit aliquet. Duis mollis, est non commodo luctus, nisi erat porttitor ligula, eget lacinia odio sem nec elit.\n' +
+								       '\n' +
+								       'Duis mollis, est non commodo luctus, nisi erat porttitor ligula, eget lacinia odio sem nec elit. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Aenean eu leo quam. Pellentesque ornare sem lacinia quam venenatis vestibulum. Maecenas sed diam eget risus varius blandit sit amet non magna.\n' +
+								       '\n' +
+								       'Nullam quis risus eget urna mollis ornare vel eu leo. Integer posuere erat a ante venenatis dapibus posuere velit aliquet. Donec ullamcorper nulla non metus auctor fringilla. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Vestibulum id ligula porta felis euismod semper.',
+					});
+					apartment.reviews.push({
+						score: 3,
+						text:  'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nullam id dolor id nibh ultricies vehicula ut id elit. Cras mattis consectetur purus sit amet fermentum. Praesent commodo cursus magna, vel scelerisque nisl consectetur et. Vestibulum id ligula porta felis euismod semper. Vestibulum id ligula porta felis euismod semper.',
+					});
+					apartment.reviews.push({
+						score: 5,
+						text:  'Nulla vitae elit libero, a pharetra augue. Aenean lacinia bibendum nulla sed consectetur. Donec id elit non mi porta gravida at eget metus. Duis mollis, est non commodo luctus, nisi erat porttitor ligula, eget lacinia odio sem nec elit. Donec id elit non mi porta gravida at eget metus.\n' +
+								       '\n' +
+								       'Duis mollis, est non commodo luctus, nisi erat porttitor ligula, eget lacinia odio sem nec elit. Donec sed odio dui. Donec sed odio dui. Integer posuere erat a ante venenatis dapibus posuere velit aliquet. Aenean eu leo quam. Pellentesque ornare sem lacinia quam venenatis vestibulum.',
+					});
+					apartment.totalScore = 15;
+
+					let details = await app.downloadDataFromHexHash(apartment.ipfsHash);
+					apartment.position = await app.getMapsAddressPosition(
+							details.street + ' ' + details.number + ', ' + details.city + ', ' + details.country,
+					);
+
+					// Add the apartment details to the apartment
+					$.extend(apartment, details);
+
+					// Wait till all reviews have been fetched, if any
+					await Promise.all(promises);
+
+					apartment.averageScore = (apartment.reviews.length > 0)
+							? apartment.totalScore / apartment.reviews.length
+							: 0;
+					app.apartments.push(apartment);
 				});
 			}
 
 			app.page = 'apartments';
 		},
 
-		refuseRental: (rental) => {
+		/**
+		 * Get the longitude and latitude for the supplied address as object {ltd: 0.00, lng: 0.00}
+		 *
+		 * @param address
+		 * @return {Promise<object>}
+		 */
+		getMapsAddressPosition: async address => {
+			if (app.googleMapsGeocoder === null) {
+				app.googleMapsGeocoder = new google.maps.Geocoder();
+			}
+
+			return new Promise(function(resolve, reject) {
+				app.googleMapsGeocoder.geocode({'address': address}, function(results, status) {
+					if (status === 'OK') {
+						resolve({
+							lat: results[0].geometry.location.lat(),
+							lng: results[0].geometry.location.lng(),
+						});
+					} else {
+						console.error(status, results);
+
+						showMessage('Could not find location of address ' + address);
+
+						reject();
+					}
+				});
+			});
+		},
+
+		/**
+		 * Highlight an apartment
+		 *
+		 * @param apartment
+		 */
+		highlightApartment: apartment => {
+			$('#apartments').toggleClass('highlighting', true);
+			$('#apartment-' + apartment.id).toggleClass('highlighted', true);
+		},
+
+		/**
+		 * End highlighting an apartment
+		 *
+		 * @param apartment
+		 */
+		unhighlightApartment: apartment => {
+			$('#apartments').toggleClass('highlighting', false);
+			$('#apartment-' + apartment.id).toggleClass('highlighted', false);
+		},
+
+		/**
+		 * Show the apartment details
+		 *
+		 * @param apartment
+		 */
+		showApartment: apartment => {
+			app.currentApartment = apartment;
+
+			app.page = 'apartment';
+		},
+
+		/**
+		 * Get the URLs for images for the apartment
+		 *
+		 * @param apartment
+		 */
+		getApartmentImages: (apartment) => {
+			let urls = [];
+
+			// Check if we have a primary image we can add
+			if (apartment.primaryImage) {
+				urls.push(app.getImageUrl(apartment.primaryImage));
+			}
+
+			// Add all other images
+			for (let ipfsHash of apartment.images) {
+				urls.push(app.getImageUrl(ipfsHash));
+			}
+
+			return urls;
+		},
+
+		refuseRental: rental => {
 
 			let testId = 25;
 
@@ -189,15 +417,7 @@ let app = new Vue({
 			});
 		},
 
-		redrawMenu: () => {
-			let menu = $('#menu');
-
-			menu.foundation('_destroy');
-			app.$nextTick(() => {
-				new Foundation.DropdownMenu(menu);
-			});
-		},
-		register:   clickEvent => {
+		register: clickEvent => {
 			clickEvent.preventDefault();
 
 			// Using the ES2015 spread operator does not work on vue data objects
@@ -354,8 +574,6 @@ let app = new Vue({
 		downloadDataFromHexHash: async (hexHash, ecAccount) => {
 			let ipfsAddress = app.hexHashToIpfsAddr(hexHash);
 
-			console.log(ipfsAddress);
-
 			let str = await app.downloadString(ipfsAddress);
 
 			if (ecAccount) {
@@ -365,11 +583,15 @@ let app = new Vue({
 			return JSON.parse(str);
 		},
 
-		changeApartmentAddress: (addressData, placeResultData, id) => {
-			app.newApartmentData.street = addressData.route;
-			app.newApartmentData.number = addressData.street_number;
-			app.newApartmentData.city = addressData.locality;
-			app.newApartmentData.country = addressData.country;
+		/**
+		 * React on a changed apartment address for new apartments
+		 *
+		 * @param placesResult
+		 */
+		changeApartmentAddress: (placesResult) => {
+			let addressData = app.extractAddressData(placesResult);
+
+			$.extend(app.newApartmentData, addressData);
 		},
 
 		selectNewApartmentAccount: account => {
@@ -413,7 +635,9 @@ let app = new Vue({
 
 			let details = {
 				title:         app.newApartmentData.title,
+				description:   app.newApartmentData.description,
 				street:        app.newApartmentData.street,
+				number:        app.newApartmentData.number,
 				zip:           app.newApartmentData.zip,
 				city:          app.newApartmentData.city,
 				country:       app.newApartmentData.country,
@@ -487,7 +711,8 @@ let app = new Vue({
 						showMessage('Apartment added');
 
 						// Show the apartment listing for the city
-						app.searchApartment(app.newApartmentData.country, app.newApartmentData.city);
+						app.searchApartment(app.newApartmentData.country, app.newApartmentData.city,
+								app.newApartmentData.latitude, app.newApartmentData.longitude);
 
 						// Clear the form
 						let account = app.newApartmentData.account;
@@ -512,7 +737,7 @@ let app = new Vue({
 			}));
 		},
 
-		getTotalPrice:         (apartment) => {
+		getTotalPrice: (apartment) => {
 			let days = app.getUnixDay(app.apartmentsTill) - app.getUnixDay(app.apartmentsFrom);
 
 			if (days > 0) {
@@ -521,19 +746,33 @@ let app = new Vue({
 
 			return null;
 		},
-		getImageUrl:           (image) => {
+
+		/**
+		 * Get an image URL for an IPFS image, using the specified address (either multihash or 0x prefixed hex hash)
+		 *
+		 * @param address
+		 * @return {string}
+		 */
+		getImageUrl: (address) => {
 			// Check if we need to decode an IPFS hex hash
-			if (image.substr(0, 2) === '0x') {
-				return ipfsGatewayUrl + app.hexHashToIpfsAddr(image);
+			if (address.substr(0, 2) === '0x') {
+				return ipfsGatewayUrl + app.hexHashToIpfsAddr(address);
 			}
 
-			return ipfsGatewayUrl + image;
+			return ipfsGatewayUrl + address;
 		},
-		getBlockie:            account => {
-			if (account) {
+
+		/**
+		 * Get style attributes for a blockie generated from an account address
+		 *
+		 * @param address
+		 * @return {*}
+		 */
+		getBlockie:     address => {
+			if (address) {
 				return {
 					'background-image': 'url(\'' + blockies.create({
-						seed: account,
+						seed: address,
 					}).toDataURL() + '\')',
 				};
 			}
@@ -541,7 +780,12 @@ let app = new Vue({
 				return {};
 			}
 		},
-		getRandomColor:        () => {
+		/**
+		 * Get a reandom color to use as background color for an apartment
+		 *
+		 * @return {string}
+		 */
+		getRandomColor: () => {
 			let oneBlack = Math.random() * 10;
 
 			let r = oneBlack <= 0.3333 ? 0 : Math.floor(Math.random() * 255);
@@ -550,13 +794,31 @@ let app = new Vue({
 
 			return 'rgba(' + r + ', ' + g + ', ' + b + ', 0.15';
 		},
-		getApartmentStyle:     (apartment) => {
+
+		/**
+		 * Get the style to use for an apartment. If no primary image is specified for the apartment, returns a random color.
+		 *
+		 * @param apartment
+		 * @return {string}
+		 */
+		getApartmentStyle: (apartment) => {
 			// Don't apply a specific style if we have an image
 			if (apartment.primaryImage) {
 				return '';
 			}
 
 			return 'background-color: ' + app.getRandomColor();
+		},
+
+		/**
+		 * Get the width for displaying a stars image, using the provided maxWidth for the full width
+		 *
+		 * @param score
+		 * @param maxWidth
+		 * @return {number}
+		 */
+		getStarsWidth:         (score, maxWidth) => {
+			return Math.round(score / 5 * maxWidth);
 		},
 		changeApartmentFilter: (apartmentsFrom, apartmentsTill) => {
 			// Only apply filter if we have dates
@@ -1383,8 +1645,9 @@ let app = new Vue({
 		},
 	},
 	components: {
-		'datepicker':  Datepicker,
-		'autoaddress': VueGoogleAutocomplete,
+		'datepicker':      Datepicker,
+		'vue-flux':        VueFlux,
+		'flux-pagination': FluxPagination,
 	},
 });
 
