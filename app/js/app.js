@@ -6,14 +6,11 @@ const ipfsGatewayUrl = '/ipfs/';
 // Constants used for google api requests
 const googleApiKey = 'AIzaSyBpuJvuXMUnbkZjS0XIQz_8hhZDdjNRvBE';
 const googleApiProject = 'couchbc-1540415979753';
+const pullInterval = 2000; // Pull every X milliseconds
 
 // Requires that the topic has already been created in Google API (for example using API explorer)
 const googlePublishUrl = 'https://pubsub.googleapis.com/v1/projects/' + googleApiProject + '/topics/{topic}:publish?key=' + googleApiKey;
-// TODO: Send data with POST messages [{data: base64 encoded data}]
-
 const googleSubscribeUrl = 'https://pubsub.googleapis.com/v1/projects/' + googleApiProject + '/subscriptions/{subscription}:pull?key=' + googleApiKey;
-// TODO: Send along topic as PUT topic: projects/{project}/topics/{topic}
-
 const googlePullUrl = 'https://pubsub.googleapis.com/v1/projects/' + googleApiProject + '/subscriptions/{subscription}:pull?key=' + googleApiKey;
 // TODO: Send along maxMessages; decode receivedMessages[{message{data}}]
 
@@ -26,6 +23,7 @@ import { default as Vue } from 'vue';
 import { default as Web3 } from 'web3';
 import { default as IpfsApi } from 'ipfs-api';
 import { default as bs58 } from 'bs58';
+import { default as uniqid } from 'uniqid';
 
 // Vue elements
 import Toasted from 'vue-toasted';
@@ -63,6 +61,9 @@ const eccrypto = require('eccrypto');
 
 // Save the rent contract
 let rentContract;
+
+// Interval ids for subscriptions
+let subscriptionIntervals = {};
 
 const defaultToastOptions = {
 	duration: 3000,
@@ -144,6 +145,8 @@ let app = new Vue({
 		},
 		apartments:        [],
 		currentApartment:  null,
+
+		topicMessages: {},
 
 		userApartments:   [],
 		rentals:          [],
@@ -1342,12 +1345,95 @@ let app = new Vue({
 
 		// Messaging
 
-		publishMessage: async (message, topic, publicKey) => {
-			return $.post();
+		/**
+		 * Publish a message to the given topic, optionally encrypting it using the publicKeyBuffer
+		 *
+		 * @param message
+		 * @param topic
+		 * @param publicKeyBuffer
+		 * @returns {Promise<*>}
+		 */
+		publishMessage: async (message, topic, publicKeyBuffer) => {
+			let url = googlePublishUrl.replace('{topic}', topic);
+
+			// Check if we need to encrypt the message
+			if (publicKey) {
+				message = app.encryptString(message, publicKeyBuffer);
+			}
+
+			let data = {
+				messages: [
+					{
+						data: btoa(message)
+					}
+				]
+			};
+
+			return $.post(url, data);
 		},
 
-		subscribeToTopic: async (topic, callback, ecAccount) => {
+		/**
+		 * Subscribe to a topic. If ecAccountAddress is given, tries to decrypt the message using the ec account stored at the specified address.
+		 * @param topic
+		 * @param ecAccountAddress
+		 * @returns {Promise<void>}
+		 */
+		subscribeToTopic:        async (topic, ecAccountAddress) => {
+			// Check if we already have a subscription id for the topic; if so, we can start listening
+			let subscription = window.localStorage.getItem('topic.' + topic + '.subscription');
+			if (subscription) {
+				app.listenToSubscription(JSON.parse(subscription));
+			}
 
+			subscription = {
+				id:               app.getRandomSubscriptionId(),
+				topic:            topic,
+				ecAccountAddress: ecAccountAddress || null
+			};
+			let url = googleSubscribeUrl.replace('{subscription}',);
+			let data = {
+				topic: 'projects/' + googleApiProject + '/topics/' + topic
+			};
+
+			await $.put(url, data);
+
+			// Store the subscription in localStorage
+			window.localStorage.setItem('topic.' + topic + '.subscription', JSON.stringify(subscription));
+
+			app.listenToSubscription(subscription);
+		},
+		getRandomSubscriptionId: () => {
+			return uniqid('sub-');
+		},
+
+		listenToSubscription: subscription => {
+			// If we already listen to the subscription, we're done
+			if (subscriptionIntervals['interval-' + subscription.id]) {
+				return;
+			}
+
+			// Periodically pull from the subscription
+			subscriptionIntervals['interval-' + subscription.id] = window.setInterval(() => {
+				app.pullFromSubscription(subscription);
+			}, pullInterval);
+		},
+
+		pullFromSubscription: async (subscription) => {
+			let url = googlePullUrl.replace('{subscription}', subscription.id);
+			let data = {
+				maxMessages:       10,
+				returnImmediately: true
+			};
+
+			let result = await $.post(url, data);
+
+			// If we don't have any messages, we're done
+			if (typeof(result.receivedMessages) === 'undefined') {
+				return;
+			}
+
+			// TODO: Ackknowledge the received messages; save them
+			// TODO for rental requests: store "pending" request in local storage; process as soon as interaction key received
 		},
 
 		// Cryptography
