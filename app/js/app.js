@@ -3,27 +3,46 @@ const websocketAddress = 'wss://couchbc.com';
 const ipfsHost = {'host': 'couchbc.com', 'port': 443, 'protocol': 'https'};
 const ipfsGatewayUrl = '/ipfs/';
 
-// Constants used for google api requests
+// Salt used for randomnesss generation. Change this in your application.
+const salt = '4iMXBkp9o8q5lX0i264U9D3Zyas73m52';
+
+// Constants used for google api requests (maps, places, geocoding)
 const googleApiKey = 'AIzaSyBpuJvuXMUnbkZjS0XIQz_8hhZDdjNRvBE';
 const googleApiProject = 'couchbc-1540415979753';
 const pullInterval = 2000; // Pull every X milliseconds
 
+// Credentials for google pub/sub service account, retrieved from JSON. Service account must be limited to a role with the following permissions:
+// pubsub.subscriptions.consume
+// pubsub.subscriptions.create
+// pubsub.topics.attachSubscription
+// pubsub.topics.publish
+const googlePubSubKey = '-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDegsPPx9ryV6/Y\nYhMCUoujq5qmUvJbh8SQJlv5OHDXf5yNSviiYABeS2e4jXxxB6y40DNBVUibyJz4\ns9t+iYsJVRyjnYXWflTXazVID1c39wtHouwIMX/hKBh5xwaFBlQFVA7AMIxOB3fe\nCU72thGVEWGFyOYlr2m7VbGaJSpZ03IFeS+RMt0Ta93wI9Exin6xfulR+a/caOw5\nDuT8SEc9MBVHqiglEh2IQibnuG27cD6nqXT5wWuvLHjcacEQUkcHtBCs3vKW561c\nKLDIoeU4/fiq2CTOtjqiQ/fVy6fzdPaZ7S/vB2qPzi5kWnbzW+S0sXnTTCnTFR1/\nv9YHy5a1AgMBAAECggEAFMDMg5Yn2R+Nkph/HmHVjVPljirBWQEeN7WkMWfuumK4\nFsON0hMzJZhR2bg0iZRGK0yb4zWRmpoI7fdUewZYFew+yhHYmEtbHWZt50UrBNjB\nUBKlghQf0b+8HKuP85tF/eM7pvhANczjhK2IlGEh3a3r0x8MPCqSqXrSIEbkHtF5\n0nNJu9cD3B0F0L1gCxw62Wa4LGBRGKzaHBaceU0vAPXQ38nCNakttqWL71zFe3Ki\nOXB9Nd8/g5ptZIVqpKRypwGN1vkTW2TCrRhj5PGFJTC6UzaitMoNJnB8WU3mfZpI\na8e960ZqBSCFltcKx/X9USPe+cptcMaObVFCuJZkhwKBgQDz6c+QjDdfwX/QiJ3t\nL6+MQ+jFqmF+eFsNq51ABfzEQMd5K28C9PBv6mrFZw8a6bGozFD7xvJyBVSsZ7Wz\nr9uLM/2Zx4mUOPSmQRC8u80et5AzCoBQMVQEmuluXUDphdT1CKg0wLysfoi7gVO9\n4o3yxxgQF32BbI6WmrM3MrZKNwKBgQDpiXM1o/mDQwRozK31k7zWAYzxdLAmdcsJ\nIKB3Fa2wlrppPbBO/TABw3tX1PBnGgbi6l9AfzOvDtem+WQ9ibaRzQuC1LXJZWuU\nllOn2pkXOSA6Wiwmz2ZxkEIbqqnezWrQ1fgUHtg/T8xnCkjZOv0XguCrWuB3+iL3\nZLeEDjnAcwKBgQCJpziHATr3BYMWsyM9ip3t8R1bAK8I6u+oJWQXj8l5EH4Cuipq\nZsWSw58CTQlPTPgApV5G2Z5WDwAcVGNNR0AFrY+/y8avKf2YHjxN50b5wOrWg2Sq\n3UvnVW3L5UEPCYKHzxzuuJ9CUh7kgzY5gbROgWHpIvinpBZMlH3z9uC9vQKBgG7h\nP74cGH9l9lX7uCx89I93NP//MxNPohK3VvizZkANkHwfOfKG66AqvAk7pNiO1u4t\n8QOiYVugZGt2xU0icXhQLkLz00vHx4hIx3dOppkMGm0aGxRiLHWG1JxmLzkFts1o\nidyjuHB25smVbHkXNMtQ7HLvNtw/+xIS077zMiBZAoGAQ0t5X6gvFkPZ1v6/lxqm\nxnLYxmk374HxYD661O1YLs1LtVLH0RnSgYLgrs2H8B0LUt+P5ghQaVBkMMP/w7zR\nKtob71gjfBC/ChTpLR22JPcjIkboElLTt8C1Zu8yUG3cE2qujRoFLA4Jmfzo2LbR\n6MayIlCRzjx98zkigypSDBA=\n-----END PRIVATE KEY-----\n';
+const googlePubSubEmail = 'couchbc@couchbc-1540415979753.iam.gserviceaccount.com';
+const googlePubSubScopes = [
+	'https://www.googleapis.com/auth/cloud-platform',
+	'https://www.googleapis.com/auth/pubsub',
+];
+
 // Requires that the topic has already been created in Google API (for example using API explorer)
-const googlePublishUrl = 'https://pubsub.googleapis.com/v1/projects/' + googleApiProject + '/topics/{topic}:publish?key=' + googleApiKey;
-const googleSubscribeUrl = 'https://pubsub.googleapis.com/v1/projects/' + googleApiProject + '/subscriptions/{subscription}:pull?key=' + googleApiKey;
-const googlePullUrl = 'https://pubsub.googleapis.com/v1/projects/' + googleApiProject + '/subscriptions/{subscription}:pull?key=' + googleApiKey;
-// TODO: Send along maxMessages; decode receivedMessages[{message{data}}]
+const googlePublishUrl = 'https://pubsub.googleapis.com/v1/projects/' + googleApiProject +
+		'/topics/{topic}:publish';
+const googleSubscribeUrl = 'https://pubsub.googleapis.com/v1/projects/' + googleApiProject +
+		'/subscriptions/{subscription}';
+const googlePullUrl = 'https://pubsub.googleapis.com/v1/projects/' + googleApiProject +
+		'/subscriptions/{subscription}:pull';
+const googleAckUrl = 'https://pubsub.googleapis.com/v1/projects/' + googleApiProject +
+		'/subscriptions/{subscription}:acknowledge';
 
 // Import the page's SCSS. Webpack will know what to do with it.
 import '../scss/app.scss';
 
 // Import libraries we need.
-import { default as $ } from 'jquery';
-import { default as Vue } from 'vue';
-import { default as Web3 } from 'web3';
-import { default as IpfsApi } from 'ipfs-api';
-import { default as bs58 } from 'bs58';
-import { default as uniqid } from 'uniqid';
+import {default as $} from 'jquery';
+import {default as Vue} from 'vue';
+import {default as Web3} from 'web3';
+import {default as IpfsApi} from 'ipfs-api';
+import {default as bs58} from 'bs58';
+import {default as uniqid} from 'uniqid';
 
 // Vue elements
 import Toasted from 'vue-toasted';
@@ -34,7 +53,7 @@ import Nl2br from 'vue-nl2br';
 import * as VueGoogleMaps from 'vue2-google-maps';
 
 // Vue slideshow
-import { VueFlux, FluxPagination, Transitions } from 'vue-flux';
+import {VueFlux, FluxPagination, Transitions} from 'vue-flux';
 
 // Import our contract artifacts and turn them into usable abstractions.
 import rent_artifacts from '../../build/contracts/Rent.json';
@@ -59,6 +78,14 @@ const ec = new EC('secp256k1');
 // Eccrypto for ECIES
 const eccrypto = require('eccrypto');
 
+// Google OAuth authorization for pub/sub
+const {GoogleToken} = require('gtoken');
+const gtoken = new GoogleToken({
+	email: googlePubSubEmail,
+	scope: googlePubSubScopes,
+	key:   googlePubSubKey,
+});
+
 // Save the rent contract
 let rentContract;
 
@@ -69,7 +96,7 @@ const defaultToastOptions = {
 	duration: 3000,
 };
 
-function showMessage (message, options) {
+function showMessage(message, options) {
 	Vue.toasted.show(message, $.extend({}, defaultToastOptions, options));
 }
 
@@ -146,7 +173,8 @@ let app = new Vue({
 		apartments:        [],
 		currentApartment:  null,
 
-		topicMessages: {},
+		receivedMessages: [],
+		topicMessages:    {},
 
 		userApartments:   [],
 		rentals:          [],
@@ -224,10 +252,10 @@ let app = new Vue({
 
 			if (addressData.country && addressData.city) {
 				app.searchApartment(
-					addressData.country,
-					addressData.city,
-					addressData.latitude,
-					addressData.longitude,
+						addressData.country,
+						addressData.city,
+						addressData.latitude,
+						addressData.longitude,
 				);
 			}
 		},
@@ -258,18 +286,19 @@ let app = new Vue({
 						for (let j = 0; j < apartment.numReviews; j++) {
 							// Add a promise that will only resolve when we have the review (with text)
 							promises.push(
-								new Promise(async (resolve, reject) => {
-									let review = await rentContract.methods.getApartmentReview(apartment.id, j).call();
-									let reviewText = await app.downloadDataFromHexHash(review.ipfsHash);
+									new Promise(async (resolve, reject) => {
+										let review = await rentContract.methods.getApartmentReview(apartment.id, j).
+												call();
+										let reviewText = await app.downloadDataFromHexHash(review.ipfsHash);
 
-									apartment.totalScore += review.score;
-									apartment.reviews.push({
-										score: review.score,
-										text:  reviewText,
-									});
+										apartment.totalScore += review.score;
+										apartment.reviews.push({
+											score: review.score,
+											text:  reviewText,
+										});
 
-									resolve();
-								}),
+										resolve();
+									}),
 							);
 						}
 					}
@@ -278,16 +307,16 @@ let app = new Vue({
 					apartment.reviews.push({
 						score: 4,
 						text:  'Donec ullamcorper nulla non metus auctor fringilla. Etiam porta sem malesuada magna mollis euismod. Vivamus sagittis lacus vel augue laoreet rutrum faucibus dolor auctor. Etiam porta sem malesuada magna mollis euismod. Curabitur blandit tempus porttitor. Cras mattis consectetur purus sit amet fermentum.\n' +
-							       '\n' +
-							       'Aenean eu leo quam. Pellentesque ornare sem lacinia quam venenatis vestibulum. Maecenas sed diam eget risus varius blandit sit amet non magna. Vivamus sagittis lacus vel augue laoreet rutrum faucibus dolor auctor. Praesent commodo cursus magna, vel scelerisque nisl consectetur et. Nullam quis risus eget urna mollis ornare vel eu leo. Aenean lacinia bibendum nulla sed consectetur. Vestibulum id ligula porta felis euismod semper.',
+								       '\n' +
+								       'Aenean eu leo quam. Pellentesque ornare sem lacinia quam venenatis vestibulum. Maecenas sed diam eget risus varius blandit sit amet non magna. Vivamus sagittis lacus vel augue laoreet rutrum faucibus dolor auctor. Praesent commodo cursus magna, vel scelerisque nisl consectetur et. Nullam quis risus eget urna mollis ornare vel eu leo. Aenean lacinia bibendum nulla sed consectetur. Vestibulum id ligula porta felis euismod semper.',
 					});
 					apartment.reviews.push({
 						score: 3,
 						text:  'Fusce dapibus, tellus ac cursus commodo, tortor mauris condimentum nibh, ut fermentum massa justo sit amet risus. Aenean eu leo quam. Pellentesque ornare sem lacinia quam venenatis vestibulum. Aenean eu leo quam. Pellentesque ornare sem lacinia quam venenatis vestibulum. Praesent commodo cursus magna, vel scelerisque nisl consectetur et. Cras mattis consectetur purus sit amet fermentum. Integer posuere erat a ante venenatis dapibus posuere velit aliquet. Duis mollis, est non commodo luctus, nisi erat porttitor ligula, eget lacinia odio sem nec elit.\n' +
-							       '\n' +
-							       'Duis mollis, est non commodo luctus, nisi erat porttitor ligula, eget lacinia odio sem nec elit. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Aenean eu leo quam. Pellentesque ornare sem lacinia quam venenatis vestibulum. Maecenas sed diam eget risus varius blandit sit amet non magna.\n' +
-							       '\n' +
-							       'Nullam quis risus eget urna mollis ornare vel eu leo. Integer posuere erat a ante venenatis dapibus posuere velit aliquet. Donec ullamcorper nulla non metus auctor fringilla. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Vestibulum id ligula porta felis euismod semper.',
+								       '\n' +
+								       'Duis mollis, est non commodo luctus, nisi erat porttitor ligula, eget lacinia odio sem nec elit. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Aenean eu leo quam. Pellentesque ornare sem lacinia quam venenatis vestibulum. Maecenas sed diam eget risus varius blandit sit amet non magna.\n' +
+								       '\n' +
+								       'Nullam quis risus eget urna mollis ornare vel eu leo. Integer posuere erat a ante venenatis dapibus posuere velit aliquet. Donec ullamcorper nulla non metus auctor fringilla. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Vestibulum id ligula porta felis euismod semper.',
 					});
 					apartment.reviews.push({
 						score: 3,
@@ -296,14 +325,14 @@ let app = new Vue({
 					apartment.reviews.push({
 						score: 5,
 						text:  'Nulla vitae elit libero, a pharetra augue. Aenean lacinia bibendum nulla sed consectetur. Donec id elit non mi porta gravida at eget metus. Duis mollis, est non commodo luctus, nisi erat porttitor ligula, eget lacinia odio sem nec elit. Donec id elit non mi porta gravida at eget metus.\n' +
-							       '\n' +
-							       'Duis mollis, est non commodo luctus, nisi erat porttitor ligula, eget lacinia odio sem nec elit. Donec sed odio dui. Donec sed odio dui. Integer posuere erat a ante venenatis dapibus posuere velit aliquet. Aenean eu leo quam. Pellentesque ornare sem lacinia quam venenatis vestibulum.',
+								       '\n' +
+								       'Duis mollis, est non commodo luctus, nisi erat porttitor ligula, eget lacinia odio sem nec elit. Donec sed odio dui. Donec sed odio dui. Integer posuere erat a ante venenatis dapibus posuere velit aliquet. Aenean eu leo quam. Pellentesque ornare sem lacinia quam venenatis vestibulum.',
 					});
 					apartment.totalScore = 15;
 
 					let details = await app.downloadDataFromHexHash(apartment.ipfsHash);
 					apartment.position = await app.getMapsAddressPosition(
-						details.street + ' ' + details.number + ', ' + details.city + ', ' + details.country,
+							details.street + ' ' + details.number + ', ' + details.city + ', ' + details.country,
 					);
 
 					// Add the apartment details to the apartment
@@ -313,8 +342,8 @@ let app = new Vue({
 					await Promise.all(promises);
 
 					apartment.averageScore = (apartment.reviews.length > 0)
-						? apartment.totalScore / apartment.reviews.length
-						: 0;
+							? apartment.totalScore / apartment.reviews.length
+							: 0;
 					app.apartments.push(apartment);
 				});
 			}
@@ -452,24 +481,24 @@ let app = new Vue({
 			});
 
 			rentContract.once('Registered', {filter: {userAddress: app.account}},
-				(error, event) => {
-					if (error) {
-						showMessage('Could not process registration');
-						console.error(error);
-						return;
-					}
+					(error, event) => {
+						if (error) {
+							showMessage('Could not process registration');
+							console.error(error);
+							return;
+						}
 
-					showMessage('Registered successfully');
+						showMessage('Registered successfully');
 
-					app.registered = true;
+						app.registered = true;
 
-					// Change the page if we're currently on the registration page
-					if (app.page === 'register') {
-						app.page = 'apartments';
-					}
+						// Change the page if we're currently on the registration page
+						if (app.page === 'register') {
+							app.page = 'apartments';
+						}
 
-					app.refreshBalance();
-				});
+						app.refreshBalance();
+					});
 		},
 
 		/**
@@ -716,26 +745,26 @@ let app = new Vue({
 			});
 
 			rentContract.once('ApartmentAdded',
-				{filter: {owner: app.newApartmentData.account.address}}, (error, event) => {
-					if (error) {
-						showMessage('Could not add apartment');
-						console.error(error);
-						return;
-					}
+					{filter: {owner: app.newApartmentData.account.address}}, (error, event) => {
+						if (error) {
+							showMessage('Could not add apartment');
+							console.error(error);
+							return;
+						}
 
-					showMessage('Apartment added');
+						showMessage('Apartment added');
 
-					// Show the apartment listing for the city
-					app.searchApartment(app.newApartmentData.country, app.newApartmentData.city,
-						app.newApartmentData.latitude, app.newApartmentData.longitude);
+						// Show the apartment listing for the city
+						app.searchApartment(app.newApartmentData.country, app.newApartmentData.city,
+								app.newApartmentData.latitude, app.newApartmentData.longitude);
 
-					// Clear the form
-					let account = app.newApartmentData.account;
-					Object.assign(app.$data.newApartmentData, app.$options.data.call(app).newApartmentData);
-					document.getElementById('apartment-address').value = '';
-					document.getElementById('add-apartment-primary-image').value = '';
-					app.newApartmentData.account = account;
-				});
+						// Clear the form
+						let account = app.newApartmentData.account;
+						Object.assign(app.$data.newApartmentData, app.$options.data.call(app).newApartmentData);
+						document.getElementById('apartment-address').value = '';
+						document.getElementById('add-apartment-primary-image').value = '';
+						app.newApartmentData.account = account;
+					});
 		},
 
 		/**
@@ -838,14 +867,14 @@ let app = new Vue({
 		changeApartmentFilter: (apartmentsFrom, apartmentsTill) => {
 			// Only apply filter if we have dates
 			if (typeof(app.apartmentsFrom) !== 'object' ||
-				typeof(app.apartmentsTill) !== 'object') {
+					typeof(app.apartmentsTill) !== 'object') {
 				app.loadApartments();
 				return;
 			}
 
 			app.loadApartments(
-				app.getUnixDay(app.apartmentsFrom),
-				app.getUnixDay(app.apartmentsTill),
+					app.getUnixDay(app.apartmentsFrom),
+					app.getUnixDay(app.apartmentsTill),
 			);
 		},
 		loadApartments:        (fromDay, tillDay) => {
@@ -1076,6 +1105,7 @@ let app = new Vue({
 		},
 
 		requestRental: apartment => {
+			// TODO for rental requests: store "pending" request in local storage; process as soon as interaction key received
 
 			return;
 
@@ -1121,7 +1151,7 @@ let app = new Vue({
 
 				if (accounts.length === 0) {
 					showMessage(
-						'Couldn\'t get any accounts! Make sure your Ethereum client is configured correctly.');
+							'Couldn\'t get any accounts! Make sure your Ethereum client is configured correctly.');
 					return;
 				}
 
@@ -1137,7 +1167,11 @@ let app = new Vue({
 					container: 'body',
 				});
 
-				app.requestRental('');
+				// Test subscriptions
+				//app.subscribeToTopic('request-interaction-key');
+				//app.publishMessage('abc', 'request-interaction-key');
+				//app.publishMessage('def', 'request-interaction-key');
+				//app.publishMessage('ghi', 'request-interaction-key');
 			});
 		},
 
@@ -1272,7 +1306,7 @@ let app = new Vue({
 				}
 
 				showMessage('Deposit claimable for rental ' + event.returnValues.rentalId + ' (' +
-					event.returnValues.deductedAmount + ' credits have been deducted)');
+						event.returnValues.deductedAmount + ' credits have been deducted)');
 
 				app.deductAmount = 0;
 
@@ -1357,19 +1391,33 @@ let app = new Vue({
 			let url = googlePublishUrl.replace('{topic}', topic);
 
 			// Check if we need to encrypt the message
-			if (publicKey) {
+			if (publicKeyBuffer) {
 				message = app.encryptString(message, publicKeyBuffer);
 			}
 
+			// Create the message
 			let data = {
 				messages: [
 					{
-						data: btoa(message)
-					}
-				]
+						data: btoa(message),
+					},
+				],
 			};
 
-			return $.post(url, data);
+			// Get an access token
+			let accessToken = await gtoken.getToken();
+
+			// Send the request as ajax
+			return $.ajax({
+				url:         url,
+				data:        JSON.stringify(data),
+				dataType:    'json',
+				contentType: 'application/json',
+				method:      'POST',
+				headers:     {
+					'Authorization': 'Bearer ' + accessToken,
+				},
+			});
 		},
 
 		/**
@@ -1378,38 +1426,72 @@ let app = new Vue({
 		 * @param ecAccountAddress
 		 * @returns {Promise<void>}
 		 */
-		subscribeToTopic:        async (topic, ecAccountAddress) => {
+		subscribeToTopic: async (topic, ecAccountAddress) => {
 			// Check if we already have a subscription id for the topic; if so, we can start listening
 			let subscription = window.localStorage.getItem('topic.' + topic + '.subscription');
 			if (subscription) {
 				app.listenToSubscription(JSON.parse(subscription));
+				return;
 			}
 
+			// Create a new subscription
 			subscription = {
 				id:               app.getRandomSubscriptionId(),
 				topic:            topic,
-				ecAccountAddress: ecAccountAddress || null
-			};
-			let url = googleSubscribeUrl.replace('{subscription}',);
-			let data = {
-				topic: 'projects/' + googleApiProject + '/topics/' + topic
+				ecAccountAddress: ecAccountAddress || null,
 			};
 
-			await $.put(url, data);
+			// Create the request
+			let url = googleSubscribeUrl.replace('{subscription}', subscription.id);
+			let data = {
+				topic: 'projects/' + googleApiProject + '/topics/' + topic,
+			};
+
+			// Get an access token
+			let accessToken = await gtoken.getToken();
+
+			// Send the request
+			await $.ajax({
+				url:         url,
+				data:        JSON.stringify(data),
+				dataType:    'json',
+				contentType: 'application/json',
+				method:      'PUT',
+				headers:     {
+					'Authorization': 'Bearer ' + accessToken,
+				},
+			});
 
 			// Store the subscription in localStorage
 			window.localStorage.setItem('topic.' + topic + '.subscription', JSON.stringify(subscription));
 
+			// Listen to the subscription
 			app.listenToSubscription(subscription);
 		},
+
+		/**
+		 * Get a random subscription id to be used with google pub/sub subscriptions
+		 *
+		 * @returns {string}
+		 */
 		getRandomSubscriptionId: () => {
-			return uniqid('sub-');
+			return 'sub-' + web3.utils.sha3(uniqid() + salt + uniqid() + Math.round(Math.random() * Math.pow(10, 20)));
 		},
 
+		/**
+		 * Listen to a subscription. Creates a period check to fetch messages from the subscription.
+		 *
+		 * @param subscription
+		 */
 		listenToSubscription: subscription => {
 			// If we already listen to the subscription, we're done
 			if (subscriptionIntervals['interval-' + subscription.id]) {
 				return;
+			}
+
+			// Ensure we have an array for topic messages
+			if (typeof(app.topicMessages[subscription.topic]) === 'undefined') {
+				app.topicMessages[subscription.topic] = [];
 			}
 
 			// Periodically pull from the subscription
@@ -1418,22 +1500,73 @@ let app = new Vue({
 			}, pullInterval);
 		},
 
+		/**
+		 * Pull messages from the specified subscription. Saves the retrieved messages in app.subscriptionMessages.
+		 *
+		 * @param subscription
+		 * @return {Promise<void>}
+		 */
 		pullFromSubscription: async (subscription) => {
 			let url = googlePullUrl.replace('{subscription}', subscription.id);
 			let data = {
 				maxMessages:       10,
-				returnImmediately: true
+				returnImmediately: true,
 			};
 
-			let result = await $.post(url, data);
+			// Get an access token
+			let accessToken = await gtoken.getToken();
+
+			// Send the request
+			let result = await $.ajax({
+				url:         url,
+				data:        JSON.stringify(data),
+				dataType:    'json',
+				contentType: 'application/json',
+				method:      'POST',
+				headers:     {
+					'Authorization': 'Bearer ' + accessToken,
+				},
+			});
 
 			// If we don't have any messages, we're done
 			if (typeof(result.receivedMessages) === 'undefined') {
 				return;
 			}
 
-			// TODO: Ackknowledge the received messages; save them
-			// TODO for rental requests: store "pending" request in local storage; process as soon as interaction key received
+			// Ensure we have an array for topic messages
+			if (typeof(app.topicMessages[subscription.topic]) === 'undefined') {
+				app.topicMessages[subscription.topic] = [];
+			}
+
+			// Construct a new request
+			url = googleAckUrl.replace('{subscription}', subscription.id);
+			data = {
+				ackIds: [],
+			};
+
+			// Add the messages to the topic messages
+			for (let message of result.receivedMessages) {
+				// Add the message to the topic messages if we don't have it yet
+				if (app.receivedMessages.indexOf(message.message.messageId) === -1) {
+					app.topicMessages[subscription.topic].push(atob(message.message.data));
+					app.receivedMessages.push(message.message.messageId);
+				}
+
+				// Add message to messages to ack
+				data.ackIds.push(message.ackId);
+			}
+
+			// Send request to acknowledge receipt
+			$.ajax({
+				url:         url,
+				data:        JSON.stringify(data),
+				dataType:    'json',
+				contentType: 'application/json',
+				method:      'POST',
+				headers:     {
+					'Authorization': 'Bearer ' + accessToken,
+				},
+			});
 		},
 
 		// Cryptography
@@ -1762,7 +1895,7 @@ let app = new Vue({
 		'datepicker':      Datepicker,
 		'vue-flux':        VueFlux,
 		'flux-pagination': FluxPagination,
-		'nl2br':           Nl2br
+		'nl2br':           Nl2br,
 	},
 });
 
@@ -1773,8 +1906,8 @@ window.addEventListener('load', () => {
 		window.web3 = new Web3(web3.currentProvider);
 	} else {
 		console.warn(
-			'No web3 detected. Falling back to ' + websocketAddress +
-			'. You should remove this fallback when you deploy live, as it\'s inherently insecure. Consider switching to Metamask for development. More info here: http://truffleframework.com/tutorials/truffle-and-metamask');
+				'No web3 detected. Falling back to ' + websocketAddress +
+				'. You should remove this fallback when you deploy live, as it\'s inherently insecure. Consider switching to Metamask for development. More info here: http://truffleframework.com/tutorials/truffle-and-metamask');
 		// fallback - use your fallback strategy (local node / hosted node + in-dapp id mgmt / fail)
 		window.web3 = new Web3(websocketAddress);
 	}

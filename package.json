@@ -52,6 +52,7 @@
 		"elliptic": "^6.4.1",
 		"foundation": "^4.2.1",
 		"foundation-sites": "^6.5.0",
+		"gtoken": "github:dennis-westphal/js-gtoken",
 		"ipfs-api": "^25.0.0",
 		"jquery": "^3.3.1",
 		"lerna": "^2.11.0",
