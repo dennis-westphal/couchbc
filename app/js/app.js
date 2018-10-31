@@ -176,13 +176,19 @@ let app = new Vue({
 		receivedMessages: [],
 		topicMessages:    {},
 
+		requestRentalFrom:   '',
+		requestRentalTill:   '',
+		requestRentalTenant: {
+			name:  '',
+			phone: '',
+			email: '',
+		},
+
 		userApartments:   [],
 		rentals:          [],
 		currentRental:    null,
 		deductAmount:     0,
 		apartmentRentals: [],
-		apartmentsFrom:   '',
-		apartmentsTill:   '',
 		disabledDates:    {
 			to: new Date(),
 		},
@@ -729,11 +735,11 @@ let app = new Vue({
 			// Upload the details
 			let detailsAddress = await app.uploadString(JSON.stringify(details));
 			let cityHash = app.getCountryCityHash(app.newApartmentData.country, app.newApartmentData.city);
-			let ownerPublicKey = await app.getOrCreateOwnerPublicKey(account);
+			let ownerEcAccount = await app.getOrCreateOwnerEcAccount(account);
 
 			let parameters = [
-				ownerPublicKey.x,
-				ownerPublicKey.y,
+				ownerEcAccount.public.x,
+				ownerEcAccount.public.y,
 				app.ipfsAddrToHash(detailsAddress),
 				cityHash,
 			];
@@ -743,6 +749,9 @@ let app = new Vue({
 			method.estimateGas().then(gasAmount => {
 				method.send({from: account.address, gas: gasAmount});
 			});
+
+			// Add a topic subscription to receive interaction key requests
+			app.addTopicSubscription('request-interaction-key', ownerEcAccount.address);
 
 			rentContract.once('ApartmentAdded',
 					{filter: {owner: app.newApartmentData.account.address}}, (error, event) => {
@@ -1157,6 +1166,8 @@ let app = new Vue({
 
 				app.determineAccounts(accounts);
 
+				app.registerSubscriptions();
+
 				app.registerEvents();
 
 				$(document).foundation();
@@ -1197,6 +1208,29 @@ let app = new Vue({
 			}
 		},
 
+		/**
+		 * Register subscription listeners
+		 */
+		registerSubscriptions: () => {
+			// Check if we have subscriptions
+			let topicSubscriptions = window.localStorage.getItem('topicSubscriptions');
+
+			// If we don't have subscriptions, we're done
+			if (topicSubscriptions === null) {
+				return;
+			}
+
+			// Parse topic subscriptions (should be hashmap topic => ecAccountAddress|null)
+			topicSubscriptions = JSON.parse(topicSubscriptions);
+
+			for (let topic in topicSubscriptions) {
+				app.subscribeToTopic(topic, topicSubscriptions[topic]);
+			}
+		},
+
+		/**
+		 * Registere event listeners
+		 */
 		registerEvents: () => {
 			rentContract.events.Test({}, (error, event) => {
 				console.log(event.returnValues);
@@ -1421,6 +1455,31 @@ let app = new Vue({
 		},
 
 		/**
+		 * Add a topic subscription that will be restored when the page is reloaded, and subscribe to the topic
+		 *
+		 * @param topic
+		 * @param ecAccountAddress
+		 * @return {Promise<void>}
+		 */
+		addTopicSubscription: async (topic, ecAccountAddress) => {
+			// Get the existing subscription registrations
+			let topicSubscriptions = window.localStorage.getItem('topicSubscriptions');
+
+			// Create or parse the hashmap
+			topicSubscriptions = (topicSubscriptions === null)
+					? {}
+					: JSON.parse(topicSubscriptions);
+
+			// Add the topic subscription
+			topicSubscriptions[topic] = ecAccountAddress || null;
+
+			// Store the topic subscriptions
+			window.localStorage.setItem('topicSubscriptions', JSON.stringify(topicSubscriptions));
+
+			app.subscribeToTopic(topic, ecAccountAddress);
+		},
+
+		/**
 		 * Subscribe to a topic. If ecAccountAddress is given, tries to decrypt the message using the ec account stored at the specified address.
 		 * @param topic
 		 * @param ecAccountAddress
@@ -1606,21 +1665,33 @@ let app = new Vue({
 		},
 
 		/**
-		 * Get or create a public key to be used for an owner account
-		 * Returns a public key in the format {x: '0x000...00', y: '0x000..00', buffer: Buffer<Uint8Array>}
+		 * Get or create an EC account to be used for an owner's bc address
+		 * Returns an object with:
+		 * {
+		 *   private: {
+		 *       hex:       "0x0000...",     (0x + 64 hex encoded bytes) = 130 chars
+		 *       buffer:    Uint8Array(129)  Buffer to be used with eccrypto
+		 *   }
+		 *   public: {
+		 *       x:         "0x0000...",     (0x + 32x hex encoded bytes = 66 chars)
+		 *       y:         "0x0000...",     (0x + 32y bytes hex = 66 chars)
+		 *       buffer:    Uint8Array(65)   Buffer to be used with eccrypto
+		 *   }
+		 *   address:     "0x0000..."        (0x + 32 bytes hex address as would be used in blockchain account and can be used for signature validation)
+		 * }
 		 */
-		getOrCreateOwnerPublicKey: async account => {
+		getOrCreateOwnerEcAccount: async bcAccount => {
 			// Try to catch the ec account associated with the address
-			let ecAccount = await app.getEcAccountForBcAccount(account);
+			let ecAccount = await app.getEcAccountForBcAccount(bcAccount.address);
 
 			// Check if we found an EC account; if we did, return the public key
 			if (ecAccount != null) {
-				return ecAccount.public;
+				return ecAccount;
 			}
 
 			// Check if the account is already registered at the blockchain as owner account;
 			// in this case we should already have a public key for it => show an error
-			if (account.type === 'owner') {
+			if (bcAccount.type === 'owner') {
 				showMessage('Could not get public key for existing owner account');
 
 				return null;
@@ -1630,10 +1701,10 @@ let app = new Vue({
 			ecAccount = await app.generateEcAccount();
 
 			// Store the EC account address in local storage to associate it with the current bc account
-			window.localStorage.setItem('ecAccounts.' + account, ecAccount.address);
+			window.localStorage.setItem('ecAccounts.' + bcAccount.address, ecAccount.address);
 
-			// Return the public key
-			return ecAccount.public;
+			// Return the account
+			return ecAccount;
 		},
 
 		/**

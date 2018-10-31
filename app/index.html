@@ -57,6 +57,7 @@
 			</div>
 		</header>
 	</div>
+
 	<div class="page apartments" v-if="page == 'apartments'">
 		<div class="grid-x grid-padding-x">
 			<div id="apartments" class="cell medium-7">
@@ -77,13 +78,12 @@
 							</span>
 						</p>
 						<p>
-							<span v-if="apartmentsFrom && apartmentsTill">{{getTotalPrice(apartment)}}
+							<span v-if="requestRentalFrom && requestRentalTill">{{getTotalPrice(apartment)}}
 								per night</span>
-							<span v-if="!(apartmentsFrom && apartmentsTill)">{{apartment.pricePerNight}}
+							<span v-if="!(requestRentalFrom && requestRentalTill)">{{apartment.pricePerNight}}
 								per night</span>
 							/ {{apartment.deposit}} deposit</p>
 					</div>
-					<!--<a class="waves-effect waves-light btn" v-if="apartmentsFrom && apartmentsTill && registered" v-on:click.stop="rent(apartment)">book</a>-->
 				</div>
 			</div>
 			<div class="cell medium-5">
@@ -105,6 +105,7 @@
 			</div>
 		</div>
 	</div>
+
 	<div class="page apartment" v-if="page == 'apartment'">
 		<div class="grid-container">
 			<header>
@@ -115,7 +116,26 @@
 						ref="slider">
 				</vue-flux>
 				<div class="text">
-					Request form
+					<fieldset>
+						<datepicker v-model="requestRentalFrom" :disabled-dates="disabledDates" :monday-first="true"></datepicker>
+						<datepicker v-model="requestRentalTill" :disabled-dates="disabledDates" :monday-first="true"></datepicker>
+					</fieldset>
+
+					<fieldset>
+						<div class="form-control">
+							<input v-model="requestRentalTenant.name" placeholder="Your name" type="text">
+						</div>
+						<div class="form-control">
+							<input v-model="requestRentalTenant.phone" placeholder="Telephone number" type="tel">
+						</div>
+						<div class="form-control">
+							<input v-model="requestRentalTenant.email" placeholder="Email address" type="email">
+						</div>
+						<p>Your personal data will only be visible to the apartment owner and a mediator in case of a
+							dispute</p>
+					</fieldset>
+
+					<a class="button">Request rental</a>
 				</div>
 			</header>
 			<h1>{{currentApartment.title}}</h1>
@@ -123,33 +143,6 @@
 		</div>
 	</div>
 
-	<!--
-		<table>
-			<thead>
-			<tr>
-				<th></th>
-				<th>Title</th>
-				<th>Country</th>
-				<th>City</th>
-				<th>Price per night</th>
-				<th>Deposit</th>
-				<th></th>
-			</tr>
-
-			<tr v-for="apartment in apartments">
-				<td><img :src="ipfsShowUrl + apartment.image"></td>
-				<td>{{ apartment.title }}</td>
-				<td>{{ apartment.address.country }}</td>
-				<td>{{ apartment.address.city }}</td>
-				<td>{{ apartment.pricePerNight }}</td>
-				<td>{{ apartment.deposit }}</td>
-				<td>
-
-				</td>
-			</tr>
-			</thead>
-		</table>
-		-->
 	<div class="page add-apartment" v-if="page == 'add-apartment'">
 		<form>
 			<div class="grid-container">
@@ -228,161 +221,6 @@
 
 				<a class="button" v-on:click.stop="addApartment">Add apartment</a>
 			</div>
-		</form>
-	</div>
-	<div class="container" v-if="page == 'add-apartment-image'">
-		<div class="input-field">
-			<label for="add-apartment-image">Image</label>
-			<input id="add-apartment-image" type="file" name="image">
-		</div>
-	</div>
-	<div class="container" v-if="page == 'user-apartments'">
-		<table>
-			<thead>
-			<tr>
-				<th>Title</th>
-				<th>Country</th>
-				<th>City</th>
-				<th>Price per night</th>
-				<th>Deposit</th>
-				<th>Rentals</th>
-				<th></th>
-			</tr>
-
-			<tr v-for="apartment in userApartments">
-				<td>{{ apartment.title }}</td>
-				<td>{{ apartment.country }}</td>
-				<td>{{ apartment.city }}</td>
-				<td>{{ apartment.pricePerNight }}</td>
-				<td>{{ apartment.deposit }}</td>
-				<td>
-					<a href="#" v-on:click.stop="showApartmentRentals(apartment)">{{ apartment.rentals }}</a>
-				</td>
-				<td>
-					<a class="waves-effect waves-light btn" v-if="apartment.disabled"
-					   v-on:click.stop="enableApartment(apartment)">Enable</a>
-					<a class="waves-effect waves-light btn" v-if="!apartment.disabled"
-					   v-on:click.stop="disableApartment(apartment)">Disable</a>
-				</td>
-			</tr>
-			</thead>
-		</table>
-	</div>
-	<div class="container" v-if="page == 'rentals'">
-		<table>
-			<thead>
-			<tr>
-				<th>Title</th>
-				<th>Country</th>
-				<th>City</th>
-				<th>From</th>
-				<th>Till</th>
-				<th>Deposit</th>
-				<th></th>
-			</tr>
-
-			<tr v-for="rental in rentals">
-				<td>{{ rental.apartment.title }}</td>
-				<td>{{ rental.apartment.country }}</td>
-				<td>{{ rental.apartment.city }}</td>
-				<td>{{ rental.from | formatDate }}</td>
-				<td>{{ rental.till | formatDate }}</td>
-				<td>{{ rental.deposit }}</td>
-				<td>
-					<a class="waves-effect waves-light btn" v-if="rental.depositClaimable"
-					   v-on:click.stop="claimDeposit(rental)">claim
-						deposit</a>
-				</td>
-			</tr>
-			</thead>
-		</table>
-	</div>
-
-	<div class="container" v-if="page == 'apartment-rentals'">
-		<h3>Rentals for {{currentApartment.title}}</h3>
-		<table>
-			<thead>
-			<tr>
-				<th>From</th>
-				<th>Till</th>
-				<th>Deposit</th>
-				<th></th>
-			</tr>
-
-			<tr v-for="rental in apartmentRentals">
-				<td>{{ rental.from | formatDate }}</td>
-				<td>{{ rental.till | formatDate }}</td>
-				<td>{{ rental.deposit }}</td>
-				<td>
-					<a class="waves-effect waves-light btn" v-if="!rental.depositClaimable"
-					   v-on:click.stop="refundDeposit(rental)">refund
-						deposit</a>
-				</td>
-			</tr>
-			</thead>
-		</table>
-	</div>
-
-	<div class="container" v-if="page == 'refund-deposit'">
-		<h3>Buy credits</h3>
-		<p>Use ether to buy credits</p>
-		<form>
-			<div class="input-field">
-				<label for="deduct">Deduct from deposit (max. {{ currentRental.deposit }})</label>
-				<input id="deduct" type="number" min="0" :max="currentRental.deposit" step="1" name="deduct"
-				       v-model="deductAmount">
-			</div>
-			<p>=> Refund {{ currentRental.deposit - deductAmount}} credits</p>
-			<a class="waves-effect waves-light btn" v-on:click.stop="doRefundDeposit()">Refund deposit</a>
-		</form>
-	</div>
-	<div class="container" v-if="page == 'register'">
-		<form>
-			<div class="input-field">
-				<label for="register-name">Name</label>
-				<input id="register-name" type="text" name="name" v-model="newUserData.name">
-			</div>
-			<div class="input-field">
-				<label for="register-street">Street</label>
-				<input id="register-street" type="text" name="street" v-model="newUserData.street">
-			</div>
-			<div class="input-field">
-				<label for="register-zip">Zip code</label>
-				<input id="register-zip" type="text" name="zip" v-model="newUserData.zip">
-			</div>
-			<div class="input-field">
-				<label for="register-city">City</label>
-				<input id="register-city" type="text" name="city" v-model="newUserData.city">
-			</div>
-			<div class="input-field">
-				<label for="register-country">Country</label>
-				<input id="register-country" type="text" name="country" v-model="newUserData.country">
-			</div>
-			<a class="waves-effect waves-light btn" v-on:click.stop="register">Register</a>
-		</form>
-	</div>
-	<div class="container" v-if="page == 'transfer'">
-		<h3>Buy credits</h3>
-		<p>Use ether to buy credits</p>
-		<form>
-			<div class="input-field">
-				<label for="transfer-eth">Eth</label>
-				<input id="transfer-eth" type="number" min="0.001" step="0.001" name="eth" v-model="transferEth">
-			</div>
-			<p>=> {{transferCredits}} credits</p>
-			<a class="waves-effect waves-light btn" v-on:click.stop="doTransfer">Transfer</a>
-		</form>
-	</div>
-	<div class="container" v-if="page == 'payout'">
-		<h3>Payout</h3>
-		<p>Convert credits and transfer to account address</p>
-		<form>
-			<div class="input-field">
-				<label for="payout-credits">Credits</label>
-				<input id="payout-credits" type="number" min="1" :max="balance" name="credits" v-model="payoutCredits">
-			</div>
-			<p>=> {{payoutEth}} eth</p>
-			<a class="waves-effect waves-light btn" v-on:click.stop="doPayout">Payout</a>
 		</form>
 	</div>
 </div>
