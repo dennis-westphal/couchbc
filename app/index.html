@@ -265,6 +265,27 @@
 			</div>
 		</form>
 	</div>
+
+	<div id="overlay" :class="{shown: loading.shown}"></div>
+	<div id="loading" :class="{shown: loading.shown}">
+		<h4>
+			<div class="lds-ring">
+				<div></div>
+				<div></div>
+				<div></div>
+				<div></div>
+			</div>
+			{{loading.headline}}
+		</h4>
+
+		<p v-for="element in loading.elements">
+			<span class="text">{{element.text}}</span>
+			<span class="dots"></span>
+			<span v-if="typeof(element.status) == 'undefined' || element.status == 'active'" class="status active">IN PROGRESS</span>
+			<span v-if="element.status == 'success'" class="status success">SUCCESS</span>
+			<span v-if="element.status == 'error'" class="status error">ERROR</span>
+		</p>
+	</div>
 </div>
 
 <script src="/bundles/app.js"></script>

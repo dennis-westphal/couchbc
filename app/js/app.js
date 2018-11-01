@@ -118,6 +118,7 @@ Vue.use(VueGoogleMaps, {
 	load:              {
 		key:       googleApiKey,
 		libraries: 'places',
+		language:  'en'
 	},
 	installComponents: true,
 });
@@ -138,6 +139,12 @@ let app = new Vue({
 		accounts: [],
 
 		page: 'start',
+
+		loading: {
+			shown:    false,
+			headline: '',
+			elements: {}
+		},
 
 		newApartmentData: {
 			account:       null,
@@ -436,19 +443,28 @@ let app = new Vue({
 		 * Request a new rental. Will request an interaction key from the owner first and add the rental to the pending rentals.
 		 */
 		requestRental: async () => {
+			// Show the load message. Wait for the response, as following steps might freeze the browser for a second.
+			await app.showLoading('Requesting rental');
+
 			// Get or create the tenant ec account
+			app.loading.elements.account = {text: 'Initializing elliptic cryptography account'};
 			let ecAccount = await app.getOrCreateEcAccount(app.rentalRequest.account);
+			app.loading.elements.account.status = 'success';
 
 			// Subscribe to the answer topic
+			app.loading.elements.subscribe = {text: 'Subscribing to interaction key responses'};
 			app.subscribeToTopic(
 					'issue-interaction-key',
 
 					// Decrypt response with own EC account => private key
 					ecAccount.address
-			);
+			).then(() => {
+				app.loading.elements.subscribe.status = 'success';
+			});
 
 			// Send a new interaction key request
-			app.publishMessage(
+			app.loading.elements.publish = {text: 'Sending encrypted interaction key request'};
+			await app.publishMessage(
 					// Send the tenants public key
 					JSON.stringify({
 						x: ecAccount.public.x,
@@ -461,8 +477,10 @@ let app = new Vue({
 					// Encrypt with owner's interaction key
 					app.getUint8ArrayBufferFromXY(app.rentalRequest.apartment.ownerPublicKey_x, app.rentalRequest.apartment.ownerPublicKey_y)
 			);
+			app.loading.elements.publish.status = 'success';
 
 			// Add the request to the pending requests
+			app.loading.elements.save = {text: 'Saving pending rental requests'};
 			app.pendingRentalRequests.push({
 				bcAccountAddress:  app.rentalRequest.account.address,
 				fromDay:           app.rentalRequest.fromDay,
@@ -480,7 +498,10 @@ let app = new Vue({
 			window.localStorage.setItem('userEmail', app.rentalRequest.contact.email);
 
 			// Save the requests in local storage
-			//window.localStorage.setItem('pendingRentalRequests', JSON.stringify(app.pendingRentalRequests));
+			window.localStorage.setItem('pendingRentalRequests', JSON.stringify(app.pendingRentalRequests));
+			app.loading.elements.save.status = 'success';
+
+			app.hideLoading();
 		},
 
 		issueInteractionToken: tenantPublicKey => {
@@ -691,35 +712,15 @@ let app = new Vue({
 		},
 
 		addApartment: async clickEvent => {
-			/*
-			Test code for generating private / public keys
+			// Display the loading message
+			app.showLoading('Adding apartment');
 
-			let keyPairA = ec.genKeyPair();
-			let keyPairB = ec.genKeyPair();
-
-			var privateKeyA = keyPairA.getPrivate().toBuffer(); // Uint8Array(32)
-			var publicKeyA = app.getUint8ArrayBufferFromPoint(keyPairA.getPublic());  // Uint8Array(32)
-			var privateKeyB = keyPairB.getPrivate().toBuffer();  // Uint8Array(32)
-			var publicKeyB = app.getUint8ArrayBufferFromPoint(keyPairB.getPublic());  // Uint8Array(32)
-
-			// Encrypting the message for B.
-			eccrypto.encrypt(publicKeyB, Buffer('msg to b')).then(function(encrypted) {
-				// B decrypting the message.
-				eccrypto.decrypt(privateKeyB, encrypted).then(function(plaintext) {
-					console.log('Message to part B:', plaintext.toString());
-				});
-			});
-
-			// Encrypting the message for A.
-			eccrypto.encrypt(publicKeyA, Buffer('msg to a')).then(function(encrypted) {
-				// A decrypting the message.
-				eccrypto.decrypt(privateKeyA, encrypted).then(function(plaintext) {
-					console.log('Message to part A:', plaintext.toString());
-				});
-			});
-			*/
-
+			// Determine the owner Ec account first as this might require further interaction (e.g. entering a password)
 			let account = app.newApartmentData.account;
+
+			app.loading.elements.account = {text: 'Initializing elliptic cryptography account'};
+			let ownerEcAccount = await app.getOrCreateEcAccount(account);
+			app.loading.elements.account.status = 'success';
 
 			let details = {
 				title:         app.newApartmentData.title,
@@ -734,6 +735,8 @@ let app = new Vue({
 				primaryImage:  '',
 				images:        [],
 			};
+
+			app.loading.elements.images = {text: 'Uploading images to IPFS'};
 
 			// Upload images
 			let promises = [];
@@ -767,11 +770,14 @@ let app = new Vue({
 
 			// Only proceed when all images have been uploaded
 			await Promise.all(promises);
+			app.loading.elements.images.status = 'success';
 
 			// Upload the details
+			app.loading.elements.details = {text: 'Uploading apartment details to IPFS'};
 			let detailsAddress = await app.uploadString(JSON.stringify(details));
+			app.loading.elements.details.status = 'success';
+
 			let cityHash = app.getCountryCityHash(app.newApartmentData.country, app.newApartmentData.city);
-			let ownerEcAccount = await app.getOrCreateEcAccount(account);
 
 			let parameters = [
 				ownerEcAccount.public.x,
@@ -780,14 +786,21 @@ let app = new Vue({
 				cityHash,
 			];
 
+			// Add a topic subscription to receive interaction key requests
+			app.loading.elements.subscribe = {text: 'Subscribe to interaction key requests'};
+			app.addTopicSubscription('request-interaction-key', ownerEcAccount.address).then(() => {
+				app.loading.elements.subscribe.status = 'success';
+			});
+
+			app.loading.elements.blockchain = {text: 'Sending apartment transaction to blockchain'};
 			// Estimate gas and call the addApartment function
 			let method = rentContract.methods.addApartment(...parameters);
 			method.estimateGas().then(gasAmount => {
-				method.send({from: account.address, gas: gasAmount});
+				method.send({from: account.address, gas: gasAmount}).on('transactionHash', () => {
+					app.loading.elements.blockchain.status = 'success';
+					app.hideLoading();
+				});
 			});
-
-			// Add a topic subscription to receive interaction key requests
-			app.addTopicSubscription('request-interaction-key', ownerEcAccount.address);
 
 			rentContract.once('ApartmentAdded',
 					{filter: {owner: app.newApartmentData.account.address}}, (error, event) => {
@@ -917,7 +930,18 @@ let app = new Vue({
 		 * @param bcAccounts
 		 */
 		determineAccounts: bcAccounts => {
+			let i = 0;
+			let isChrome = /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor);
+
 			for (let bcAccount of bcAccounts) {
+				// Only show half of the accounts to chrome and the other half to other browsers (for test purposes)
+				if (isChrome && i++ % 2 === 0) {
+					continue;
+				}
+				else if (!isChrome && i++ % 2 === 1) {
+					continue;
+				}
+
 				rentContract.methods.getAddressType().call({from: bcAccount}, (error, type) => {
 					let account = {
 						'address': bcAccount,
@@ -1696,12 +1720,13 @@ let app = new Vue({
 					mac:            Buffer(app.hexToUint8Array(arr[3])),
 				};
 
-				// Try to decrypt the string
+				// Try to decrypt the message
 				let result = await eccrypto.decrypt(privateKeyBuffer, message);
+				let resultString = result.toString();
 
-				console.debug('Decryption successful: ', result);
+				console.debug('Decryption successful: ', resultString);
 
-				return result.toString();
+				return resultString;
 			}
 			catch (e) {
 				console.debug('Decryption failed; returning null');
@@ -1790,6 +1815,44 @@ let app = new Vue({
 		hexHashToIpfsAddr: hexHash => {
 			return bs58.encode(Buffer.from('1220' + hexHash.substr(2), 'hex'));
 		},
+
+		// Loading / overlay
+
+		/**
+		 * Show a loading message. Returns a promise that will resolve once the loading message is fully displayed.
+		 *
+		 * @param headline
+		 * @returns {Promise<any>}
+		 */
+		showLoading: headline => {
+			app.loading.headline = headline;
+			app.loading.messages = {};
+
+			app.loading.shown = true;
+
+			return new Promise((resolve, reject) => {
+				setTimeout(() => {
+					resolve();
+				}, 300);
+			});
+		},
+
+		/**
+		 * Wait one second, then hide the loading message. Returns a promise that will resolve if the loading message is gone.
+		 *
+		 * @returns {Promise<any>}
+		 */
+		hideLoading: () => {
+			setTimeout(() => {
+				app.loading.shown = false;
+			}, 1000);
+
+			return new Promise((resolve, reject) => {
+				setTimeout(() => {
+					resolve();
+				}, 1300);
+			});
+		}
 	},
 	components: {
 		'datepicker':      Datepicker,
