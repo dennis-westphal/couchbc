@@ -73,16 +73,19 @@
 						<p class="title">
 							{{apartment.title|truncate(20)}}
 							<span v-if="apartment.reviews.length > 0"
-							      class="stars"
-							      :style="{backgroundImage: getImageUrl('QmepT6MmHFZTuhtaA7esu7GtD476UQUdXk3K2bWRi2Hmid'), width: getStarsWidth(apartment.averageScore, 122)}">
+							      class="score"
+							      v-bind:style="{backgroundImage: 'url(' + getImageUrl('QmepT6MmHFZTuhtaA7esu7GtD476UQUdXk3K2bWRi2Hmid') + ')', width: getStarsWidth(apartment.averageScore, 122) + 'px'}">
 							</span>
 						</p>
 						<p>
-							<span v-if="requestRentalFrom && requestRentalTill">{{getTotalPrice(apartment)}}
-								per night</span>
-							<span v-if="!(requestRentalFrom && requestRentalTill)">{{apartment.pricePerNight}}
-								per night</span>
-							/ {{apartment.deposit}} deposit</p>
+							<span v-if="rentalRequestFrom && rentalRequestTill">
+								{{getTotalPrice(apartment)}} per night
+							</span>
+							<span v-if="!(rentalRequestFrom && rentalRequestTill)">
+								{{apartment.pricePerNight}} per night
+							</span>
+							/ {{apartment.deposit}} deposit
+						</p>
 					</div>
 				</div>
 			</div>
@@ -111,35 +114,60 @@
 			<header>
 				<vue-flux
 						:options="fluxOptions"
-						:images="getApartmentImages(currentApartment)"
+						:images="getApartmentImages(rentalRequest.apartment)"
 						:transitions="fluxTransitions"
 						ref="slider">
 				</vue-flux>
 				<div class="text">
 					<fieldset>
-						<datepicker v-model="requestRentalFrom" :disabled-dates="disabledDates" :monday-first="true"></datepicker>
-						<datepicker v-model="requestRentalTill" :disabled-dates="disabledDates" :monday-first="true"></datepicker>
+						<div class="form-control">
+							<datepicker v-model="rentalRequestFrom" :disabled-dates="disabledDates"
+							            :monday-first="true" placeholder="From"></datepicker>
+						</div>
+						<div class="form-control">
+							<datepicker v-model="rentalRequestTill" :disabled-dates="disabledDates"
+							            :monday-first="true" placeholder="Till"></datepicker>
+						</div>
 					</fieldset>
+
+					<p class="fee">
+						<span v-if="rentalRequest.fee > 0">
+							Rental fee: {{rentalRequest.fee}} finney ({{finneyToEth(rentalRequest.fee)}} eth)<br/>
+						</span>
+						Deposit: {{rentalRequest.apartment.deposit}} finney ({{finneyToEth(rentalRequest.apartment.deposit)}} eth)
+					</p>
 
 					<fieldset>
 						<div class="form-control">
-							<input v-model="requestRentalTenant.name" placeholder="Your name" type="text">
+							<input v-model="rentalRequest.name" placeholder="Your name" type="text">
 						</div>
 						<div class="form-control">
-							<input v-model="requestRentalTenant.phone" placeholder="Telephone number" type="tel">
+							<input v-model="rentalRequest.phone" placeholder="Telephone number" type="tel">
 						</div>
 						<div class="form-control">
-							<input v-model="requestRentalTenant.email" placeholder="Email address" type="email">
+							<input v-model="rentalRequest.email" placeholder="Email address" type="email">
 						</div>
-						<p>Your personal data will only be visible to the apartment owner and a mediator in case of a
-							dispute</p>
+						<p class="privacy-hint">
+							Your personal data will only be visible to the apartment owner and a mediator in case of a dispute
+						</p>
 					</fieldset>
 
 					<a class="button">Request rental</a>
 				</div>
 			</header>
-			<h1>{{currentApartment.title}}</h1>
-			<nl2br tag="p" :text="currentApartment.description"/>
+
+			<h1>{{rentalRequest.apartment.title}}</h1>
+			<nl2br tag="p" :text="rentalRequest.apartment.description"></nl2br>
+
+			<section class="reviews" v-if="rentalRequest.apartment.reviews.length > 0">
+				<h3>Reviews</h3>
+				<article v-for="review in rentalRequest.apartment.reviews">
+					<span class="score"
+					      v-bind:style="{backgroundImage: 'url(' + getImageUrl('QmepT6MmHFZTuhtaA7esu7GtD476UQUdXk3K2bWRi2Hmid') + ')', width: getStarsWidth(review.score, 122) + 'px'}"></span>
+
+					<nl2br tag="p" :text="review.text"></nl2br>
+				</article>
+			</section>
 		</div>
 	</div>
 

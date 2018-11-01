@@ -6,17 +6,7 @@ p {
 	margin-top: 0;
 }
 
-div.top-bar {
-	border-bottom: #DDD 1px solid;
-	a {
-		color: #000;
-	}
-}
-
-a.transfer {
-	color: #00E676;
-}
-
-a.payout {
-	color: #FF0800
+p.privacy-hint {
+	font-style: italic;
+	font-size: .8rem;
 }

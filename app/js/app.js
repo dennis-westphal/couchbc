@@ -138,15 +138,7 @@ let app = new Vue({
 
 		page: 'start',
 
-		rentalRequestData: {
-			account: null,
-			name:    '',
-			street:  '',
-			zip:     '',
-			city:    '',
-			country: '',
-		},
-		newApartmentData:  {
+		newApartmentData: {
 			account:       null,
 			title:         '',
 			description:   '',
@@ -162,7 +154,7 @@ let app = new Vue({
 			primaryImage:  '',
 			images:        [],
 		},
-		searchData:        {
+		searchData:       {
 			country:   null,
 			city:      null,
 			fromDate:  null,
@@ -170,18 +162,24 @@ let app = new Vue({
 			latitude:  0,
 			longitude: 0,
 		},
-		apartments:        [],
-		currentApartment:  null,
+		apartments:       [],
+		currentApartment: null,
 
 		receivedMessages: [],
 		topicMessages:    {},
 
-		requestRentalFrom:   '',
-		requestRentalTill:   '',
-		requestRentalTenant: {
-			name:  '',
-			phone: '',
-			email: '',
+		rentalRequestFrom: '',
+		rentalRequestTill: '',
+		rentalRequest:     {
+			account:   null,
+			fromDay:   0,
+			tillDay:   0,
+			apartment: null,
+			name:      window.localStorage.getItem('userName') || '',
+			phone:     window.localStorage.getItem('userPhone') || '',
+			email:     window.localStorage.getItem('userEmail') || '',
+			fee:       0,
+			deposit:   0
 		},
 
 		userApartments:   [],
@@ -194,13 +192,21 @@ let app = new Vue({
 		},
 	}),
 	watch:      {
-		apartmentsFrom: () => {
-			app.changeApartmentFilter();
+		rentalRequestFrom: (newValue) => {
+			if (newValue) {
+				app.rentalRequest.fromDay = app.dateToUnixDay(newValue);
+			}
+
+			app.updateRentalRequestFee();
 		},
-		apartmentsTill: () => {
-			app.changeApartmentFilter();
+		rentalRequestTill: (newValue) => {
+			if (newValue) {
+				app.rentalRequest.tillDay = app.dateToUnixDay(newValue);
+			}
+
+			app.updateRentalRequestFee();
 		},
-		rentalAccount:  (rentalAccount) => {
+		rentalAccount:     (rentalAccount) => {
 			web3.eth.defaultAccount = app.rentalAccount;
 			rentContract.options.from = app.rentalAccount;
 
@@ -293,8 +299,7 @@ let app = new Vue({
 							// Add a promise that will only resolve when we have the review (with text)
 							promises.push(
 									new Promise(async (resolve, reject) => {
-										let review = await rentContract.methods.getApartmentReview(apartment.id, j).
-												call();
+										let review = await rentContract.methods.getApartmentReview(apartment.id, j).call();
 										let reviewText = await app.downloadDataFromHexHash(review.ipfsHash);
 
 										apartment.totalScore += review.score;
@@ -412,9 +417,74 @@ let app = new Vue({
 		 * @param apartment
 		 */
 		showApartment: apartment => {
-			app.currentApartment = apartment;
+			app.rentalRequest.apartment = apartment;
 
 			app.page = 'apartment';
+		},
+
+		/**
+		 * Update the fee for a rental request
+		 */
+		updateRentalRequestFee: () => {
+			// Check if we have enough details to determine the rental fee
+			if (app.rentalRequest.apartment === null ||
+					app.rentalRequest.fromDay === 0 || app.rentalRequest.tillDay === 0 ||
+					app.rentalRequest.tillDay <= app.rentalRequest.fromDay
+			) {
+				app.rentalRequest.fee = 0;
+
+				return;
+			}
+
+			app.rentalRequest.fee = (app.rentalRequest.tillDay - app.rentalRequest.fromDay) * app.rentalRequest.apartment.pricePerNight;
+		},
+
+		requestRental: apartment => {
+			// TODO for rental requests: store "pending" request in local storage; process as soon as interaction key received
+			// Get the pending requests
+			let pendingRequests = JSON.parse(window.localStorage.getItem('pendingRequests') || '[]');
+
+			// Add the request to the pending requests
+			let from = app.dateToUnixDay(app.rentalRequest.from);
+			let till = app.dateToUnixDay(app.rentalRequest.till);
+			pendingRequests.push({
+				bcAccountAddress:  app.rentalRequest.account.address,
+				from:              from,
+				till:              till,
+				apartment:         apartment.id,
+				apartmentIpfsHash: apartment.ipfsHash,
+				fee:               (till - from) * apartment.fee
+			});
+
+			return;
+
+			let fromDay = app.dateToUnixDay(app.apartmentsFrom);
+			let tillDay = app.dateToUnixDay(app.apartmentsTill);
+			let cost = apartment.pricePerNight * (tillDay - fromDay) + parseInt(apartment.deposit);
+
+			let method = rentContract.methods.rent(apartment.id, fromDay, tillDay);
+
+			// If we got enough balance, we can just send it
+			if (cost <= app.balance) {
+				method.estimateGas().then(gasAmount => {
+					method.send({gas: gasAmount});
+				});
+				return;
+			}
+
+			// Determine the required value to aquire the balance and send it along
+			rentContract.methods.creditsToWei(cost - app.balance).call((error, costInWei) => {
+				if (error) {
+					console.error('Could not determine wei cost', error);
+					showMessage('Could not book apartment');
+					return;
+				}
+
+				method.estimateGas({value: costInWei}).then(gasAmount => {
+					console.log('Sending ' + (costInWei + 21000) + ' wei along with transaction to pay for rent...');
+					method.send({gas: gasAmount + 21000, value: costInWei});
+				});
+			});
 		},
 
 		/**
@@ -467,44 +537,6 @@ let app = new Vue({
 			method.estimateGas({from: app.accounts[0]}).then(gasAmount => {
 				method.send({from: app.accounts[0], gas: gasAmount});
 			});
-		},
-
-		register: clickEvent => {
-			clickEvent.preventDefault();
-
-			// Using the ES2015 spread operator does not work on vue data objects
-			let params = [
-				app.newUserData.name,
-				app.newUserData.street,
-				app.newUserData.zip,
-				app.newUserData.city,
-				app.newUserData.country];
-
-			// Estimate gas and call the register function
-			let method = rentContract.methods.register(...params);
-			method.estimateGas().then(gasAmount => {
-				method.send({gas: gasAmount});
-			});
-
-			rentContract.once('Registered', {filter: {userAddress: app.account}},
-					(error, event) => {
-						if (error) {
-							showMessage('Could not process registration');
-							console.error(error);
-							return;
-						}
-
-						showMessage('Registered successfully');
-
-						app.registered = true;
-
-						// Change the page if we're currently on the registration page
-						if (app.page === 'register') {
-							app.page = 'apartments';
-						}
-
-						app.refreshBalance();
-					});
 		},
 
 		/**
@@ -791,7 +823,7 @@ let app = new Vue({
 		},
 
 		getTotalPrice: (apartment) => {
-			let days = app.getUnixDay(app.apartmentsTill) - app.getUnixDay(app.apartmentsFrom);
+			let days = app.dateToUnixDay(app.apartmentsTill) - app.dateToUnixDay(app.apartmentsFrom);
 
 			if (days > 0) {
 				return app.pricePerNight * days;
@@ -882,8 +914,8 @@ let app = new Vue({
 			}
 
 			app.loadApartments(
-					app.getUnixDay(app.apartmentsFrom),
-					app.getUnixDay(app.apartmentsTill),
+					app.dateToUnixDay(app.apartmentsFrom),
+					app.dateToUnixDay(app.apartmentsTill),
 			);
 		},
 		loadApartments:        (fromDay, tillDay) => {
@@ -1113,40 +1145,31 @@ let app = new Vue({
 			});
 		},
 
-		requestRental: apartment => {
-			// TODO for rental requests: store "pending" request in local storage; process as soon as interaction key received
+		// Check all accounts for existing owner / tenant profiles and interaction keys
+		determineAccounts: bcAccounts => {
+			for (let bcAccount of bcAccounts) {
+				rentContract.methods.getAddressType().call({from: bcAccount}, (error, type) => {
+					let account = {
+						'address': bcAccount,
+						'type':    type,
+					};
 
-			return;
+					app.accounts.push(account);
 
-			let fromDay = app.getUnixDay(app.apartmentsFrom);
-			let tillDay = app.getUnixDay(app.apartmentsTill);
-			let cost = apartment.pricePerNight * (tillDay - fromDay) + parseInt(apartment.deposit);
+					if (app.newApartmentData.account === null && type === 'owner') {
+						app.newApartmentData.account = account;
+					} else if (app.rentalRequest.account === null && type === 'tenant') {
+						app.rentalRequest.account = account;
+					}
 
-			let method = rentContract.methods.rent(apartment.id, fromDay, tillDay);
-
-			// If we got enough balance, we can just send it
-			if (cost <= app.balance) {
-				method.estimateGas().then(gasAmount => {
-					method.send({gas: gasAmount});
+					// TODO: Determine accounts with interaction keys (locally)
 				});
-				return;
 			}
-
-			// Determine the required value to aquire the balance and send it along
-			rentContract.methods.creditsToWei(cost - app.balance).call((error, costInWei) => {
-				if (error) {
-					console.error('Could not determine wei cost', error);
-					showMessage('Could not book apartment');
-					return;
-				}
-
-				method.estimateGas({value: costInWei}).then(gasAmount => {
-					console.log('Sending ' + (costInWei + 21000) + ' wei along with transaction to pay for rent...');
-					method.send({gas: gasAmount + 21000, value: costInWei});
-				});
-			});
 		},
 
+		/**
+		 * Initiate the application
+		 */
 		start: () => {
 			// Get the contract from the artifacts
 			rentContract = new web3.eth.Contract(rent_artifacts.abi, rent_artifacts.networks[4447].address);
@@ -1184,28 +1207,6 @@ let app = new Vue({
 				//app.publishMessage('def', 'request-interaction-key');
 				//app.publishMessage('ghi', 'request-interaction-key');
 			});
-		},
-
-		// Check all accounts for existing owner / tenant profiles and interaction keys
-		determineAccounts: bcAccounts => {
-			for (let bcAccount of bcAccounts) {
-				rentContract.methods.getAddressType().call({from: bcAccount}, (error, type) => {
-					let account = {
-						'address': bcAccount,
-						'type':    type,
-					};
-
-					app.accounts.push(account);
-
-					if (app.newApartmentData.account === null && type === 'owner') {
-						app.newApartmentData.account = account;
-					} else if (app.rentalRequestData.account === null && type === 'tenant') {
-						app.rentalRequestData.account = account;
-					}
-
-					// TODO: Determine accounts with interaction keys (locally)
-				});
-			}
 		},
 
 		/**
@@ -1923,7 +1924,7 @@ let app = new Vue({
 		},
 
 		// Date
-		getUnixDay: date => {
+		dateToUnixDay: date => {
 			return Math.floor(date.getTime() / (1000 * 60 * 60 * 24));
 		},
 
@@ -1939,6 +1940,9 @@ let app = new Vue({
 		},
 		finneyToWei: finney => {
 			return finney * Math.pow(10, 15);
+		},
+		finneyToEth: finney => {
+			return finney / 1000;
 		},
 
 		// IPFS utilities

@@ -48,10 +48,11 @@ div.page.apartments {
 					font-weight: bold;
 					margin-bottom: .4rem;
 
-					span.stars {
+					span.score {
 						float: right;
 						display: inline-block;
 						height: 23px;
+						background-position: right;
 					}
 				}
 			}

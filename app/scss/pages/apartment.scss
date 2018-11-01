@@ -1,18 +1,44 @@
 div.page.apartment {
-	header {
+	> .grid-container > header {
 		position: relative;
 		width: 100%;
-		height: 30rem;
+		height: 34rem;
 		margin-bottom: 1rem;
 
 		div.text {
 			position: absolute;
-			max-width: 70%;
+			max-width: 350px;
+			width: 70%;
 			bottom: 2rem;
 			right: 2rem;
 			padding: .4rem .8rem;
 			background: rgba(255, 255, 255, 0.8);
 			z-index: 20;
+
+			.button {
+				float: right;
+			}
+		}
+	}
+	section.reviews {
+		margin-top: 2rem;
+		border-top: #666 1px solid;
+		padding-top: 2rem;
+
+		article {
+			span.score {
+				float: left;
+				display: inline-block;
+				height: 23px;
+				margin-right: .8rem;
+			}
+			margin-bottom: .5rem;
+			border-bottom: #ddd 1px solid;
+			padding-bottom: .5rem;
+
+			&:last-child {
+				border-bottom: 0;
+			}
 		}
 	}
 }

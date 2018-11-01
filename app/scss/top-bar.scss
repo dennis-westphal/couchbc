@@ -1,4 +1,11 @@
-.top-bar-left {
+div.top-bar {
+	border-bottom: #DDD 1px solid;
+	a {
+		color: #000;
+	}
+}
+
+div.top-bar-left {
 	display: flex;
 
 	a.logo {

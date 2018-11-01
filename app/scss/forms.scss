@@ -8,6 +8,19 @@ html {
 	margin-bottom: 1rem;
 }
 
+fieldset {
+	margin-bottom: 1rem;
+
+	.form-control {
+		margin-bottom: .5rem;
+	}
+}
+
+.vdp-datepicker input[readonly] {
+	cursor: pointer;
+	background-color: #fefefe;
+}
+
 .button {
 	&.add {
 		background-color: #279b23;
