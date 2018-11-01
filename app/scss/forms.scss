@@ -21,6 +21,17 @@ fieldset {
 	background-color: #fefefe;
 }
 
+html .v-select > .dropdown-toggle {
+	border-radius: 0;
+	background-color: #fefefe;
+
+	padding: 0;
+
+	input, input:focus {
+		margin: 0;
+	}
+}
+
 .button {
 	&.add {
 		background-color: #279b23;

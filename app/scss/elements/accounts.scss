@@ -1,4 +1,4 @@
-#account-selection {
+.account-list {
 	div.account {
 		cursor: pointer;
 		min-height: 28px;
@@ -17,18 +17,8 @@
 		&.forbidden {
 			cursor: not-allowed;
 		}
-		> span.blockie {
-			float: left;
-			display: inline-block;
-			margin-right: 2px;
-			width: 40px;
-			height: 28px;
-			background-repeat: no-repeat;
-			background-position: left center;
-		}
 		> span.mdi {
 			float: right;
-			cursor: help;
 
 			&::before {
 				font-size: 1.4rem;
@@ -36,4 +26,21 @@
 			}
 		}
 	}
+}
+
+.account-select {
+	.forbidden {
+		cursor: not-allowed;
+		color: #999;
+	}
+}
+
+span.blockie {
+	float: left;
+	display: inline-block;
+	margin-right: 2px;
+	width: 40px;
+	height: 28px;
+	background-repeat: no-repeat;
+	background-position: left center;
 }

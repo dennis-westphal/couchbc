@@ -11,12 +11,16 @@ div.page.apartment {
 			width: 70%;
 			bottom: 2rem;
 			right: 2rem;
-			padding: .4rem .8rem;
+			padding: .6rem;
 			background: rgba(255, 255, 255, 0.8);
 			z-index: 20;
 
 			.button {
 				float: right;
+			}
+
+			p, .button {
+				margin-bottom: 0
 			}
 		}
 	}

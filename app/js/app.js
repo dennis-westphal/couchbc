@@ -48,6 +48,7 @@ import {default as uniqid} from 'uniqid';
 import Toasted from 'vue-toasted';
 import VueFilter from 'vue-filter';
 import Nl2br from 'vue-nl2br';
+import vSelect from 'vue-select';
 
 // Vue google map
 import * as VueGoogleMaps from 'vue2-google-maps';
@@ -166,21 +167,23 @@ let app = new Vue({
 		currentApartment: null,
 
 		receivedMessages: [],
-		topicMessages:    {},
 
-		rentalRequestFrom: '',
-		rentalRequestTill: '',
-		rentalRequest:     {
+		rentalRequestFrom:     '',
+		rentalRequestTill:     '',
+		rentalRequest:         {
 			account:   null,
 			fromDay:   0,
 			tillDay:   0,
 			apartment: null,
-			name:      window.localStorage.getItem('userName') || '',
-			phone:     window.localStorage.getItem('userPhone') || '',
-			email:     window.localStorage.getItem('userEmail') || '',
+			contact:   {
+				name:  window.localStorage.getItem('userName') || '',
+				phone: window.localStorage.getItem('userPhone') || '',
+				email: window.localStorage.getItem('userEmail') || '',
+			},
 			fee:       0,
 			deposit:   0
 		},
+		pendingRentalRequests: JSON.parse(window.localStorage.getItem('pendingRentalRequests') || '[]'),
 
 		userApartments:   [],
 		rentals:          [],
@@ -205,16 +208,6 @@ let app = new Vue({
 			}
 
 			app.updateRentalRequestFee();
-		},
-		rentalAccount:     (rentalAccount) => {
-			web3.eth.defaultAccount = app.rentalAccount;
-			rentContract.options.from = app.rentalAccount;
-
-			// Check if the eth account has an account
-			//app.checkAccount();
-
-			// Load the apartments
-			//app.loadApartments();
 		},
 	},
 	methods:    {
@@ -439,52 +432,63 @@ let app = new Vue({
 			app.rentalRequest.fee = (app.rentalRequest.tillDay - app.rentalRequest.fromDay) * app.rentalRequest.apartment.pricePerNight;
 		},
 
-		requestRental: apartment => {
-			// TODO for rental requests: store "pending" request in local storage; process as soon as interaction key received
-			// Get the pending requests
-			let pendingRequests = JSON.parse(window.localStorage.getItem('pendingRequests') || '[]');
+		/**
+		 * Request a new rental. Will request an interaction key from the owner first and add the rental to the pending rentals.
+		 */
+		requestRental: async () => {
+			// Get or create the tenant ec account
+			let ecAccount = await app.getOrCreateEcAccount(app.rentalRequest.account);
+
+			// Subscribe to the answer topic
+			app.subscribeToTopic(
+					'issue-interaction-key',
+
+					// Decrypt response with own EC account => private key
+					ecAccount.address
+			);
+
+			// Send a new interaction key request
+			app.publishMessage(
+					// Send the tenants public key
+					JSON.stringify({
+						x: ecAccount.public.x,
+						y: ecAccount.public.y
+					}),
+
+					// Topic to send the message to
+					'request-interaction-key',
+
+					// Encrypt with owner's interaction key
+					app.getUint8ArrayBufferFromXY(app.rentalRequest.apartment.ownerPublicKey_x, app.rentalRequest.apartment.ownerPublicKey_y)
+			);
 
 			// Add the request to the pending requests
-			let from = app.dateToUnixDay(app.rentalRequest.from);
-			let till = app.dateToUnixDay(app.rentalRequest.till);
-			pendingRequests.push({
+			app.pendingRentalRequests.push({
 				bcAccountAddress:  app.rentalRequest.account.address,
-				from:              from,
-				till:              till,
-				apartment:         apartment.id,
-				apartmentIpfsHash: apartment.ipfsHash,
-				fee:               (till - from) * apartment.fee
+				fromDay:           app.rentalRequest.fromDay,
+				tillDay:           app.rentalRequest.tillDay,
+				apartment:         app.rentalRequest.apartment.id,
+				apartmentIpfsHash: app.rentalRequest.apartment.ipfsHash,
+				fee:               (app.rentalRequest.tillDay - app.rentalRequest.fromDay) * app.rentalRequest.apartment.pricePerNight,
+				deposit:           app.rentalRequest.apartment.deposit,
+				contact:           app.rentalRequest.contact
 			});
 
-			return;
+			// Save the tenant's data in local storage for autocompletion of further actions
+			window.localStorage.setItem('userName', app.rentalRequest.contact.name);
+			window.localStorage.setItem('userPhone', app.rentalRequest.contact.phone);
+			window.localStorage.setItem('userEmail', app.rentalRequest.contact.email);
 
-			let fromDay = app.dateToUnixDay(app.apartmentsFrom);
-			let tillDay = app.dateToUnixDay(app.apartmentsTill);
-			let cost = apartment.pricePerNight * (tillDay - fromDay) + parseInt(apartment.deposit);
+			// Save the requests in local storage
+			//window.localStorage.setItem('pendingRentalRequests', JSON.stringify(app.pendingRentalRequests));
+		},
 
-			let method = rentContract.methods.rent(apartment.id, fromDay, tillDay);
+		issueInteractionToken: tenantPublicKey => {
+			console.log('request ' + tenantPublicKey);
+		},
 
-			// If we got enough balance, we can just send it
-			if (cost <= app.balance) {
-				method.estimateGas().then(gasAmount => {
-					method.send({gas: gasAmount});
-				});
-				return;
-			}
-
-			// Determine the required value to aquire the balance and send it along
-			rentContract.methods.creditsToWei(cost - app.balance).call((error, costInWei) => {
-				if (error) {
-					console.error('Could not determine wei cost', error);
-					showMessage('Could not book apartment');
-					return;
-				}
-
-				method.estimateGas({value: costInWei}).then(gasAmount => {
-					console.log('Sending ' + (costInWei + 21000) + ' wei along with transaction to pay for rent...');
-					method.send({gas: gasAmount + 21000, value: costInWei});
-				});
-			});
+		addRentalRequestToBlockchain: interactionKey => {
+			console.log('issue ' + interactionKey);
 		},
 
 		/**
@@ -767,7 +771,7 @@ let app = new Vue({
 			// Upload the details
 			let detailsAddress = await app.uploadString(JSON.stringify(details));
 			let cityHash = app.getCountryCityHash(app.newApartmentData.country, app.newApartmentData.city);
-			let ownerEcAccount = await app.getOrCreateOwnerEcAccount(account);
+			let ownerEcAccount = await app.getOrCreateEcAccount(account);
 
 			let parameters = [
 				ownerEcAccount.public.x,
@@ -853,7 +857,7 @@ let app = new Vue({
 		 * @param address
 		 * @return {*}
 		 */
-		getBlockie:     address => {
+		getBlockie: address => {
 			if (address) {
 				return {
 					'background-image': 'url(\'' + blockies.create({
@@ -865,6 +869,7 @@ let app = new Vue({
 				return {};
 			}
 		},
+
 		/**
 		 * Get a reandom color to use as background color for an apartment
 		 *
@@ -902,256 +907,22 @@ let app = new Vue({
 		 * @param maxWidth
 		 * @return {number}
 		 */
-		getStarsWidth:         (score, maxWidth) => {
+		getStarsWidth: (score, maxWidth) => {
 			return Math.round(score / 5 * maxWidth);
 		},
-		changeApartmentFilter: (apartmentsFrom, apartmentsTill) => {
-			// Only apply filter if we have dates
-			if (typeof(app.apartmentsFrom) !== 'object' ||
-					typeof(app.apartmentsTill) !== 'object') {
-				app.loadApartments();
-				return;
-			}
 
-			app.loadApartments(
-					app.dateToUnixDay(app.apartmentsFrom),
-					app.dateToUnixDay(app.apartmentsTill),
-			);
-		},
-		loadApartments:        (fromDay, tillDay) => {
-			rentContract.methods.getApartmentsNum().call((error, result) => {
-				if (error) {
-					console.error(error);
-					return;
-				}
-
-				app.apartments = [];
-				let numApartments = parseInt(result);
-
-				for (let i = 0; i < numApartments; i++) {
-					rentContract.methods.getApartment(i).call((error, apartment) => {
-						if (error) {
-							console.error(error);
-							return;
-						}
-
-						// Check if we need to apply a filter
-						if (typeof(fromDay) === 'undefined') {
-							app.loadApartmentData(apartment);
-							return;
-						}
-
-						rentContract.methods.isAvailable(apartment.id, fromDay, tillDay).call((error, available) => {
-							if (available) {
-								app.loadApartmentData(apartment);
-							}
-						});
-					});
-				}
-			});
-		},
-		loadApartmentData:     (apartment) => {
-			// Load the address data for the apartment
-			rentContract.methods.getPhysicalAddress(apartment.physicalAddress).call((error, physicalAddress) => {
-				// Ensure we add an apartment to the list twice by checking if it already exists in the apartments
-				for (let exitingApartment of app.apartments) {
-					if (exitingApartment.id === apartment.id) {
-						return;
-					}
-				}
-
-				// Add the apartment with the address to the apartment list
-				apartment.address = physicalAddress;
-				app.apartments.push(apartment);
-
-				// Load apartment images
-				apartment.images = [];
-				for (let i = 0; i < apartment.numImages; i++) {
-					rentContract.methods.getApartmentImage(apartment.id, i).call(image => {
-						apartment.images.push(image);
-					});
-				}
-			});
-		},
-		loadUserApartments:    () => {
-			// TODO: images
-
-			rentContract.methods.getUserApartmentsNum().call((error, result) => {
-				if (error) {
-					console.error(error);
-					return;
-				}
-
-				app.userApartments = [];
-
-				let numApartments = parseInt(result);
-				for (let i = 0; i < numApartments; i++) {
-					rentContract.methods.getUserApartment(i).call((error, apartment) => {
-						if (error) {
-							console.error(error);
-							return;
-						}
-
-						rentContract.methods.getApartmentRentalsNum(apartment.id).call((error, numRentals) => {
-							apartment.rentals = numRentals;
-							app.userApartments.push(apartment);
-						});
-					});
-				}
-			});
-		},
-		disableApartment:      apartment => {
-			// Estimate gas and call the disableApartment function
-			let method = rentContract.methods.disableApartment(apartment.id);
-			method.estimateGas().then(gasAmount => {
-				method.send({gas: gasAmount});
-			});
-		},
-		showApartmentRentals:  apartment => {
-			app.currentApartment = apartment;
-			app.apartmentRentals = [];
-
-			rentContract.methods.getApartmentRentalsNum(apartment.id).call((error, result) => {
-				if (error) {
-					console.error(error);
-					return;
-				}
-
-				let numRentals = parseInt(result);
-				let promises = [];
-
-				for (let i = 0; i < numRentals; i++) {
-					promises.push(rentContract.methods.getApartmentRental(apartment.id, i).call((error, rental) => {
-						rental.from = new Date(rental.fromDay * 1000 * 60 * 60 * 24);
-						rental.till = new Date(rental.tillDay * 1000 * 60 * 60 * 24);
-						app.apartmentRentals.push(rental);
-					}));
-				}
-
-				Promise.all(promises).then(() => {
-					app.page = 'apartment-rentals';
-				});
-			});
-		},
-
-		checkAccount:      () => {
-			rentContract.methods.isRegistered().call((error, result) => {
-				if (error) {
-					console.error(error);
-					return;
-				}
-
-				app.registered = result;
-
-				if (app.registered) {
-					showMessage('Successfully logged in');
-
-					// Refresh the user balance
-					app.refreshBalance();
-
-					// Load the user rentals
-					app.updateUserRentals();
-
-					// Load the user apartments
-					app.loadUserApartments();
-				}
-			});
-		},
-		refreshBalance:    () => {
-			rentContract.methods.getBalance().call((error, balance) => {
-				if (error) {
-					console.error(error);
-					return;
-				}
-
-				app.balance = parseInt(balance);
-			});
-
-			app.refreshEthBalance();
-		},
-		switchAccount:     index => {
-			app.account = app.accounts[index];
-			let params = new URLSearchParams(location.search);
-			params.set('a', index);
-			window.history.replaceState({}, '', `${location.pathname}?${params}`);
-		},
-		refreshEthBalance: () => {
-			web3.eth.getBalance(app.account).then((weiBalance) => {
-				app.ethBalance = app.weiToEth(weiBalance);
-			});
-		},
-		doTransfer:        () => {
-			let wei = app.ethToWei(app.transferEth);
-
-			let method = rentContract.methods.transfer();
-			method.estimateGas({value: wei}).then(gasAmount => {
-				method.send({gas: gasAmount, value: wei});
-
-				showMessage('Transfer started...');
-			});
-		},
-		doPayout:          () => {
-			let method = rentContract.methods.payout(app.payoutCredits);
-			method.estimateGas().then(gasAmount => {
-				method.send({gas: gasAmount + 21000});
-
-				showMessage('Payout started...');
-			});
-		},
-		updateUserRentals: () => {
-			rentContract.methods.getUserRentalsNum().call((error, numRentals) => {
-				if (error) {
-					console.error(error);
-					return;
-				}
-
-				if (numRentals === 0) {
-					return;
-				}
-
-				app.rentals = [];
-
-				for (let i = 0; i < numRentals; i++) {
-					rentContract.methods.getUserRental(i).call((error, rental) => {
-						rentContract.methods.getApartment(rental.apartmentId).call((error, apartment) => {
-							rental.apartment = apartment;
-							rental.from = new Date(rental.fromDay * 1000 * 60 * 60 * 24);
-							rental.till = new Date(rental.tillDay * 1000 * 60 * 60 * 24);
-
-							app.rentals.push(rental);
-						});
-					});
-				}
-			});
-		},
-		refundDeposit:     rental => {
-			app.currentRental = rental;
-			app.page = 'refund-deposit';
-		},
-		doRefundDeposit:   () => {
-			let method = rentContract.methods.refundDeposit(app.currentRental.rentalId, parseInt(app.deductAmount));
-			method.estimateGas().then(gasAmount => {
-				method.send({gas: gasAmount});
-
-				showMessage('Deposit refund started...');
-			});
-		},
-		claimDeposit:      rental => {
-			let method = rentContract.methods.claimDeposit(rental.rentalId);
-			method.estimateGas().then(gasAmount => {
-				method.send({gas: gasAmount});
-
-				showMessage('Deposit claim started...');
-			});
-		},
-
-		// Check all accounts for existing owner / tenant profiles and interaction keys
+		/**
+		 * Check all accounts for existing owner / tenant profiles and interaction keys
+		 *
+		 * @param bcAccounts
+		 */
 		determineAccounts: bcAccounts => {
 			for (let bcAccount of bcAccounts) {
 				rentContract.methods.getAddressType().call({from: bcAccount}, (error, type) => {
 					let account = {
 						'address': bcAccount,
 						'type':    type,
+						'label':   bcAccount.substr(0, 12) + '...' + bcAccount.substr(36)
 					};
 
 					app.accounts.push(account);
@@ -1427,7 +1198,8 @@ let app = new Vue({
 
 			// Check if we need to encrypt the message
 			if (publicKeyBuffer) {
-				message = app.encryptString(message, publicKeyBuffer);
+				// Add VALID to the encrypted message for easy checking
+				message = await app.encryptString('VALID ' + message, publicKeyBuffer);
 			}
 
 			// Create the message
@@ -1549,11 +1321,6 @@ let app = new Vue({
 				return;
 			}
 
-			// Ensure we have an array for topic messages
-			if (typeof(app.topicMessages[subscription.topic]) === 'undefined') {
-				app.topicMessages[subscription.topic] = [];
-			}
-
 			// Periodically pull from the subscription
 			subscriptionIntervals['interval-' + subscription.id] = window.setInterval(() => {
 				app.pullFromSubscription(subscription);
@@ -1561,7 +1328,7 @@ let app = new Vue({
 		},
 
 		/**
-		 * Pull messages from the specified subscription. Saves the retrieved messages in app.subscriptionMessages.
+		 * Pull messages from the specified subscription. Hands the retrieved messages of to processMessage.
 		 *
 		 * @param subscription
 		 * @return {Promise<void>}
@@ -1593,11 +1360,6 @@ let app = new Vue({
 				return;
 			}
 
-			// Ensure we have an array for topic messages
-			if (typeof(app.topicMessages[subscription.topic]) === 'undefined') {
-				app.topicMessages[subscription.topic] = [];
-			}
-
 			// Construct a new request
 			url = googleAckUrl.replace('{subscription}', subscription.id);
 			data = {
@@ -1606,9 +1368,25 @@ let app = new Vue({
 
 			// Add the messages to the topic messages
 			for (let message of result.receivedMessages) {
-				// Add the message to the topic messages if we don't have it yet
+				// Process the message if we haven't done it yet
 				if (app.receivedMessages.indexOf(message.message.messageId) === -1) {
-					app.topicMessages[subscription.topic].push(atob(message.message.data));
+					let data = atob(message.message.data);
+
+					// If we don't need to decrypt the message, we can directly process it
+					if (subscription.ecAccountAddress === null) {
+						app.processTopicMessage(subscription.topic, data);
+						app.receivedMessages.push(message.message.messageId);
+					}
+
+					let ecAccount = await app.getEcAccount(subscription.ecAccountAddress);
+
+					data = await app.decryptString(data, ecAccount.private.buffer);
+
+					// Only process if the message was decrypted properly
+					if (data != null && data.substr(0, 6) === 'VALID ') {
+						app.processTopicMessage(subscription.topic, data.substr(6));
+					}
+
 					app.receivedMessages.push(message.message.messageId);
 				}
 
@@ -1627,6 +1405,16 @@ let app = new Vue({
 					'Authorization': 'Bearer ' + accessToken,
 				},
 			});
+		},
+
+		processTopicMessage: (topic, message) => {
+			if (topic === 'request-interaction-token') {
+				app.issueInteractionToken(JSON.parse(message));
+				return;
+			}
+			if (topic === 'issue-interaction-token') {
+				app.addRentalRequestToBlockchain(JSON.parse(message));
+			}
 		},
 
 		// Cryptography
@@ -1666,7 +1454,7 @@ let app = new Vue({
 		},
 
 		/**
-		 * Get or create an EC account to be used for an owner's bc address
+		 * Get or create an EC account to be used in association with the bc address
 		 * Returns an object with:
 		 * {
 		 *   private: {
@@ -1681,7 +1469,7 @@ let app = new Vue({
 		 *   address:     "0x0000..."        (0x + 32 bytes hex address as would be used in blockchain account and can be used for signature validation)
 		 * }
 		 */
-		getOrCreateOwnerEcAccount: async bcAccount => {
+		getOrCreateEcAccount: async bcAccount => {
 			// Try to catch the ec account associated with the address
 			let ecAccount = await app.getEcAccountForBcAccount(bcAccount.address);
 
@@ -1690,10 +1478,10 @@ let app = new Vue({
 				return ecAccount;
 			}
 
-			// Check if the account is already registered at the blockchain as owner account;
+			// Check if the account is already registered at the blockchain as owner or tenant account;
 			// in this case we should already have a public key for it => show an error
-			if (bcAccount.type === 'owner') {
-				showMessage('Could not get public key for existing owner account');
+			if (bcAccount.type === 'owner' || bcAccount.type === 'tenant') {
+				showMessage('Could not get public key for existing ' + bcAccount.type + ' account');
 
 				return null;
 			}
@@ -1797,20 +1585,20 @@ let app = new Vue({
 			//console.log('0x' + Buffer(eccrypto.getPublic(privateKey)).toString('hex'));
 			//console.log('0x04' + (keyPair.getPublic().x.toString(16)) + (keyPair.getPublic().y.toString(16)));
 
-			let pkHex = privateKey.toString('hex');
-			let xHex = publicKey.x.toString(16);
-			let yHex = publicKey.y.toString(16);
-			let account = web3.eth.accounts.privateKeyToAccount('0x' + pkHex);
+			let pkHex = '0x' + privateKey.toString('hex');
+			let account = web3.eth.accounts.privateKeyToAccount(pkHex);
+			let xHex = '0x' + publicKey.x.toString(16);
+			let yHex = '0x' + publicKey.y.toString(16);
 
 			// Save the account in the wallet
 			wallet.add(account);
 			wallet.save(app.walletPassword);
 
 			return {
-				private: '0x' + pkHex,
+				private: pkHex,
 				public:  {
-					x:      '0x' + xHex,
-					y:      '0x' + yHex,
+					x:      xHex,
+					y:      yHex,
 					buffer: app.getUint8ArrayBufferFromXY(xHex, yHex),
 				},
 				address: account.address,
@@ -1844,18 +1632,17 @@ let app = new Vue({
 
 			let publicKeyHex = Buffer(eccrypto.getPublic(privateKeyArray)).toString('hex');
 
-			let pkHex = account.privateKey.substr(2);
-			let xHex = publicKeyHex.substr(2, 64);
-			let yHex = publicKeyHex.substr(66);
+			let xHex = '0x' + publicKeyHex.substr(2, 64);
+			let yHex = '0x' + publicKeyHex.substr(66);
 
 			return {
 				private: {
-					hex:    '0x' + pkHex,
+					hex:    account.privateKey,
 					buffer: Buffer(privateKeyArray),
 				},
 				public:  {
-					x:      '0x' + xHex,
-					y:      '0x' + yHex,
+					x:      xHex,
+					y:      yHex,
 					buffer: app.getUint8ArrayBufferFromXY(xHex, yHex),
 				},
 				address: account.address,
@@ -1870,7 +1657,23 @@ let app = new Vue({
 		 * @return {Promise<Buffer>}
 		 */
 		encryptString: async (str, publicKeyBuffer) => {
-			return await eccrypto.encrypt(publicKeyBuffer, Buffer(str));
+			console.debug('Encrypting ' + str + ' with:', publicKeyBuffer);
+
+			// Encrypt the message
+			let result = await eccrypto.encrypt(publicKeyBuffer, Buffer(str));
+
+			// Retrieve the elements of the encrypted message and pack them into an serializable object
+			let message = [
+				result.iv.toString('hex'),
+				result.ephemPublicKey.toString('hex'),
+				result.ciphertext.toString('hex'),
+				result.mac.toString('hex')
+			];
+			let jsonStr = JSON.stringify(message);
+
+			console.debug('Encryption successful: ', jsonStr);
+
+			return jsonStr;
 		},
 
 		/**
@@ -1881,7 +1684,29 @@ let app = new Vue({
 		 * @return {Promise<Buffer>}
 		 */
 		decryptString: async (str, privateKeyBuffer) => {
-			return await eccrypto.decrypt(privateKeyBuffer, Buffer(str));
+			console.debug('Trying to decrypt ' + str + ' with:', privateKeyBuffer);
+
+			try {
+				// Extract the elements of the json string and convert them to Buffers
+				let arr = JSON.parse(str);
+				let message = {
+					iv:             Buffer(app.hexToUint8Array(arr[0])),
+					ephemPublicKey: Buffer(app.hexToUint8Array(arr[1])),
+					ciphertext:     Buffer(app.hexToUint8Array(arr[2])),
+					mac:            Buffer(app.hexToUint8Array(arr[3])),
+				};
+
+				// Try to decrypt the string
+				let result = await eccrypto.decrypt(privateKeyBuffer, message);
+
+				console.debug('Decryption successful: ', result);
+
+				return result.toString();
+			}
+			catch (e) {
+				console.debug('Decryption failed; returning null');
+				return null;
+			}
 		},
 
 		/**
@@ -1899,7 +1724,7 @@ let app = new Vue({
 		},
 
 		/**
-		 * Get an uint8array buffer to use with eccrypto from a x and y hex coordinates (without 0x prefix)
+		 * Get an uint8array buffer to use with eccrypto from a x and y 0x prefixed hex coordinates
 		 * @param x
 		 * @param y
 		 * @return {Uint8Array}
@@ -1907,8 +1732,8 @@ let app = new Vue({
 		getUint8ArrayBufferFromXY: (x, y) => {
 			let arr = new Uint8Array(65);
 			arr[0] = 4;
-			arr.set(app.hexToUint8Array(x), 1);
-			arr.set(app.hexToUint8Array(y), 33);
+			arr.set(app.hexToUint8Array(x.substr(2)), 1);
+			arr.set(app.hexToUint8Array(y.substr(2)), 33);
 
 			return Buffer(arr);
 		},
@@ -1971,6 +1796,7 @@ let app = new Vue({
 		'vue-flux':        VueFlux,
 		'flux-pagination': FluxPagination,
 		'nl2br':           Nl2br,
+		'v-select':        vSelect
 	},
 });
 

@@ -30,13 +30,13 @@
 									Add apartment
 								</a>
 							</li>
-							<li v-if="userApartments.length > 0">
+							<li v-if="false">
 								<a href="#" v-on:click.stop="page = 'user-apartments'">
 									My apartments
 								</a>
 							</li>
 
-							<li v-if="rentals.length > 0">
+							<li v-if="false">
 								<a href="#" v-on:click.stop="page = 'rentals'">
 									My rentals
 								</a>
@@ -128,31 +128,46 @@
 							<datepicker v-model="rentalRequestTill" :disabled-dates="disabledDates"
 							            :monday-first="true" placeholder="Till"></datepicker>
 						</div>
+						<p class="fee">
+							<span v-if="rentalRequest.fee > 0">
+								Rental fee: {{rentalRequest.fee}} finney ({{finneyToEth(rentalRequest.fee)}} eth)<br/>
+							</span>
+							Deposit: {{rentalRequest.apartment.deposit}} finney ({{finneyToEth(rentalRequest.apartment.deposit)}} eth)
+						</p>
 					</fieldset>
 
-					<p class="fee">
-						<span v-if="rentalRequest.fee > 0">
-							Rental fee: {{rentalRequest.fee}} finney ({{finneyToEth(rentalRequest.fee)}} eth)<br/>
-						</span>
-						Deposit: {{rentalRequest.apartment.deposit}} finney ({{finneyToEth(rentalRequest.apartment.deposit)}} eth)
-					</p>
-
 					<fieldset>
-						<div class="form-control">
-							<input v-model="rentalRequest.name" placeholder="Your name" type="text">
+						<div class="form-control account-select">
+							<v-select :options="accounts" placeholder="Select account" v-model="rentalRequest.account">
+								<template slot="option" slot-scope="option">
+									<span :class="{forbidden: option.type == 'owner' || option.type == 'interaction'}">
+										<span class="blockie" :style="getBlockie(option.address)"></span>
+										{{option.label}}
+										<span v-if="option.type == 'owner'" class="mdi mdi-home-account tooltip"
+										      title="This account is used for managing apartments and thus cannot be used to rent an apartment"></span>
+										<span v-if="option.type == 'tenant'" class="mdi mdi-account-card-details tooltip"
+										      title="This account is used for managing rentals"></span>
+										<span v-if="option.type == 'interaction'" class="mdi mdi-account-switch tooltip"
+										      title="This account has been used in managing a rental request and thus cannot be used for renting an apartment"></span>
+									</span>
+								</template>
+							</v-select>
 						</div>
 						<div class="form-control">
-							<input v-model="rentalRequest.phone" placeholder="Telephone number" type="tel">
+							<input v-model="rentalRequest.contact.name" placeholder="Your name" type="text">
 						</div>
 						<div class="form-control">
-							<input v-model="rentalRequest.email" placeholder="Email address" type="email">
+							<input v-model="rentalRequest.contact.phone" placeholder="Telephone number" type="tel">
+						</div>
+						<div class="form-control">
+							<input v-model="rentalRequest.contact.email" placeholder="Email address" type="email">
 						</div>
 						<p class="privacy-hint">
 							Your personal data will only be visible to the apartment owner and a mediator in case of a dispute
 						</p>
 					</fieldset>
 
-					<a class="button">Request rental</a>
+					<a href="#" class="button" v-on:click.stop="requestRental">Request rental</a>
 				</div>
 			</header>
 
@@ -164,7 +179,6 @@
 				<article v-for="review in rentalRequest.apartment.reviews">
 					<span class="score"
 					      v-bind:style="{backgroundImage: 'url(' + getImageUrl('QmepT6MmHFZTuhtaA7esu7GtD476UQUdXk3K2bWRi2Hmid') + ')', width: getStarsWidth(review.score, 122) + 'px'}"></span>
-
 					<nl2br tag="p" :text="review.text"></nl2br>
 				</article>
 			</section>
@@ -227,7 +241,7 @@
 							</div>
 						</div>
 					</div>
-					<div id="account-selection" class="cell large-3">
+					<div class="account-list" class="cell large-3">
 						<h3>Account selection</h3>
 
 						<div
@@ -241,8 +255,8 @@
 							<span v-if="account.type == 'tenant'" class="mdi mdi-account-card-details tooltip"
 							      title="This account is used for managing rentals and thus cannot be used to add an apartment"></span>
 							<span v-if="account.type == 'interaction'" class="mdi mdi-account-switch tooltip"
-							      title="This account has been used in a rental and thus cannot be used for adding an apartment"></span>
-							{{account.address.substr(0, 12)}}...{{account.address.substr(36)}}
+							      title="This account has been used in managing a rental request and thus cannot be used for adding an apartment"></span>
+							{{account.label}}
 						</div>
 					</div>
 				</div>
