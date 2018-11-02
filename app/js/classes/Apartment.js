@@ -44,8 +44,8 @@ export class Apartment {
 		let apartment = new Apartment();
 		Object.assign(apartment, data);
 
-		// Display the loading message
-		Loading.show('Adding apartment');
+		// Show the load message. Wait for the response, as following steps might freeze the browser for a second.
+		await Loading.show('Adding apartment');
 
 		// Determine the owner Ec account first as this might require further interaction (e.g. entering a password)
 		Loading.add('account', 'Initializing elliptic cryptography account');

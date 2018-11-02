@@ -25,6 +25,7 @@ import {MapsUtil} from './utils/MapsUtil';
 import {googleApiKey} from './credentials';
 import {IpfsUtil} from './utils/IpfsUtil';
 import {Notifications} from './utils/Notifications';
+import {Conversion} from './utils/Conversion';
 
 // Blockies for account icons
 require('./blockies.min.js');
@@ -133,14 +134,14 @@ let app = new Vue({
 	watch:      {
 		rentalRequestFrom: (newValue) => {
 			if (newValue) {
-				app.rentalRequest.fromDay = app.dateToUnixDay(newValue);
+				app.rentalRequest.fromDay = Conversion.dateToUnixDay(newValue);
 			}
 
 			app.updateRentalRequestFee();
 		},
 		rentalRequestTill: (newValue) => {
 			if (newValue) {
-				app.rentalRequest.tillDay = app.dateToUnixDay(newValue);
+				app.rentalRequest.tillDay = Conversion.dateToUnixDay(newValue);
 			}
 
 			app.updateRentalRequestFee();
@@ -218,76 +219,20 @@ let app = new Vue({
 				app.rentalRequest.tillDay <= app.rentalRequest.fromDay
 			) {
 				app.rentalRequest.fee = 0;
+				app.rentalRequest.feeInEth = 0;
 
 				return;
 			}
 
 			app.rentalRequest.fee = (app.rentalRequest.tillDay - app.rentalRequest.fromDay) * app.rentalRequest.apartment.pricePerNight;
+			app.rentalRequest.feeInEth = Conversion.finneyToEth(app.rentalRequest.fee);
 		},
 
 		/**
 		 * Request a new rental. Will request an interaction key from the owner first and add the rental to the pending rentals.
 		 */
 		requestRental: async () => {
-			// Show the load message. Wait for the response, as following steps might freeze the browser for a second.
-			await app.showLoading('Requesting rental');
 
-			// Get or create the tenant ec account
-			app.loading.elements.account = {text: 'Initializing elliptic cryptography account'};
-			let ecAccount = await app.getOrCreateEcAccount(app.rentalRequest.account);
-			app.loading.elements.account.status = 'success';
-
-			// Subscribe to the answer topic
-			app.loading.elements.subscribe = {text: 'Subscribing to interaction key responses'};
-			app.subscribeToTopic(
-				'issue-interaction-key',
-
-				// Decrypt response with own EC account => private key
-				ecAccount.address
-			).then(() => {
-				app.loading.elements.subscribe.status = 'success';
-			});
-
-			// Send a new interaction key request
-			app.loading.elements.publish = {text: 'Sending encrypted interaction key request'};
-			await app.publishMessage(
-				// Send the tenants public key
-				JSON.stringify({
-					x: ecAccount.public.x,
-					y: ecAccount.public.y
-				}),
-
-				// Topic to send the message to
-				'request-interaction-key',
-
-				// Encrypt with owner's interaction key
-				app.getUint8ArrayBufferFromXY(app.rentalRequest.apartment.ownerPublicKey_x, app.rentalRequest.apartment.ownerPublicKey_y)
-			);
-			app.loading.elements.publish.status = 'success';
-
-			// Add the request to the pending requests
-			app.loading.elements.save = {text: 'Saving pending rental requests'};
-			app.pendingRentalRequests.push({
-				bcAccountAddress:  app.rentalRequest.account.address,
-				fromDay:           app.rentalRequest.fromDay,
-				tillDay:           app.rentalRequest.tillDay,
-				apartment:         app.rentalRequest.apartment.id,
-				apartmentIpfsHash: app.rentalRequest.apartment.ipfsHash,
-				fee:               (app.rentalRequest.tillDay - app.rentalRequest.fromDay) * app.rentalRequest.apartment.pricePerNight,
-				deposit:           app.rentalRequest.apartment.deposit,
-				contact:           app.rentalRequest.contact
-			});
-
-			// Save the tenant's data in local storage for autocompletion of further actions
-			window.localStorage.setItem('userName', app.rentalRequest.contact.name);
-			window.localStorage.setItem('userPhone', app.rentalRequest.contact.phone);
-			window.localStorage.setItem('userEmail', app.rentalRequest.contact.email);
-
-			// Save the requests in local storage
-			window.localStorage.setItem('pendingRentalRequests', JSON.stringify(app.pendingRentalRequests));
-			app.loading.elements.save.status = 'success';
-
-			app.hideLoading();
 		},
 
 		issueInteractionToken: tenantPublicKey => {
