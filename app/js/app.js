@@ -1,66 +1,30 @@
-// Define the server address (for now)
-const websocketAddress = 'wss://couchbc.com';
-const ipfsHost = {'host': 'couchbc.com', 'port': 443, 'protocol': 'https'};
-const ipfsGatewayUrl = '/ipfs/';
-
-// Salt used for randomnesss generation. Change this in your application.
-const salt = '4iMXBkp9o8q5lX0i264U9D3Zyas73m52';
-
-// Constants used for google api requests (maps, places, geocoding)
-const googleApiKey = 'AIzaSyBpuJvuXMUnbkZjS0XIQz_8hhZDdjNRvBE';
-const googleApiProject = 'couchbc-1540415979753';
-const pullInterval = 2000; // Pull every X milliseconds
-
-// Credentials for google pub/sub service account, retrieved from JSON. Service account must be limited to a role with the following permissions:
-// pubsub.subscriptions.consume
-// pubsub.subscriptions.create
-// pubsub.topics.attachSubscription
-// pubsub.topics.publish
-const googlePubSubKey = '-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDegsPPx9ryV6/Y\nYhMCUoujq5qmUvJbh8SQJlv5OHDXf5yNSviiYABeS2e4jXxxB6y40DNBVUibyJz4\ns9t+iYsJVRyjnYXWflTXazVID1c39wtHouwIMX/hKBh5xwaFBlQFVA7AMIxOB3fe\nCU72thGVEWGFyOYlr2m7VbGaJSpZ03IFeS+RMt0Ta93wI9Exin6xfulR+a/caOw5\nDuT8SEc9MBVHqiglEh2IQibnuG27cD6nqXT5wWuvLHjcacEQUkcHtBCs3vKW561c\nKLDIoeU4/fiq2CTOtjqiQ/fVy6fzdPaZ7S/vB2qPzi5kWnbzW+S0sXnTTCnTFR1/\nv9YHy5a1AgMBAAECggEAFMDMg5Yn2R+Nkph/HmHVjVPljirBWQEeN7WkMWfuumK4\nFsON0hMzJZhR2bg0iZRGK0yb4zWRmpoI7fdUewZYFew+yhHYmEtbHWZt50UrBNjB\nUBKlghQf0b+8HKuP85tF/eM7pvhANczjhK2IlGEh3a3r0x8MPCqSqXrSIEbkHtF5\n0nNJu9cD3B0F0L1gCxw62Wa4LGBRGKzaHBaceU0vAPXQ38nCNakttqWL71zFe3Ki\nOXB9Nd8/g5ptZIVqpKRypwGN1vkTW2TCrRhj5PGFJTC6UzaitMoNJnB8WU3mfZpI\na8e960ZqBSCFltcKx/X9USPe+cptcMaObVFCuJZkhwKBgQDz6c+QjDdfwX/QiJ3t\nL6+MQ+jFqmF+eFsNq51ABfzEQMd5K28C9PBv6mrFZw8a6bGozFD7xvJyBVSsZ7Wz\nr9uLM/2Zx4mUOPSmQRC8u80et5AzCoBQMVQEmuluXUDphdT1CKg0wLysfoi7gVO9\n4o3yxxgQF32BbI6WmrM3MrZKNwKBgQDpiXM1o/mDQwRozK31k7zWAYzxdLAmdcsJ\nIKB3Fa2wlrppPbBO/TABw3tX1PBnGgbi6l9AfzOvDtem+WQ9ibaRzQuC1LXJZWuU\nllOn2pkXOSA6Wiwmz2ZxkEIbqqnezWrQ1fgUHtg/T8xnCkjZOv0XguCrWuB3+iL3\nZLeEDjnAcwKBgQCJpziHATr3BYMWsyM9ip3t8R1bAK8I6u+oJWQXj8l5EH4Cuipq\nZsWSw58CTQlPTPgApV5G2Z5WDwAcVGNNR0AFrY+/y8avKf2YHjxN50b5wOrWg2Sq\n3UvnVW3L5UEPCYKHzxzuuJ9CUh7kgzY5gbROgWHpIvinpBZMlH3z9uC9vQKBgG7h\nP74cGH9l9lX7uCx89I93NP//MxNPohK3VvizZkANkHwfOfKG66AqvAk7pNiO1u4t\n8QOiYVugZGt2xU0icXhQLkLz00vHx4hIx3dOppkMGm0aGxRiLHWG1JxmLzkFts1o\nidyjuHB25smVbHkXNMtQ7HLvNtw/+xIS077zMiBZAoGAQ0t5X6gvFkPZ1v6/lxqm\nxnLYxmk374HxYD661O1YLs1LtVLH0RnSgYLgrs2H8B0LUt+P5ghQaVBkMMP/w7zR\nKtob71gjfBC/ChTpLR22JPcjIkboElLTt8C1Zu8yUG3cE2qujRoFLA4Jmfzo2LbR\n6MayIlCRzjx98zkigypSDBA=\n-----END PRIVATE KEY-----\n';
-const googlePubSubEmail = 'couchbc@couchbc-1540415979753.iam.gserviceaccount.com';
-const googlePubSubScopes = [
-	'https://www.googleapis.com/auth/cloud-platform',
-	'https://www.googleapis.com/auth/pubsub',
-];
-
-// Requires that the topic has already been created in Google API (for example using API explorer)
-const googlePublishUrl = 'https://pubsub.googleapis.com/v1/projects/' + googleApiProject +
-		'/topics/{topic}:publish';
-const googleSubscribeUrl = 'https://pubsub.googleapis.com/v1/projects/' + googleApiProject +
-		'/subscriptions/{subscription}';
-const googlePullUrl = 'https://pubsub.googleapis.com/v1/projects/' + googleApiProject +
-		'/subscriptions/{subscription}:pull';
-const googleAckUrl = 'https://pubsub.googleapis.com/v1/projects/' + googleApiProject +
-		'/subscriptions/{subscription}:acknowledge';
-
 // Import the page's SCSS. Webpack will know what to do with it.
 import '../scss/app.scss';
 
 // Import libraries we need.
 import {default as $} from 'jquery';
-import {default as Vue} from 'vue';
-import {default as Web3} from 'web3';
-import {default as IpfsApi} from 'ipfs-api';
-import {default as bs58} from 'bs58';
-import {default as uniqid} from 'uniqid';
+import Vue from 'vue';
 
 // Vue elements
 import Toasted from 'vue-toasted';
 import VueFilter from 'vue-filter';
 import Nl2br from 'vue-nl2br';
 import vSelect from 'vue-select';
-
-// Vue google map
 import * as VueGoogleMaps from 'vue2-google-maps';
-
-// Vue slideshow
 import {VueFlux, FluxPagination, Transitions} from 'vue-flux';
-
-// Import our contract artifacts and turn them into usable abstractions.
-import rent_artifacts from '../../build/contracts/Rent.json';
-
 import Datepicker from 'vuejs-datepicker';
+import store from './store.js';
+
+// Moment for formatting date
 import moment from 'moment';
+
+import {Web3Util} from './utils/Web3Util';
+import {PubSub} from './utils/PubSub';
+import {Apartment} from './classes/Apartment';
+import {MapsUtil} from './utils/MapsUtil';
+import {googleApiKey} from './credentials';
+import {IpfsUtil} from './utils/IpfsUtil';
+import {Notifications} from './utils/Notifications';
 
 // Blockies for account icons
 require('./blockies.min.js');
@@ -72,35 +36,7 @@ require('foundation-sites');
 require('webpack-jquery-ui/css.js');
 require('webpack-jquery-ui/tooltip.js');
 
-// Elliptic for elliptic curve cryptography
-const EC = require('elliptic').ec;
-const ec = new EC('secp256k1');
-
-// Eccrypto for ECIES
-const eccrypto = require('eccrypto');
-
-// Google OAuth authorization for pub/sub
-const {GoogleToken} = require('gtoken');
-const gtoken = new GoogleToken({
-	email: googlePubSubEmail,
-	scope: googlePubSubScopes,
-	key:   googlePubSubKey,
-});
-
-// Save the rent contract
-let rentContract;
-
-// Interval ids for subscriptions
-let subscriptionIntervals = {};
-
-const defaultToastOptions = {
-	duration: 3000,
-};
-
-function showMessage(message, options) {
-	Vue.toasted.show(message, $.extend({}, defaultToastOptions, options));
-}
-
+// Add date filters
 Vue.filter('formatDate', function(date) {
 	if (date) {
 		return moment(date).format('DD.MM.YYYY');
@@ -112,6 +48,7 @@ Vue.filter('formatDateTime', function(date) {
 	}
 });
 
+// Add vue components and filters
 Vue.use(Toasted);
 Vue.use(VueFilter);
 Vue.use(VueGoogleMaps, {
@@ -126,25 +63,22 @@ Vue.use(VueGoogleMaps, {
 let app = new Vue({
 	el:         '#app',
 	data:       () => ({
-		fluxOptions:        {
+		store,
+
+		// Library settings
+		fluxOptions:     {
 			autoplay: true,
 		},
-		fluxTransitions:    {
+		fluxTransitions: {
 			transitionFade: Transitions.transitionFade,
 		},
-		googleMapsGeocoder: null,
-
-		wallet: null,
+		disabledDates:   {
+			to: new Date(),
+		},
 
 		accounts: [],
 
 		page: 'start',
-
-		loading: {
-			shown:    false,
-			headline: '',
-			elements: {}
-		},
 
 		newApartmentData: {
 			account:       null,
@@ -171,13 +105,11 @@ let app = new Vue({
 			longitude: 0,
 		},
 		apartments:       [],
-		currentApartment: null,
+		apartmentImages:  null, // Cache to prevent slider from reloading
 
-		receivedMessages: [],
-
-		rentalRequestFrom:     '',
-		rentalRequestTill:     '',
-		rentalRequest:         {
+		rentalRequestFrom: '',
+		rentalRequestTill: '',
+		rentalRequest:     {
 			account:   null,
 			fromDay:   0,
 			tillDay:   0,
@@ -188,18 +120,15 @@ let app = new Vue({
 				email: window.localStorage.getItem('userEmail') || '',
 			},
 			fee:       0,
+			feeInEth:  0,
 			deposit:   0
 		},
-		pendingRentalRequests: JSON.parse(window.localStorage.getItem('pendingRentalRequests') || '[]'),
 
 		userApartments:   [],
 		rentals:          [],
 		currentRental:    null,
 		deductAmount:     0,
 		apartmentRentals: [],
-		disabledDates:    {
-			to: new Date(),
-		},
 	}),
 	watch:      {
 		rentalRequestFrom: (newValue) => {
@@ -219,55 +148,19 @@ let app = new Vue({
 	},
 	methods:    {
 		/**
-		 * Extract address data from a gmaps places result
-		 * @param placesResult
-		 * @return {{latitude: number, longitude: number, country: string, zip: string, city: string, street: string, number: string}}
-		 */
-		extractAddressData: placesResult => {
-			let addressData = {
-				latitude:  placesResult.geometry.location.lat(),
-				longitude: placesResult.geometry.location.lng(),
-			};
-
-			for (let component of placesResult.address_components) {
-				if (component.types.indexOf('country') !== -1) {
-					addressData.country = component.long_name;
-					continue;
-				}
-				if (component.types.indexOf('postal_code') !== -1) {
-					addressData.zip = component.long_name;
-					continue;
-				}
-				if (component.types.indexOf('locality') !== -1) {
-					addressData.city = component.long_name;
-					continue;
-				}
-				if (component.types.indexOf('route') !== -1) {
-					addressData.street = component.long_name;
-					continue;
-				}
-				if (component.types.indexOf('street_number') !== -1) {
-					addressData.number = component.long_name;
-				}
-			}
-
-			return addressData;
-		},
-
-		/**
 		 * Function called when user searches for apartments at an address
 		 *
 		 * @param placesResult
 		 */
 		changeSearchAddress: (placesResult) => {
-			let addressData = app.extractAddressData(placesResult);
+			let addressData = MapsUtil.extractAddressData(placesResult);
 
 			if (addressData.country && addressData.city) {
 				app.searchApartment(
-						addressData.country,
-						addressData.city,
-						addressData.latitude,
-						addressData.longitude,
+					addressData.country,
+					addressData.city,
+					addressData.latitude,
+					addressData.longitude,
 				);
 			}
 		},
@@ -278,117 +171,9 @@ let app = new Vue({
 			app.searchData.latitude = latitude;
 			app.searchData.longitude = longitude;
 
-			let cityHash = app.getCountryCityHash(country, city);
-
-			let numApartments = await rentContract.methods.getNumCityApartments(cityHash).call();
-
-			app.apartments = [];
-
-			// Fetch all apartments for the city
-			for (let i = 0; i < numApartments; i++) {
-				// Get the apartment for the city hash
-				rentContract.methods.getCityApartment(cityHash, i).call().then(async apartment => {
-					let promises = [];
-
-					apartment.reviews = [];
-					apartment.totalScore = 0;
-
-					// If the apartment has reviews, fetch them
-					if (apartment.numReviews > 0) {
-						for (let j = 0; j < apartment.numReviews; j++) {
-							// Add a promise that will only resolve when we have the review (with text)
-							promises.push(
-									new Promise(async (resolve, reject) => {
-										let review = await rentContract.methods.getApartmentReview(apartment.id, j).call();
-										let reviewText = await app.downloadDataFromHexHash(review.ipfsHash);
-
-										apartment.totalScore += review.score;
-										apartment.reviews.push({
-											score: review.score,
-											text:  reviewText,
-										});
-
-										resolve();
-									}),
-							);
-						}
-					}
-
-					// Test reviews
-					apartment.reviews.push({
-						score: 4,
-						text:  'Donec ullamcorper nulla non metus auctor fringilla. Etiam porta sem malesuada magna mollis euismod. Vivamus sagittis lacus vel augue laoreet rutrum faucibus dolor auctor. Etiam porta sem malesuada magna mollis euismod. Curabitur blandit tempus porttitor. Cras mattis consectetur purus sit amet fermentum.\n' +
-								       '\n' +
-								       'Aenean eu leo quam. Pellentesque ornare sem lacinia quam venenatis vestibulum. Maecenas sed diam eget risus varius blandit sit amet non magna. Vivamus sagittis lacus vel augue laoreet rutrum faucibus dolor auctor. Praesent commodo cursus magna, vel scelerisque nisl consectetur et. Nullam quis risus eget urna mollis ornare vel eu leo. Aenean lacinia bibendum nulla sed consectetur. Vestibulum id ligula porta felis euismod semper.',
-					});
-					apartment.reviews.push({
-						score: 3,
-						text:  'Fusce dapibus, tellus ac cursus commodo, tortor mauris condimentum nibh, ut fermentum massa justo sit amet risus. Aenean eu leo quam. Pellentesque ornare sem lacinia quam venenatis vestibulum. Aenean eu leo quam. Pellentesque ornare sem lacinia quam venenatis vestibulum. Praesent commodo cursus magna, vel scelerisque nisl consectetur et. Cras mattis consectetur purus sit amet fermentum. Integer posuere erat a ante venenatis dapibus posuere velit aliquet. Duis mollis, est non commodo luctus, nisi erat porttitor ligula, eget lacinia odio sem nec elit.\n' +
-								       '\n' +
-								       'Duis mollis, est non commodo luctus, nisi erat porttitor ligula, eget lacinia odio sem nec elit. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Aenean eu leo quam. Pellentesque ornare sem lacinia quam venenatis vestibulum. Maecenas sed diam eget risus varius blandit sit amet non magna.\n' +
-								       '\n' +
-								       'Nullam quis risus eget urna mollis ornare vel eu leo. Integer posuere erat a ante venenatis dapibus posuere velit aliquet. Donec ullamcorper nulla non metus auctor fringilla. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Vestibulum id ligula porta felis euismod semper.',
-					});
-					apartment.reviews.push({
-						score: 3,
-						text:  'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nullam id dolor id nibh ultricies vehicula ut id elit. Cras mattis consectetur purus sit amet fermentum. Praesent commodo cursus magna, vel scelerisque nisl consectetur et. Vestibulum id ligula porta felis euismod semper. Vestibulum id ligula porta felis euismod semper.',
-					});
-					apartment.reviews.push({
-						score: 5,
-						text:  'Nulla vitae elit libero, a pharetra augue. Aenean lacinia bibendum nulla sed consectetur. Donec id elit non mi porta gravida at eget metus. Duis mollis, est non commodo luctus, nisi erat porttitor ligula, eget lacinia odio sem nec elit. Donec id elit non mi porta gravida at eget metus.\n' +
-								       '\n' +
-								       'Duis mollis, est non commodo luctus, nisi erat porttitor ligula, eget lacinia odio sem nec elit. Donec sed odio dui. Donec sed odio dui. Integer posuere erat a ante venenatis dapibus posuere velit aliquet. Aenean eu leo quam. Pellentesque ornare sem lacinia quam venenatis vestibulum.',
-					});
-					apartment.totalScore = 15;
-
-					let details = await app.downloadDataFromHexHash(apartment.ipfsHash);
-					apartment.position = await app.getMapsAddressPosition(
-							details.street + ' ' + details.number + ', ' + details.city + ', ' + details.country,
-					);
-
-					// Add the apartment details to the apartment
-					$.extend(apartment, details);
-
-					// Wait till all reviews have been fetched, if any
-					await Promise.all(promises);
-
-					apartment.averageScore = (apartment.reviews.length > 0)
-							? apartment.totalScore / apartment.reviews.length
-							: 0;
-					app.apartments.push(apartment);
-				});
-			}
+			app.apartments = await Apartment.getCityApartments(country, city);
 
 			app.page = 'apartments';
-		},
-
-		/**
-		 * Get the longitude and latitude for the supplied address as object {ltd: 0.00, lng: 0.00}
-		 *
-		 * @param address
-		 * @return {Promise<object>}
-		 */
-		getMapsAddressPosition: async address => {
-			if (app.googleMapsGeocoder === null) {
-				app.googleMapsGeocoder = new google.maps.Geocoder();
-			}
-
-			return new Promise(function(resolve, reject) {
-				app.googleMapsGeocoder.geocode({'address': address}, function(results, status) {
-					if (status === 'OK') {
-						resolve({
-							lat: results[0].geometry.location.lat(),
-							lng: results[0].geometry.location.lng(),
-						});
-					} else {
-						console.error(status, results);
-
-						showMessage('Could not find location of address ' + address);
-
-						reject();
-					}
-				});
-			});
 		},
 
 		/**
@@ -418,18 +203,19 @@ let app = new Vue({
 		 */
 		showApartment: apartment => {
 			app.rentalRequest.apartment = apartment;
+			app.apartmentImages = apartment.getImageUrls();
 
 			app.page = 'apartment';
 		},
 
 		/**
-		 * Update the fee for a rental request
+		 * Update the fee for a rental request. Called when the rental request date changes
 		 */
 		updateRentalRequestFee: () => {
 			// Check if we have enough details to determine the rental fee
 			if (app.rentalRequest.apartment === null ||
-					app.rentalRequest.fromDay === 0 || app.rentalRequest.tillDay === 0 ||
-					app.rentalRequest.tillDay <= app.rentalRequest.fromDay
+				app.rentalRequest.fromDay === 0 || app.rentalRequest.tillDay === 0 ||
+				app.rentalRequest.tillDay <= app.rentalRequest.fromDay
 			) {
 				app.rentalRequest.fee = 0;
 
@@ -454,10 +240,10 @@ let app = new Vue({
 			// Subscribe to the answer topic
 			app.loading.elements.subscribe = {text: 'Subscribing to interaction key responses'};
 			app.subscribeToTopic(
-					'issue-interaction-key',
+				'issue-interaction-key',
 
-					// Decrypt response with own EC account => private key
-					ecAccount.address
+				// Decrypt response with own EC account => private key
+				ecAccount.address
 			).then(() => {
 				app.loading.elements.subscribe.status = 'success';
 			});
@@ -465,17 +251,17 @@ let app = new Vue({
 			// Send a new interaction key request
 			app.loading.elements.publish = {text: 'Sending encrypted interaction key request'};
 			await app.publishMessage(
-					// Send the tenants public key
-					JSON.stringify({
-						x: ecAccount.public.x,
-						y: ecAccount.public.y
-					}),
+				// Send the tenants public key
+				JSON.stringify({
+					x: ecAccount.public.x,
+					y: ecAccount.public.y
+				}),
 
-					// Topic to send the message to
-					'request-interaction-key',
+				// Topic to send the message to
+				'request-interaction-key',
 
-					// Encrypt with owner's interaction key
-					app.getUint8ArrayBufferFromXY(app.rentalRequest.apartment.ownerPublicKey_x, app.rentalRequest.apartment.ownerPublicKey_y)
+				// Encrypt with owner's interaction key
+				app.getUint8ArrayBufferFromXY(app.rentalRequest.apartment.ownerPublicKey_x, app.rentalRequest.apartment.ownerPublicKey_y)
 			);
 			app.loading.elements.publish.status = 'success';
 
@@ -512,27 +298,7 @@ let app = new Vue({
 			console.log('issue ' + interactionKey);
 		},
 
-		/**
-		 * Get the URLs for images for the apartment
-		 *
-		 * @param apartment
-		 */
-		getApartmentImages: (apartment) => {
-			let urls = [];
-
-			// Check if we have a primary image we can add
-			if (apartment.primaryImage) {
-				urls.push(app.getImageUrl(apartment.primaryImage));
-			}
-
-			// Add all other images
-			for (let ipfsHash of apartment.images) {
-				urls.push(app.getImageUrl(ipfsHash));
-			}
-
-			return urls;
-		},
-
+		/*
 		refuseRental: rental => {
 
 			let testId = 25;
@@ -563,146 +329,24 @@ let app = new Vue({
 				method.send({from: app.accounts[0], gas: gasAmount});
 			});
 		},
+		*/
 
 		/**
-		 * Upload a string to IPFS. Returns the IPFS address of the string.
-		 * @param str
-		 * @return {Promise<string>}
-		 */
-		uploadString: async str => {
-			// Get an IPFS connection
-			let ipfsConnection = IpfsApi(ipfsHost);
-
-			// Fill a file buffer with the string
-			let filledBuffer = Buffer(str);
-
-			return new Promise((resolve, reject) => {
-				// Add the file to IPFS
-				ipfsConnection.files.add(filledBuffer, (err, result) => {
-					if (err) {
-						console.error(err);
-
-						reject();
-						throw('Could not upload image to IPFS: ' + err);
-					}
-
-					console.log('String uploaded to ' + result[0].hash);
-
-					resolve(result[0].hash);
-				});
-			});
-		},
-
-		/**
-		 * Upload an image to IPFS. Returns the IPFS address of the image.
-		 *
-		 * @param inputElement
-		 * @return {Promise<string>}
-		 */
-		uploadImage:    async inputElement => {
-			// Return a promise that is resolved if the image upload succeeded
-			return new Promise((resolve, reject) => {
-				let reader = new FileReader();
-				reader.onloadend = () => {
-					// Get an IPFS connection
-					let ipfsConnection = IpfsApi(ipfsHost);
-
-					// Fill a file buffer
-					let filledBuffer = Buffer(reader.result);
-
-					// Add the file to IPFS
-					ipfsConnection.files.add(filledBuffer, (err, result) => {
-						if (err) {
-							console.error(err);
-
-							reject();
-							throw('Could not upload image to IPFS: ' + err);
-						}
-
-						console.log('Image uploaded to ' + result[0].hash);
-
-						resolve(result[0].hash);
-					});
-				};
-
-				reader.readAsArrayBuffer(inputElement.files[0]);
-			});
-		},
-		/**
-		 * Download a string from an IPFS address
-		 *
-		 * @param ipfsAddr
-		 * @return {Promise<string>}
-		 */
-		downloadString: async ipfsAddr => {
-			// Return a promise that is resolved with the ipfs string downloaded
-			return new Promise((resolve, reject) => {
-				let ipfsConnection = IpfsApi(ipfsHost);
-
-				// Get the string from IPFS
-				ipfsConnection.files.get(ipfsAddr, (err, files) => {
-					if (err) {
-						console.error(err);
-
-						reject();
-						// TODO: Catch exceptions in user initiated root function (problem: async/Promise!)
-						throw('Could not download data from IPFS: ' + err);
-					}
-
-					resolve(files[0].content);
-				});
-			});
-		},
-
-		/**
-		 * Upload data, optionally encrypting it in the process. Returns the prefixed SHA256 hex hash part of IPFS address.
-		 *
-		 * @param data   Data that will be JSON-encoded and uploaded (encrypted)
-		 * @param publicKeyBuffer Buffer containing the public key to be used for encryption, if any
-		 * @return {Promise<str>}
-		 */
-		uploadData: async (data, publicKeyBuffer) => {
-			let str = JSON.stringify(data);
-
-			if (publicKeyBuffer) {
-				str = await app.encryptString(str, publicKeyBuffer);
-			}
-
-			let ipfsAddress = await app.uploadString(str);
-
-			return app.ipfsAddrToHash(ipfsAddress);
-		},
-
-		/**
-		 * Download JSON encoded from the supplied SHA256 hex hash referencing an IPFS address, optionally decrypting it in the process
-		 *
-		 * @param hexHash   SHA256 hex encoded 0x prefixed hash
-		 * @param ecAccount EC account used for decryption or null
-		 * @return {Promise<object>}
-		 */
-		downloadDataFromHexHash: async (hexHash, ecAccount) => {
-			let ipfsAddress = app.hexHashToIpfsAddr(hexHash);
-
-			let str = await app.downloadString(ipfsAddress);
-
-			if (ecAccount) {
-				str = await app.decryptString(str, ecAccount.private.buffer);
-			}
-
-			return JSON.parse(str);
-		},
-
-		/**
-		 * React on a changed apartment address for new apartments
+		 * React on a changed apartment address when adding apartments apartments
 		 *
 		 * @param placesResult
 		 */
 		changeApartmentAddress: (placesResult) => {
-			let addressData = app.extractAddressData(placesResult);
+			let addressData = MapsUtil.extractAddressData(placesResult);
 
-			$.extend(app.newApartmentData, addressData);
+			Object.assign(app.newApartmentData, addressData);
 		},
 
+		/**
+		 * React on changed accounts when adding apartments
+		 *
+		 * @param account
+		 */
 		selectNewApartmentAccount: account => {
 			// Ignore selected accounts if they have been used by a tenant or interaction
 			if (account.type === 'tenant' || account.type === 'interaction') {
@@ -711,157 +355,37 @@ let app = new Vue({
 			app.newApartmentData.account = account;
 		},
 
+		/**
+		 * Add an apartment
+		 *
+		 * @param clickEvent
+		 * @returns {Promise<void>}
+		 */
 		addApartment: async clickEvent => {
-			// Display the loading message
-			app.showLoading('Adding apartment');
-
-			// Determine the owner Ec account first as this might require further interaction (e.g. entering a password)
 			let account = app.newApartmentData.account;
-
-			app.loading.elements.account = {text: 'Initializing elliptic cryptography account'};
-			let ownerEcAccount = await app.getOrCreateEcAccount(account);
-			app.loading.elements.account.status = 'success';
-
-			let details = {
-				title:         app.newApartmentData.title,
-				description:   app.newApartmentData.description,
-				street:        app.newApartmentData.street,
-				number:        app.newApartmentData.number,
-				zip:           app.newApartmentData.zip,
-				city:          app.newApartmentData.city,
-				country:       app.newApartmentData.country,
-				pricePerNight: app.newApartmentData.pricePerNight,
-				deposit:       app.newApartmentData.deposit,
-				primaryImage:  '',
-				images:        [],
-			};
-
-			app.loading.elements.images = {text: 'Uploading images to IPFS'};
-
-			// Upload images
-			let promises = [];
-
-			// Upload primary image
 			let primaryImageInputElement = document.getElementById('add-apartment-primary-image');
-			if (primaryImageInputElement.files[0]) {
-				promises.push(new Promise((resolve, reject) => {
-					app.uploadImage(primaryImageInputElement).then(hash => {
-						details.primaryImage = app.ipfsAddrToHash(hash);
+			let imageInputElements = $('.page.add-apartment input.add-image');
 
-						resolve();
-					});
-				}));
-			}
+			Apartment.add(account, app.newApartmentData, primaryImageInputElement, imageInputElements).then(() => {
+				// Clear the form
+				let account = app.newApartmentData.account;
+				Object.assign(app.$data.newApartmentData, app.$options.data.call(app).newApartmentData);
+				document.getElementById('apartment-address').value = '';
+				document.getElementById('add-apartment-primary-image').value = '';
+				app.newApartmentData.account = account;
+			});
 
-			// Upload other images
-			$('.page.add-apartment input.add-image').each((index, element) => {
-				if (element.files[0]) {
-					let index = $(element).data('index');
+			Web3Util.contract.once('ApartmentAdded',
+				{filter: {owner: account.address}}, (error, event) => {
+					if (error) {
+						Notifications.show('Could not add apartment');
+						console.error(error);
+						return;
+					}
 
-					promises.push(new Promise((resolve, reject) => {
-						app.uploadImage(element).then(hash => {
-							details.images[index] = app.ipfsAddrToHash(hash);
-
-							resolve();
-						});
-					}));
+					Notifications.show('Apartment added');
 				}
-			});
-
-			// Only proceed when all images have been uploaded
-			await Promise.all(promises);
-			app.loading.elements.images.status = 'success';
-
-			// Upload the details
-			app.loading.elements.details = {text: 'Uploading apartment details to IPFS'};
-			let detailsAddress = await app.uploadString(JSON.stringify(details));
-			app.loading.elements.details.status = 'success';
-
-			let cityHash = app.getCountryCityHash(app.newApartmentData.country, app.newApartmentData.city);
-
-			let parameters = [
-				ownerEcAccount.public.x,
-				ownerEcAccount.public.y,
-				app.ipfsAddrToHash(detailsAddress),
-				cityHash,
-			];
-
-			// Add a topic subscription to receive interaction key requests
-			app.loading.elements.subscribe = {text: 'Subscribe to interaction key requests'};
-			app.addTopicSubscription('request-interaction-key', ownerEcAccount.address).then(() => {
-				app.loading.elements.subscribe.status = 'success';
-			});
-
-			app.loading.elements.blockchain = {text: 'Sending apartment transaction to blockchain'};
-			// Estimate gas and call the addApartment function
-			let method = rentContract.methods.addApartment(...parameters);
-			method.estimateGas().then(gasAmount => {
-				method.send({from: account.address, gas: gasAmount}).on('transactionHash', () => {
-					app.loading.elements.blockchain.status = 'success';
-					app.hideLoading();
-				});
-			});
-
-			rentContract.once('ApartmentAdded',
-					{filter: {owner: app.newApartmentData.account.address}}, (error, event) => {
-						if (error) {
-							showMessage('Could not add apartment');
-							console.error(error);
-							return;
-						}
-
-						showMessage('Apartment added');
-
-						// Show the apartment listing for the city
-						app.searchApartment(app.newApartmentData.country, app.newApartmentData.city,
-								app.newApartmentData.latitude, app.newApartmentData.longitude);
-
-						// Clear the form
-						let account = app.newApartmentData.account;
-						Object.assign(app.$data.newApartmentData, app.$options.data.call(app).newApartmentData);
-						document.getElementById('apartment-address').value = '';
-						document.getElementById('add-apartment-primary-image').value = '';
-						app.newApartmentData.account = account;
-					});
-		},
-
-		/**
-		 * Get the hash for county and city by which apartments can be searched for
-		 *
-		 * @param country
-		 * @param city
-		 * @return string
-		 */
-		getCountryCityHash: (country, city) => {
-			return web3.utils.keccak256(JSON.stringify({
-				'country': country,
-				'city':    city,
-			}));
-		},
-
-		getTotalPrice: (apartment) => {
-			let days = app.dateToUnixDay(app.apartmentsTill) - app.dateToUnixDay(app.apartmentsFrom);
-
-			if (days > 0) {
-				return app.pricePerNight * days;
-			}
-
-			return null;
-		},
-
-		/**
-		 * Get an image URL for an IPFS image, using the specified address (either multihash or 0x prefixed hex hash)
-		 *
-		 * @param address
-		 * @return {string}
-		 */
-		getImageUrl: (address) => {
-			// Check if we need to decode an IPFS hex hash
-			if (address.substr(0, 2) === '0x') {
-				return ipfsGatewayUrl + app.hexHashToIpfsAddr(address);
-			}
-
-			return ipfsGatewayUrl + address;
+			);
 		},
 
 		/**
@@ -925,89 +449,56 @@ let app = new Vue({
 		},
 
 		/**
-		 * Check all accounts for existing owner / tenant profiles and interaction keys
-		 *
-		 * @param bcAccounts
+		 * Initiate the application
 		 */
-		determineAccounts: bcAccounts => {
-			let i = 0;
-			let isChrome = /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor);
+		start: async () => {
+			$(document).foundation();
 
-			for (let bcAccount of bcAccounts) {
-				// Only show half of the accounts to chrome and the other half to other browsers (for test purposes)
-				if (isChrome && i++ % 2 === 0) {
-					continue;
-				}
-				else if (!isChrome && i++ % 2 === 1) {
-					continue;
-				}
+			// Enable tooltips
+			$(document).tooltip({
+				selector:  '.tooltip[title]',
+				container: 'body',
+			});
 
-				rentContract.methods.getAddressType().call({from: bcAccount}, (error, type) => {
-					let account = {
-						'address': bcAccount,
-						'type':    type,
-						'label':   bcAccount.substr(0, 12) + '...' + bcAccount.substr(36)
-					};
+			app.store.commit('setGoogleMapsGeocoder', new google.maps.Geocoder());
 
-					app.accounts.push(account);
+			app.accounts = await Web3Util.fetchAccounts();
+			app.assignDefaultAccounts();
 
-					if (app.newApartmentData.account === null && type === 'owner') {
-						app.newApartmentData.account = account;
-					} else if (app.rentalRequest.account === null && type === 'tenant') {
-						app.rentalRequest.account = account;
-					}
+			app.registerSubscriptions();
 
-					// TODO: Determine accounts with interaction keys (locally)
-				});
-			}
+			app.registerEvents();
+
+			app.loadPendingRentalRequests();
 		},
 
 		/**
-		 * Initiate the application
+		 * Assign default accounts based on the first available account with the same type
 		 */
-		start: () => {
-			// Get the contract from the artifacts
-			rentContract = new web3.eth.Contract(rent_artifacts.abi, rent_artifacts.networks[4447].address);
-
-			web3.eth.getAccounts((error, accounts) => {
-				if (error) {
-					showMessage('There was an error fetching your accounts');
-					console.error(error);
-					return;
+		assignDefaultAccounts: () => {
+			for (let account of app.accounts) {
+				if (account.type === 'owner' && app.newApartmentData.account === null) {
+					app.newApartmentData.account = account;
+					continue;
 				}
-
-				if (accounts.length === 0) {
-					showMessage(
-							'Couldn\'t get any accounts! Make sure your Ethereum client is configured correctly.');
-					return;
+				if (account.type === 'tenant' && app.rentalRequest.account === null) {
+					app.rentalRequest.account = account;
 				}
-
-				app.determineAccounts(accounts);
-
-				app.registerSubscriptions();
-
-				app.registerEvents();
-
-				$(document).foundation();
-
-				// Enable tooltips
-				$(document).tooltip({
-					selector:  '.tooltip[title]',
-					container: 'body',
-				});
-
-				// Test subscriptions
-				//app.subscribeToTopic('request-interaction-key');
-				//app.publishMessage('abc', 'request-interaction-key');
-				//app.publishMessage('def', 'request-interaction-key');
-				//app.publishMessage('ghi', 'request-interaction-key');
-			});
+			}
 		},
 
 		/**
 		 * Register subscription listeners
 		 */
 		registerSubscriptions: () => {
+			// Register topic processors
+			PubSub.registerTopicProcessor('request-interaction-token', (message) => {
+				app.issueInteractionToken(JSON.parse(message));
+			});
+			PubSub.registerTopicProcessor('issue-interaction-token', (message) => {
+				app.addRentalRequestToBlockchain(JSON.parse(message));
+			});
+
 			// Check if we have subscriptions
 			let topicSubscriptions = window.localStorage.getItem('topicSubscriptions');
 
@@ -1020,7 +511,16 @@ let app = new Vue({
 			topicSubscriptions = JSON.parse(topicSubscriptions);
 
 			for (let topic in topicSubscriptions) {
-				app.subscribeToTopic(topic, topicSubscriptions[topic]);
+				PubSub.subscribeToTopic(topic, topicSubscriptions[topic]);
+			}
+		},
+
+		loadPendingRentalRequests: () => {
+			// Load the pending rental requests from localStorage
+			let pendingRentalRequests = JSON.parse(window.localStorage.getItem('pendingRentalRequests') || '[]');
+
+			for (let pendingRequest of pendingRentalRequests) {
+
 			}
 		},
 
@@ -1028,165 +528,21 @@ let app = new Vue({
 		 * Registere event listeners
 		 */
 		registerEvents: () => {
-			rentContract.events.Test({}, (error, event) => {
+			Web3Util.contract.events.Test({}, (error, event) => {
 				console.log(event.returnValues);
 			});
-			rentContract.events.TestAddr({}, (error, event) => {
+			Web3Util.contract.events.TestAddr({}, (error, event) => {
 				console.log(event.returnValues);
 			});
 
 			return;
-
-			rentContract.events.ApartmentAdded({userAddress: app.account}, (error, event) => {
-				if (error) {
-					console.error(error);
-					showMessage('Apartment could not be added');
-					return;
-				}
-
-				showMessage('Apartment successfully added');
-
-				app.loadApartments();
-				app.loadUserApartments();
-			});
-
-			rentContract.events.ApartmentEnabled({userAddress: app.account}, (error, event) => {
-				if (error) {
-					console.error(error);
-					showMessage('Apartment could not be enabled');
-					return;
-				}
-				showMessage('Apartment successfully enabled');
-
-				app.loadApartments();
-				app.loadUserApartments();
-			});
-			rentContract.events.ApartmentDisabled({userAddress: app.account}, (error, event) => {
-				if (error) {
-					console.error(error);
-					showMessage('Apartment could not be disabled');
-					return;
-				}
-				showMessage('Apartment successfully disabled');
-
-				app.loadApartments();
-				app.loadUserApartments();
-			});
-
-			rentContract.events.ImageAdded({userAddress: app.account}, (error, event) => {
-				if (error) {
-					console.error(error);
-					showMessage('Image could not be added');
-					return;
-				}
-
-				showMessage('Image successfully added');
-
-				// Add the image to the apartment
-				for (let currentApartment of app.apartments) {
-					if (currentApartment.id === event.returnValues.apartmentId) {
-						app.apartments.images.push(event.returnValues.apartmentId);
-						return;
-					}
-				}
-
-			});
-
-			rentContract.events.Rented({userAddress: app.account}, (error, event) => {
-				if (error) {
-					console.error(error);
-					showMessage('Apartment could not be rented');
-					return;
-				}
-
-				showMessage('Apartment successfully rented');
-
-				app.apartmentsFrom = '';
-				app.apartmentsTill = '';
-
-				if (app.page === 'apartments') {
-					app.page = 'rentals';
-				}
-
-				app.updateUserRentals();
-				app.refreshBalance();
-			});
-
-			rentContract.events.DepositRefunded({ownerAddress: app.account}, (error, event) => {
-				if (error) {
-					console.error(error);
-					showMessage('Deposit could not be refunded');
-					return;
-				}
-
-				showMessage('Deposit successfully refunded');
-
-				app.deductAmount = 0;
-
-				if (app.page === 'refund-deposit') {
-					app.page = 'user-apartments';
-				}
-
-				app.refreshBalance();
-			});
-			rentContract.events.DepositRefunded({tenantAddress: app.account}, (error, event) => {
-				if (error) {
-					console.error(error);
-					return;
-				}
-
-				showMessage('Deposit claimable for rental ' + event.returnValues.rentalId + ' (' +
-						event.returnValues.deductedAmount + ' credits have been deducted)');
-
-				app.deductAmount = 0;
-
-				if (app.page === 'refund-deposit') {
-					app.page = 'user-apartments';
-				}
-
-				app.updateUserRentals();
-			});
-			rentContract.events.DepositClaimed({userAddress: app.account}, (error, event) => {
-				if (error) {
-					console.error(error);
-					showMessage('Deposit could not be claimed');
-					return;
-				}
-
-				showMessage('Deposit successfully claimed');
-				app.refreshBalance();
-				app.updateUserRentals();
-			});
-
-			rentContract.events.Transferred({userAddress: app.account}, (error, event) => {
-				if (error) {
-					console.error(error);
-					showMessage('Failed to buy credits');
-					return;
-				}
-				showMessage('Credits successfully bought');
-
-				app.transferEth = 0;
-
-				app.balance = event.returnValues.newBalance;
-				app.refreshEthBalance();
-			});
-
-			rentContract.events.Paidout({userAddress: app.account}, (error, event) => {
-				if (error) {
-					console.error(error);
-					showMessage('Failed to pay out credits');
-					return;
-				}
-				showMessage('Successfully paid out credits');
-
-				app.payoutCredits = 0;
-
-				app.balance = event.returnValues.newBalance;
-				app.refreshEthBalance();
-			});
 		},
 
+		/**
+		 * Load a preview when the image source is changed
+		 *
+		 * @param event
+		 */
 		changeImageSrc: event => {
 			let input = event.target;
 			let previewImg = $(input).next('img.preview');
@@ -1207,651 +563,14 @@ let app = new Vue({
 			reader.readAsDataURL(input.files[0]);
 		},
 
-		// Messaging
-
 		/**
-		 * Publish a message to the given topic, optionally encrypting it using the publicKeyBuffer
-		 *
-		 * @param message
-		 * @param topic
-		 * @param publicKeyBuffer
-		 * @returns {Promise<*>}
-		 */
-		publishMessage: async (message, topic, publicKeyBuffer) => {
-			let url = googlePublishUrl.replace('{topic}', topic);
-
-			// Check if we need to encrypt the message
-			if (publicKeyBuffer) {
-				// Add VALID to the encrypted message for easy checking
-				message = await app.encryptString('VALID ' + message, publicKeyBuffer);
-			}
-
-			// Create the message
-			let data = {
-				messages: [
-					{
-						data: btoa(message),
-					},
-				],
-			};
-
-			// Get an access token
-			let accessToken = await gtoken.getToken();
-
-			// Send the request as ajax
-			return $.ajax({
-				url:         url,
-				data:        JSON.stringify(data),
-				dataType:    'json',
-				contentType: 'application/json',
-				method:      'POST',
-				headers:     {
-					'Authorization': 'Bearer ' + accessToken,
-				},
-			});
-		},
-
-		/**
-		 * Add a topic subscription that will be restored when the page is reloaded, and subscribe to the topic
-		 *
-		 * @param topic
-		 * @param ecAccountAddress
-		 * @return {Promise<void>}
-		 */
-		addTopicSubscription: async (topic, ecAccountAddress) => {
-			// Get the existing subscription registrations
-			let topicSubscriptions = window.localStorage.getItem('topicSubscriptions');
-
-			// Create or parse the hashmap
-			topicSubscriptions = (topicSubscriptions === null)
-					? {}
-					: JSON.parse(topicSubscriptions);
-
-			// Add the topic subscription
-			topicSubscriptions[topic] = ecAccountAddress || null;
-
-			// Store the topic subscriptions
-			window.localStorage.setItem('topicSubscriptions', JSON.stringify(topicSubscriptions));
-
-			app.subscribeToTopic(topic, ecAccountAddress);
-		},
-
-		/**
-		 * Subscribe to a topic. If ecAccountAddress is given, tries to decrypt the message using the ec account stored at the specified address.
-		 * @param topic
-		 * @param ecAccountAddress
-		 * @returns {Promise<void>}
-		 */
-		subscribeToTopic: async (topic, ecAccountAddress) => {
-			// Check if we already have a subscription id for the topic; if so, we can start listening
-			let subscription = window.localStorage.getItem('topic.' + topic + '.subscription');
-			if (subscription) {
-				app.listenToSubscription(JSON.parse(subscription));
-				return;
-			}
-
-			// Create a new subscription
-			subscription = {
-				id:               app.getRandomSubscriptionId(),
-				topic:            topic,
-				ecAccountAddress: ecAccountAddress || null,
-			};
-
-			// Create the request
-			let url = googleSubscribeUrl.replace('{subscription}', subscription.id);
-			let data = {
-				topic: 'projects/' + googleApiProject + '/topics/' + topic,
-			};
-
-			// Get an access token
-			let accessToken = await gtoken.getToken();
-
-			// Send the request
-			await $.ajax({
-				url:         url,
-				data:        JSON.stringify(data),
-				dataType:    'json',
-				contentType: 'application/json',
-				method:      'PUT',
-				headers:     {
-					'Authorization': 'Bearer ' + accessToken,
-				},
-			});
-
-			// Store the subscription in localStorage
-			window.localStorage.setItem('topic.' + topic + '.subscription', JSON.stringify(subscription));
-
-			// Listen to the subscription
-			app.listenToSubscription(subscription);
-		},
-
-		/**
-		 * Get a random subscription id to be used with google pub/sub subscriptions
-		 *
-		 * @returns {string}
-		 */
-		getRandomSubscriptionId: () => {
-			return 'sub-' + web3.utils.sha3(uniqid() + salt + uniqid() + Math.round(Math.random() * Math.pow(10, 20)));
-		},
-
-		/**
-		 * Listen to a subscription. Creates a period check to fetch messages from the subscription.
-		 *
-		 * @param subscription
-		 */
-		listenToSubscription: subscription => {
-			// If we already listen to the subscription, we're done
-			if (subscriptionIntervals['interval-' + subscription.id]) {
-				return;
-			}
-
-			// Periodically pull from the subscription
-			subscriptionIntervals['interval-' + subscription.id] = window.setInterval(() => {
-				app.pullFromSubscription(subscription);
-			}, pullInterval);
-		},
-
-		/**
-		 * Pull messages from the specified subscription. Hands the retrieved messages of to processMessage.
-		 *
-		 * @param subscription
-		 * @return {Promise<void>}
-		 */
-		pullFromSubscription: async (subscription) => {
-			let url = googlePullUrl.replace('{subscription}', subscription.id);
-			let data = {
-				maxMessages:       10,
-				returnImmediately: true,
-			};
-
-			// Get an access token
-			let accessToken = await gtoken.getToken();
-
-			// Send the request
-			let result = await $.ajax({
-				url:         url,
-				data:        JSON.stringify(data),
-				dataType:    'json',
-				contentType: 'application/json',
-				method:      'POST',
-				headers:     {
-					'Authorization': 'Bearer ' + accessToken,
-				},
-			});
-
-			// If we don't have any messages, we're done
-			if (typeof(result.receivedMessages) === 'undefined') {
-				return;
-			}
-
-			// Construct a new request
-			url = googleAckUrl.replace('{subscription}', subscription.id);
-			data = {
-				ackIds: [],
-			};
-
-			// Add the messages to the topic messages
-			for (let message of result.receivedMessages) {
-				// Process the message if we haven't done it yet
-				if (app.receivedMessages.indexOf(message.message.messageId) === -1) {
-					let data = atob(message.message.data);
-
-					// If we don't need to decrypt the message, we can directly process it
-					if (subscription.ecAccountAddress === null) {
-						app.processTopicMessage(subscription.topic, data);
-						app.receivedMessages.push(message.message.messageId);
-					}
-
-					let ecAccount = await app.getEcAccount(subscription.ecAccountAddress);
-
-					data = await app.decryptString(data, ecAccount.private.buffer);
-
-					// Only process if the message was decrypted properly
-					if (data != null && data.substr(0, 6) === 'VALID ') {
-						app.processTopicMessage(subscription.topic, data.substr(6));
-					}
-
-					app.receivedMessages.push(message.message.messageId);
-				}
-
-				// Add message to messages to ack
-				data.ackIds.push(message.ackId);
-			}
-
-			// Send request to acknowledge receipt
-			$.ajax({
-				url:         url,
-				data:        JSON.stringify(data),
-				dataType:    'json',
-				contentType: 'application/json',
-				method:      'POST',
-				headers:     {
-					'Authorization': 'Bearer ' + accessToken,
-				},
-			});
-		},
-
-		processTopicMessage: (topic, message) => {
-			if (topic === 'request-interaction-token') {
-				app.issueInteractionToken(JSON.parse(message));
-				return;
-			}
-			if (topic === 'issue-interaction-token') {
-				app.addRentalRequestToBlockchain(JSON.parse(message));
-			}
-		},
-
-		// Cryptography
-
-		/**
-		 * Get the wallet. Asks user for password if wallet hasn't been decrypted or created yet
-		 *
-		 * @return {web3.eth.accounts.wallet}
-		 */
-		getWallet: async () => {
-			if (app.wallet) {
-				return app.wallet;
-			}
-
-			// Check if we have a wallet; if so, ask user for password
-			if (window.localStorage.getItem('web3js_wallet')) {
-				// TODO: Implement asking for password
-				let password = 'secret';
-
-				let wallet = web3.eth.accounts.wallet.load(password);
-
-				// TODO: Retry password till we have a wallet
-
-				app.walletPassword = password;
-				app.wallet = wallet;
-				return wallet;
-			}
-
-			// Otherwise, ask user to specify password for new wallet
-			// TODO: Implement asking for password
-			let password = 'secret';
-
-			app.walletPassword = password;
-			app.wallet = web3.eth.accounts.wallet.create();
-
-			return app.wallet;
-		},
-
-		/**
-		 * Get or create an EC account to be used in association with the bc address
-		 * Returns an object with:
-		 * {
-		 *   private: {
-		 *       hex:       "0x0000...",     (0x + 64 hex encoded bytes) = 130 chars
-		 *       buffer:    Uint8Array(129)  Buffer to be used with eccrypto
-		 *   }
-		 *   public: {
-		 *       x:         "0x0000...",     (0x + 32x hex encoded bytes = 66 chars)
-		 *       y:         "0x0000...",     (0x + 32y bytes hex = 66 chars)
-		 *       buffer:    Uint8Array(65)   Buffer to be used with eccrypto
-		 *   }
-		 *   address:     "0x0000..."        (0x + 32 bytes hex address as would be used in blockchain account and can be used for signature validation)
-		 * }
-		 */
-		getOrCreateEcAccount: async bcAccount => {
-			// Try to catch the ec account associated with the address
-			let ecAccount = await app.getEcAccountForBcAccount(bcAccount.address);
-
-			// Check if we found an EC account; if we did, return the public key
-			if (ecAccount != null) {
-				return ecAccount;
-			}
-
-			// Check if the account is already registered at the blockchain as owner or tenant account;
-			// in this case we should already have a public key for it => show an error
-			if (bcAccount.type === 'owner' || bcAccount.type === 'tenant') {
-				showMessage('Could not get public key for existing ' + bcAccount.type + ' account');
-
-				return null;
-			}
-
-			// Otherwise, generate an EC account
-			ecAccount = await app.generateEcAccount();
-
-			// Store the EC account address in local storage to associate it with the current bc account
-			window.localStorage.setItem('ecAccounts.' + bcAccount.address, ecAccount.address);
-
-			// Return the account
-			return ecAccount;
-		},
-
-		/**
-		 * Get the EC account associated with the specified blockchain address in local storage.
-		 * Returns null if no account is associated with the address or an object with:
-		 * {
-		 *   private: {
-		 *       hex:       "0x0000...",     (0x + 64 hex encoded bytes) = 130 chars
-		 *       buffer:    Uint8Array(129)  Buffer to be used with eccrypto
-		 *   }
-		 *   public: {
-		 *       x:         "0x0000...",     (0x + 32x hex encoded bytes = 66 chars)
-		 *       y:         "0x0000...",     (0x + 32y bytes hex = 66 chars)
-		 *       buffer:    Uint8Array(65)   Buffer to be used with eccrypto
-		 *   }
-		 *   address:     "0x0000..."        (0x + 32 bytes hex address as would be used in blockchain account and can be used for signature validation)
-		 * }
-		 */
-		getEcAccountForBcAccount: async bcAddress => {
-			// Local storage is acting as hashmap: BC account address => EC account address
-
-			// The account address is used to find the key; the address contained within is NOT the same as the account address
-			let ecAccountAddress = window.localStorage.getItem('ecAccounts.' + bcAddress);
-
-			if (ecAccountAddress) {
-				return await app.getEcAccount(ecAccountAddress);
-			}
-
-			return null;
-		},
-
-		/**
-		 * Get an EC account for the given EC account address from the wallet
-		 *
-		 * Returns null if no Ec account was found or an object with:
-		 * {
-		 *   private: {
-		 *       hex:       "0x0000...",     (0x + 64 hex encoded bytes) = 130 chars
-		 *       buffer:    Uint8Array(129)  Buffer to be used with eccrypto
-		 *   }
-		 *   public: {
-		 *       x:         "0x0000...",     (0x + 32x hex encoded bytes = 66 chars)
-		 *       y:         "0x0000...",     (0x + 32y bytes hex = 66 chars)
-		 *       buffer:    Uint8Array(65)   Buffer to be used with eccrypto
-		 *   }
-		 *   address:     "0x0000..."        (0x + 32 bytes hex address as would be used in blockchain account and can be used for signature validation)
-		 * }
-		 */
-		getEcAccount: async address => {
-			// Get the wallet
-			let wallet = await app.getWallet();
-
-			// Check if an Ec account exists at the address
-			if (typeof(wallet[address]) === 'undefined') {
-				return null;
-			}
-
-			return app.getEcAccountForWalletAccount(wallet[address]);
-		},
-
-		/**
-		 * Generate a new account used for EC cryptography.
-		 * Stores the generated account in the user's encrypted wallet.
-		 *
-		 * Returns an object with:
-		 * {
-		 *   private: {
-		 *       hex:       "0x0000...",     (0x + 64 hex encoded bytes) = 130 chars
-		 *       buffer:    Uint8Array(129)  Buffer to be used with eccrypto
-		 *   }
-		 *   public: {
-		 *       x:         "0x0000...",     (0x + 32x hex encoded bytes = 66 chars)
-		 *       y:         "0x0000...",     (0x + 32y bytes hex = 66 chars)
-		 *       buffer:    Uint8Array(65)   Buffer to be used with eccrypto
-		 *   }
-		 *   address:     "0x0000..."        (0x + 32 bytes hex address as would be used in blockchain account and can be used for signature validation)
-		 * }
-		 */
-		generateEcAccount: async () => {
-			// Get the wallet
-			let wallet = await app.getWallet();
-
-			let keyPair = ec.genKeyPair();
-
-			let privateKey = keyPair.getPrivate().toBuffer();
-			let publicKey = keyPair.getPublic();
-
-			// This is the same: (eccrypto always adds 04 in front of x and y point of public key)
-			//console.log('0x' + Buffer(eccrypto.getPublic(privateKey)).toString('hex'));
-			//console.log('0x04' + (keyPair.getPublic().x.toString(16)) + (keyPair.getPublic().y.toString(16)));
-
-			let pkHex = '0x' + privateKey.toString('hex');
-			let account = web3.eth.accounts.privateKeyToAccount(pkHex);
-			let xHex = '0x' + publicKey.x.toString(16);
-			let yHex = '0x' + publicKey.y.toString(16);
-
-			// Save the account in the wallet
-			wallet.add(account);
-			wallet.save(app.walletPassword);
-
-			return {
-				private: pkHex,
-				public:  {
-					x:      xHex,
-					y:      yHex,
-					buffer: app.getUint8ArrayBufferFromXY(xHex, yHex),
-				},
-				address: account.address,
-			};
-		},
-
-		/**
-		 * Get an EC account for the specified private key.
-		 * Does not save or fetch the account from the wallet; the EC account is purely generated in memory.
-		 *
-		 * Returns an object with:
-		 * {
-		 *   private: {
-		 *       hex:       "0x0000...",     (0x + 64 hex encoded bytes) = 130 chars
-		 *       buffer:    Uint8Array(129)  Buffer to be used with eccrypto
-		 *   }
-		 *   public: {
-		 *       x:         "0x0000...",     (0x + 32x hex encoded bytes = 66 chars)
-		 *       y:         "0x0000...",     (0x + 32y bytes hex = 66 chars)
-		 *       buffer:    Uint8Array(65)   Buffer to be used with eccrypto
-		 *   }
-		 *   address:     "0x0000..."        (0x + 32 bytes hex address as would be used in blockchain account and can be used for signature validation)
-		 * }
-		 *
-		 * @param account
-		 * @return {{private: string, public: {x: string, y: string, combined: string}, address: *}}
-		 */
-		getEcAccountForWalletAccount: account => {
-			// Get the public key for the private key
-			let privateKeyArray = app.hexToUint8Array(account.privateKey.substr(2));
-
-			let publicKeyHex = Buffer(eccrypto.getPublic(privateKeyArray)).toString('hex');
-
-			let xHex = '0x' + publicKeyHex.substr(2, 64);
-			let yHex = '0x' + publicKeyHex.substr(66);
-
-			return {
-				private: {
-					hex:    account.privateKey,
-					buffer: Buffer(privateKeyArray),
-				},
-				public:  {
-					x:      xHex,
-					y:      yHex,
-					buffer: app.getUint8ArrayBufferFromXY(xHex, yHex),
-				},
-				address: account.address,
-			};
-		},
-
-		/**
-		 * Encrypt the string using the supplied public key buffer
-		 *
-		 * @param str
-		 * @param publicKeyBuffer
-		 * @return {Promise<Buffer>}
-		 */
-		encryptString: async (str, publicKeyBuffer) => {
-			console.debug('Encrypting ' + str + ' with:', publicKeyBuffer);
-
-			// Encrypt the message
-			let result = await eccrypto.encrypt(publicKeyBuffer, Buffer(str));
-
-			// Retrieve the elements of the encrypted message and pack them into an serializable object
-			let message = [
-				result.iv.toString('hex'),
-				result.ephemPublicKey.toString('hex'),
-				result.ciphertext.toString('hex'),
-				result.mac.toString('hex')
-			];
-			let jsonStr = JSON.stringify(message);
-
-			console.debug('Encryption successful: ', jsonStr);
-
-			return jsonStr;
-		},
-
-		/**
-		 * Decrypt the string using the supplied private key buffer
-		 *
-		 * @param str
-		 * @param privateKeyBuffer
-		 * @return {Promise<Buffer>}
-		 */
-		decryptString: async (str, privateKeyBuffer) => {
-			console.debug('Trying to decrypt ' + str + ' with:', privateKeyBuffer);
-
-			try {
-				// Extract the elements of the json string and convert them to Buffers
-				let arr = JSON.parse(str);
-				let message = {
-					iv:             Buffer(app.hexToUint8Array(arr[0])),
-					ephemPublicKey: Buffer(app.hexToUint8Array(arr[1])),
-					ciphertext:     Buffer(app.hexToUint8Array(arr[2])),
-					mac:            Buffer(app.hexToUint8Array(arr[3])),
-				};
-
-				// Try to decrypt the message
-				let result = await eccrypto.decrypt(privateKeyBuffer, message);
-				let resultString = result.toString();
-
-				console.debug('Decryption successful: ', resultString);
-
-				return resultString;
-			}
-			catch (e) {
-				console.debug('Decryption failed; returning null');
-				return null;
-			}
-		},
-
-		/**
-		 * Get an uint8array buffer to use with eccrypto from a public point
-		 * @param point
-		 * @return {Uint8Array}
-		 */
-		getUint8ArrayBufferFromPoint: point => {
-			let arr = new Uint8Array(65);
-			arr[0] = 4;
-			arr.set(point.x.toBuffer(), 1);
-			arr.set(point.y.toBuffer(), 33);
-
-			return Buffer(new Uint8Array(arr));
-		},
-
-		/**
-		 * Get an uint8array buffer to use with eccrypto from a x and y 0x prefixed hex coordinates
-		 * @param x
-		 * @param y
-		 * @return {Uint8Array}
-		 */
-		getUint8ArrayBufferFromXY: (x, y) => {
-			let arr = new Uint8Array(65);
-			arr[0] = 4;
-			arr.set(app.hexToUint8Array(x.substr(2)), 1);
-			arr.set(app.hexToUint8Array(y.substr(2)), 33);
-
-			return Buffer(arr);
-		},
-
-		/**
-		 * Convert a hex string to an Uint8 array
-		 *
-		 * @param hex
-		 * @return {Uint8Array}
-		 */
-		hexToUint8Array: (hex) => {
-			return new Uint8Array(hex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
-		},
-
-		// Date
-		dateToUnixDay: date => {
-			return Math.floor(date.getTime() / (1000 * 60 * 60 * 24));
-		},
-
-		// Units
-		weiToEth:    wei => {
-			return Math.floor(wei / Math.pow(10, 15)) / Math.pow(10, 3);
-		},
-		ethToWei:    eth => {
-			return eth * Math.pow(10, 18);
-		},
-		weiToFinney: wei => {
-			return Math.floor(wei / Math.pow(10, 15));
-		},
-		finneyToWei: finney => {
-			return finney * Math.pow(10, 15);
-		},
-		finneyToEth: finney => {
-			return finney / 1000;
-		},
-
-		// IPFS utilities
-		/**
-		 * Get a hex 0x prefixed hash from an IPFS address. Should only be used with SHA256 addresses.
+		 * Get the image url for the specified hash
 		 *
 		 * @param address
-		 * @return {string}
+		 * @returns {string}
 		 */
-		ipfsAddrToHash: address => {
-			return '0x' + (bs58.decode(address).slice(2).toString('hex'));
-		},
-
-		/**
-		 * Get an IPFS address from an hex 0x prefixed hash. Should only be used with SHA256 hashes.
-		 *
-		 * @param hexHash
-		 * @return {string}
-		 */
-		hexHashToIpfsAddr: hexHash => {
-			return bs58.encode(Buffer.from('1220' + hexHash.substr(2), 'hex'));
-		},
-
-		// Loading / overlay
-
-		/**
-		 * Show a loading message. Returns a promise that will resolve once the loading message is fully displayed.
-		 *
-		 * @param headline
-		 * @returns {Promise<any>}
-		 */
-		showLoading: headline => {
-			app.loading.headline = headline;
-			app.loading.messages = {};
-
-			app.loading.shown = true;
-
-			return new Promise((resolve, reject) => {
-				setTimeout(() => {
-					resolve();
-				}, 300);
-			});
-		},
-
-		/**
-		 * Wait one second, then hide the loading message. Returns a promise that will resolve if the loading message is gone.
-		 *
-		 * @returns {Promise<any>}
-		 */
-		hideLoading: () => {
-			setTimeout(() => {
-				app.loading.shown = false;
-			}, 1000);
-
-			return new Promise((resolve, reject) => {
-				setTimeout(() => {
-					resolve();
-				}, 1300);
-			});
+		getImageUrl: (address) => {
+			return IpfsUtil.getImageUrl(address);
 		}
 	},
 	components: {
@@ -1864,17 +583,5 @@ let app = new Vue({
 });
 
 window.addEventListener('load', () => {
-	// We can't use Metamask's web3 currently as subscriptions through websockets are still in dev
-	if (typeof web3 !== 'undefined' && false) {
-		// Use Mist/MetaMask's provider
-		window.web3 = new Web3(web3.currentProvider);
-	} else {
-		console.warn(
-				'No web3 detected. Falling back to ' + websocketAddress +
-				'. You should remove this fallback when you deploy live, as it\'s inherently insecure. Consider switching to Metamask for development. More info here: http://truffleframework.com/tutorials/truffle-and-metamask');
-		// fallback - use your fallback strategy (local node / hosted node + in-dapp id mgmt / fail)
-		window.web3 = new Web3(websocketAddress);
-	}
-
 	app.start();
 });
