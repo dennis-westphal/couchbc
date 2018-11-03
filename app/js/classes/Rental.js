@@ -4,6 +4,7 @@ import { PubSub } from '../utils/PubSub'
 import { Conversion } from '../utils/Conversion'
 import { Apartment } from './Apartment'
 import { Web3Util } from '../utils/Web3Util'
+import { IpfsUtil } from '../utils/IpfsUtil'
 
 export class Rental {
 	constructor () {
@@ -11,7 +12,6 @@ export class Rental {
 		this.interactionPublicKey_x = ''
 		this.interactionPublicKey_y = ''
 		this.interactionAddress = ''
-		this.apartmentHash = ''
 
 		this.detailsIpfsHash = ''
 		this.detailsHash = ''
@@ -51,7 +51,7 @@ export class Rental {
 		Object.assign(rental, data)
 
 		// Show the load message. Wait for the response, as following steps might freeze the browser for a second.
-		await Loading.show('Requesting rental')
+		await Loading.show('Adding rental request')
 
 		// Get or create the tenant ec account
 		Loading.add('account', 'Initializing elliptic cryptography account')
@@ -117,6 +117,75 @@ export class Rental {
 
 		// Save the requests in local storage
 		window.localStorage.setItem('pendingRentalRequests', JSON.stringify(pendingRentalRequests))
+	}
+
+	async sendRequest () {
+		// Show the load message. Wait for the response, as following steps might freeze the browser for a second.
+		await Loading.show('Sending rental request')
+
+		Loading.add('Checking if the tenant account exists')
+		let account = Web3Util.getAccount(this.tenant)
+		if (account.type !== 'tenant') {
+			// TODO: Generate tenant EC account for public key
+		}
+
+		// Get a public key buffer from the interaction key for encryption of the details
+		let
+			publicKeyBuffer = Conversion.getUint8ArrayBufferFromXY(this.interactionPublicKey_x, this.interactionPublicKey_y)
+
+		Loading.add('upload', 'Uploading details to IPFS')
+		let detailsIpfsAddress = await IpfsUtil.uploadData(this.details, publicKeyBuffer)
+		this.detailsIpfsHash = IpfsUtil.ipfsAddrToHash(detailsIpfsAddress)
+		Loading.success('upload')
+
+		Loading.add('compile', 'Compiling data')
+		let detailsString = JSON.stringify(this.details)
+		this.detailsHash = Web3Util.web3.utils.sha3(JSON.stringify())
+
+		let params = [
+			this.fee,
+			this.deposit,
+			this.interactionPublicKey_x,
+			this.interactionPublicKey_y,
+			this.interactionAddress,
+			this.apartmentHash,
+			this.detailsIpfsHash,
+			this.detailsHash
+			// TODO: Add tenant public key
+		]
+	}
+
+	/**
+	 * Get the apartment hash based on the apartment id and a generated nonce
+	 * @returns {string}
+	 */
+	get apartmentHash () {
+		return Web3Util.web3.utils.sha3(JSON.stringify([this.apartment.id, this.getApartmentNonce()]))
+	}
+
+	/**
+	 * Get a nonce to be used in the generation of the apartment hash.
+	 * Is stored locally to allow later proving of knowledge of this nonce to prove the apartment contained in a hash
+	 * @returns {*}
+	 */
+	getApartmentNonce () {
+		// Get the nonce id based on the interaction key
+		let nonceId = 'nonce.' + (Web3Util.web3.utils.sha3(this.interactionPublicKey_x + this.interactionPublicKey_y))
+
+		// Check if we already have a none
+		let nonce = window.localStorage.getItem(nonceId)
+
+		if (nonce !== null) {
+			return nonce
+		}
+
+		// Generate a random number
+		// While this doesn't strictly generate a number only used used, it's sufficient for our purposes
+		nonce = Math.round(Math.random() * Math.pow(10, 20))
+
+		window.localStorage.setItem(nonceId, nonce)
+
+		return nonce
 	}
 
 	/**

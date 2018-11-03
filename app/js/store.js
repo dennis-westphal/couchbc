@@ -14,9 +14,13 @@ export default new Vuex.Store({
 	},
 	mutations: {
 		showLoading (state, headline) {
+			// If the loading screen is not currently shown, clear previously displayed elements
+			if (!state.loading.shown) {
+				state.loading.elements = {}
+			}
+
 			state.loading.headline = headline
 			state.loading.shown = true
-			state.loading.elements = {}
 		},
 		addLoadingElement (state, payload) {
 			state.loading.elements[payload.id] = {

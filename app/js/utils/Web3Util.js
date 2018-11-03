@@ -17,9 +17,15 @@ class Web3UtilClass {
 			this.web3 = new Web3(websocketAddress)
 		}
 
+		this.accounts = []
 		this.contract = new this.web3.eth.Contract(rent_artifacts.abi, rent_artifacts.networks[4447].address)
 	}
 
+	/**
+	 * Fetch the accounts from web3
+	 *
+	 * @returns {Promise<*>}
+	 */
 	async fetchAccounts () {
 		return new Promise((resolve, reject) => {
 			this.web3.eth.getAccounts((error, bcAddresses) => {
@@ -40,6 +46,12 @@ class Web3UtilClass {
 		})
 	}
 
+	/**
+	 * Determine the account typed for the supplied blockchain addresses
+	 *
+	 * @param bcAddresses
+	 * @returns {Promise<Array>}
+	 */
 	async determineAccounts (bcAddresses) {
 		let accounts = []
 		let promises = []
@@ -76,7 +88,24 @@ class Web3UtilClass {
 		// Wait till we got all account's details
 		await Promise.all(promises)
 
+		this.accounts = accounts
+
 		return accounts
+	}
+
+	/**
+	 * Get the account for the address, or null
+	 * @param address
+	 * @returns {*}
+	 */
+	getAccount (address) {
+		for (let account of this.accounts) {
+			if (account.address === address) {
+				return account
+			}
+		}
+
+		return null
 	}
 }
 
