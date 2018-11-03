@@ -1,5 +1,5 @@
-import store from '../store.js';
-import {hideLoadingDelay, loadingTransitionDuration} from '../constants';
+import store from '../store.js'
+import { hideLoadingDelay, loadingTransitionDuration } from '../constants'
 
 export class Loading {
 	/**
@@ -8,14 +8,14 @@ export class Loading {
 	 * @param headline
 	 * @returns {Promise<any>}
 	 */
-	static async show(headline) {
-		store.commit('showLoading', headline);
+	static async show (headline) {
+		store.commit('showLoading', headline)
 
 		return new Promise((resolve, reject) => {
 			setTimeout(() => {
-				resolve();
-			}, loadingTransitionDuration);
-		});
+				resolve()
+			}, loadingTransitionDuration)
+		})
 	}
 
 	/**
@@ -25,12 +25,12 @@ export class Loading {
 	 * @param text
 	 * @param status
 	 */
-	static add(id, text, status) {
+	static add (id, text, status) {
 		store.commit('addLoadingElement', {
 			id:     id,
 			text:   text,
 			status: status
-		});
+		})
 	}
 
 	/**
@@ -39,11 +39,11 @@ export class Loading {
 	 * @param id
 	 * @param status
 	 */
-	static set(id, status) {
+	static set (id, status) {
 		store.commit('setLoadingElementStatus', {
 			id:     id,
 			status: status
-		});
+		})
 	}
 
 	/**
@@ -51,11 +51,11 @@ export class Loading {
 	 *
 	 * @param id
 	 */
-	static success(id) {
+	static success (id) {
 		store.commit('setLoadingElementStatus', {
 			id:     id,
 			status: 'success'
-		});
+		})
 	}
 
 	/**
@@ -63,11 +63,11 @@ export class Loading {
 	 *
 	 * @param id
 	 */
-	static error(id) {
+	static error (id) {
 		store.commit('setLoadingElementStatus', {
 			id:     id,
 			status: 'error'
-		});
+		})
 	}
 
 	/**
@@ -75,15 +75,15 @@ export class Loading {
 	 *
 	 * @returns {Promise<any>}
 	 */
-	static async hide() {
+	static async hide () {
 		setTimeout(() => {
-			store.commit('hideLoading');
-		}, hideLoadingDelay);
+			store.commit('hideLoading')
+		}, hideLoadingDelay)
 
 		return new Promise((resolve, reject) => {
 			setTimeout(() => {
-				resolve();
-			}, hideLoadingDelay + loadingTransitionDuration);
-		});
+				resolve()
+			}, hideLoadingDelay + loadingTransitionDuration)
+		})
 	}
 }

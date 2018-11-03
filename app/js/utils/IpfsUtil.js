@@ -1,20 +1,20 @@
-import {default as IpfsApi} from 'ipfs-api';
-import {ipfsHost, ipfsGatewayUrl} from '../constants';
-import {default as bs58} from 'bs58';
-import {Cryptography} from './Cryptography';
+import { default as IpfsApi } from 'ipfs-api'
+import { ipfsHost, ipfsGatewayUrl } from '../constants'
+import { default as bs58 } from 'bs58'
+import { Cryptography } from './Cryptography'
 
 class IpfsUtilClass {
 	/**
 	 * Get an IpfsApi connection
 	 */
-	getConnection() {
+	getConnection () {
 		if (this.connection) {
-			return this.connection;
+			return this.connection
 		}
 
-		this.connection = IpfsApi(ipfsHost);
+		this.connection = IpfsApi(ipfsHost)
 
-		return this.connection;
+		return this.connection
 	}
 
 	/**
@@ -22,28 +22,28 @@ class IpfsUtilClass {
 	 * @param str
 	 * @return {Promise<string>}
 	 */
-	async uploadString(str) {
+	async uploadString (str) {
 		// Get an IPFS connection
-		let ipfsConnection = this.getConnection();
+		let ipfsConnection = this.getConnection()
 
 		// Fill a file buffer with the string
-		let filledBuffer = Buffer(str);
+		let filledBuffer = Buffer(str)
 
 		return new Promise((resolve, reject) => {
 			// Add the file to IPFS
 			ipfsConnection.files.add(filledBuffer, (err, result) => {
 				if (err) {
-					console.error(err);
+					console.error(err)
 
-					reject();
-					throw('Could not upload image to IPFS: ' + err);
+					reject()
+					throw('Could not upload image to IPFS: ' + err)
 				}
 
-				console.log('String uploaded to ' + result[0].hash);
+				console.log('String uploaded to ' + result[0].hash)
 
-				resolve(result[0].hash);
-			});
-		});
+				resolve(result[0].hash)
+			})
+		})
 	}
 
 	/**
@@ -52,34 +52,34 @@ class IpfsUtilClass {
 	 * @param inputElement
 	 * @return {Promise<string>}
 	 */
-	async uploadImage(inputElement) {
+	async uploadImage (inputElement) {
 		// Return a promise that is resolved if the image upload succeeded
 		return new Promise((resolve, reject) => {
-			let reader = new FileReader();
+			let reader = new FileReader()
 			reader.onloadend = () => {
 				// Get an IPFS connection
-				let ipfsConnection = this.getConnection();
+				let ipfsConnection = this.getConnection()
 
 				// Fill a file buffer
-				let filledBuffer = Buffer(reader.result);
+				let filledBuffer = Buffer(reader.result)
 
 				// Add the file to IPFS
 				ipfsConnection.files.add(filledBuffer, (err, result) => {
 					if (err) {
-						console.error(err);
+						console.error(err)
 
-						reject();
-						throw('Could not upload image to IPFS: ' + err);
+						reject()
+						throw('Could not upload image to IPFS: ' + err)
 					}
 
-					console.log('Image uploaded to ' + result[0].hash);
+					console.log('Image uploaded to ' + result[0].hash)
 
-					resolve(result[0].hash);
-				});
-			};
+					resolve(result[0].hash)
+				})
+			}
 
-			reader.readAsArrayBuffer(inputElement.files[0]);
-		});
+			reader.readAsArrayBuffer(inputElement.files[0])
+		})
 	}
 
 	/**
@@ -88,24 +88,24 @@ class IpfsUtilClass {
 	 * @param ipfsAddr
 	 * @return {Promise<string>}
 	 */
-	async downloadString(ipfsAddr) {
+	async downloadString (ipfsAddr) {
 		// Return a promise that is resolved with the ipfs string downloaded
 		return new Promise((resolve, reject) => {
-			let ipfsConnection = this.getConnection();
+			let ipfsConnection = this.getConnection()
 
 			// Get the string from IPFS
 			ipfsConnection.files.get(ipfsAddr, (err, files) => {
 				if (err) {
-					console.error(err);
+					console.error(err)
 
-					reject();
+					reject()
 					// TODO: Catch exceptions in user initiated root function (problem: async/Promise!)
-					throw('Could not download data from IPFS: ' + err);
+					throw('Could not download data from IPFS: ' + err)
 				}
 
-				resolve(files[0].content);
-			});
-		});
+				resolve(files[0].content)
+			})
+		})
 	}
 
 	/**
@@ -115,16 +115,16 @@ class IpfsUtilClass {
 	 * @param ecAccount EC account used for decryption or null
 	 * @return {Promise<object>}
 	 */
-	async downloadDataFromHexHash(hexHash, ecAccount) {
-		let ipfsAddress = this.hexHashToIpfsAddr(hexHash);
+	async downloadDataFromHexHash (hexHash, ecAccount) {
+		let ipfsAddress = this.hexHashToIpfsAddr(hexHash)
 
-		let str = await this.downloadString(ipfsAddress);
+		let str = await this.downloadString(ipfsAddress)
 
 		if (ecAccount) {
-			str = await Cryptography.decryptString(str, ecAccount.private.buffer);
+			str = await Cryptography.decryptString(str, ecAccount.private.buffer)
 		}
 
-		return JSON.parse(str);
+		return JSON.parse(str)
 	}
 
 	/**
@@ -134,16 +134,16 @@ class IpfsUtilClass {
 	 * @param publicKeyBuffer Buffer containing the public key to be used for encryption, if any
 	 * @return {Promise<string>}
 	 */
-	async uploadData(data, publicKeyBuffer) {
-		let str = JSON.stringify(data);
+	async uploadData (data, publicKeyBuffer) {
+		let str = JSON.stringify(data)
 
 		if (publicKeyBuffer) {
-			str = await Cryptography.encryptString(str, publicKeyBuffer);
+			str = await Cryptography.encryptString(str, publicKeyBuffer)
 		}
 
-		let ipfsAddress = await this.uploadString(str);
+		let ipfsAddress = await this.uploadString(str)
 
-		return this.ipfsAddrToHash(ipfsAddress);
+		return this.ipfsAddrToHash(ipfsAddress)
 	}
 
 	/**
@@ -152,13 +152,13 @@ class IpfsUtilClass {
 	 * @param address
 	 * @return {string}
 	 */
-	getImageUrl(address) {
+	getImageUrl (address) {
 		// Check if we need to decode an IPFS hex hash
 		if (address.substr(0, 2) === '0x') {
-			return ipfsGatewayUrl + this.hexHashToIpfsAddr(address);
+			return ipfsGatewayUrl + this.hexHashToIpfsAddr(address)
 		}
 
-		return ipfsGatewayUrl + address;
+		return ipfsGatewayUrl + address
 	}
 
 	// IPFS utilities
@@ -168,8 +168,8 @@ class IpfsUtilClass {
 	 * @param address
 	 * @return {string}
 	 */
-	ipfsAddrToHash(address) {
-		return '0x' + (bs58.decode(address).slice(2).toString('hex'));
+	ipfsAddrToHash (address) {
+		return '0x' + (bs58.decode(address).slice(2).toString('hex'))
 	}
 
 	/**
@@ -178,9 +178,9 @@ class IpfsUtilClass {
 	 * @param hexHash
 	 * @return {string}
 	 */
-	hexHashToIpfsAddr(hexHash) {
-		return bs58.encode(Buffer.from('1220' + hexHash.substr(2), 'hex'));
+	hexHashToIpfsAddr (hexHash) {
+		return bs58.encode(Buffer.from('1220' + hexHash.substr(2), 'hex'))
 	}
 }
 
-export const IpfsUtil = new IpfsUtilClass();
+export const IpfsUtil = new IpfsUtilClass()

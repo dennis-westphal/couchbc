@@ -1,7 +1,7 @@
-import Vue from 'vue';
-import Vuex from 'vuex';
+import Vue from 'vue'
+import Vuex from 'vuex'
 
-Vue.use(Vuex);
+Vue.use(Vuex)
 
 export default new Vuex.Store({
 	state:     {
@@ -13,35 +13,35 @@ export default new Vuex.Store({
 		googleMapsGeocoder: null
 	},
 	mutations: {
-		showLoading(state, headline) {
-			state.loading.headline = headline;
-			state.loading.shown = true;
-			state.loading.elements = {};
+		showLoading (state, headline) {
+			state.loading.headline = headline
+			state.loading.shown = true
+			state.loading.elements = {}
 		},
-		addLoadingElement(state, payload) {
+		addLoadingElement (state, payload) {
 			state.loading.elements[payload.id] = {
 				text:   payload.text,
 				status: payload.status || 'active'
-			};
-		},
-		setLoadingElementStatus(state, payload) {
-			if (state.loading.elements[payload.id]) {
-				state.loading.elements[payload.id].status = payload.status;
 			}
 		},
-		hideLoading(state) {
-			state.loading.shown = false;
+		setLoadingElementStatus (state, payload) {
+			if (state.loading.elements[payload.id]) {
+				state.loading.elements[payload.id].status = payload.status
+			}
 		},
-		setGoogleMapsGeocoder(state, geocoder) {
-			state.googleMapsGeocoder = geocoder;
+		hideLoading (state) {
+			state.loading.shown = false
+		},
+		setGoogleMapsGeocoder (state, geocoder) {
+			state.googleMapsGeocoder = geocoder
 		}
 	},
 	getters:   {
 		loading:            state => {
-			return state.loading;
+			return state.loading
 		},
 		googleMapsGeocoder: state => {
-			return state.googleMapsGeocoder;
+			return state.googleMapsGeocoder
 		}
 	}
-});
+})
