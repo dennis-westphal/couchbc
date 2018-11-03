@@ -135,6 +135,27 @@ export class Apartment {
 	}
 
 	/**
+	 * Find an apartment by it's id
+	 *
+	 * @param id
+	 * @returns {Promise<Apartment>}
+	 */
+	static async findById(id) {
+		let apartment = new Apartment();
+
+		// Fetch the apartment from the blockchain
+		let apartmentData = await Web3Util.contract.methods.getApartment(id).call();
+
+		Object.assign(apartment, apartmentData);
+
+		// Fetch the details
+		await apartment.fetchReviews();
+		await apartment.fetchDetails();
+
+		return apartment;
+	}
+
+	/**
 	 * Get all apartments in the specified city
 	 *
 	 * @param country

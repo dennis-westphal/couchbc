@@ -3,7 +3,7 @@ import {default as Web3} from 'web3';
 import {Notifications} from './Notifications';
 import rent_artifacts from '../../../build/contracts/Rent';
 
-export class Web3UtilClass {
+class Web3UtilClass {
 	constructor() {
 		// Check if we can use an injected web3
 		if (typeof web3 !== 'undefined' && useInjectedWeb3) {

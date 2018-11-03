@@ -360,8 +360,10 @@ contract Rent {
 
 	// Get the number of rentals by the tenant
 	function getNumTenantRentals(address tenantAddr) public view returns (uint) {
-		// Check that the tenant exists
-		require(tenants[tenantAddr].initialized);
+		// If the tenant doesn't exist, he also doesn't have rentals
+		if (!tenants[tenantAddr].initialized) {
+			return 0;
+		}
 
 		return tenants[tenantAddr].rentals.length;
 	}

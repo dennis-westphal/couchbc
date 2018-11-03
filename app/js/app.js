@@ -232,7 +232,7 @@ let app = new Vue({
 		 * Request a new rental. Will request an interaction key from the owner first and add the rental to the pending rentals.
 		 */
 		requestRental: async () => {
-
+			Rental.addRequest(app.rentalRequest.account, app.rentalRequest);
 		},
 
 		issueInteractionToken: tenantPublicKey => {
