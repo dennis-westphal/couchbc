@@ -160,7 +160,7 @@ class CryptographyClass {
 	 *       y:         "0x0000...",     (0x + 32y bytes hex = 66 chars)
 	 *       buffer:    Uint8Array(65)   Buffer to be used with eccrypto
 	 *   }
-	 *   address:     "0x0000..."        (0x + 32 bytes hex address as would be used in blockchain account and can be used for signature validation)
+	 *   address:     "0x0000..."        (0x + 32 bytes hex address as would be used in blockchain account. Can be used for signature validation and to fetch account from wallet.)
 	 * }
 	 */
 	async generateEcAccount () {
@@ -197,7 +197,7 @@ class CryptographyClass {
 	}
 
 	/**
-	 * Get an EC account for the specified private key.
+	 * Get an EC account for the specified wallet account.
 	 * Does not save or fetch the account from the wallet; the EC account is purely generated in memory.
 	 *
 	 * Returns an object with:

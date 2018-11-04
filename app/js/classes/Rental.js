@@ -5,6 +5,7 @@ import { Conversion } from '../utils/Conversion'
 import { Apartment } from './Apartment'
 import { Web3Util } from '../utils/Web3Util'
 import { IpfsUtil } from '../utils/IpfsUtil'
+import { default as uniqid } from 'uniqid'
 
 export class Rental {
 	constructor () {
@@ -103,6 +104,8 @@ export class Rental {
 		let pendingRentalRequests = JSON.parse(window.localStorage.setItem('pendingRentalRequests') || '[]')
 
 		pendingRentalRequests.push({
+			// Assign a unique id to the request so we know which one to remove from local storage later on
+			id:        uniqid(),
 			tenant:    this.tenant,
 			apartment: this.apartment.id,
 			fee:       this.fee,
@@ -119,15 +122,18 @@ export class Rental {
 		window.localStorage.setItem('pendingRentalRequests', JSON.stringify(pendingRentalRequests))
 	}
 
+	/**
+	 * Send the request for the rental to the blockchain
+	 *
+	 * @returns {Promise<*>}
+	 */
 	async sendRequest () {
 		// Show the load message. Wait for the response, as following steps might freeze the browser for a second.
 		await Loading.show('Sending rental request')
 
-		Loading.add('Checking if the tenant account exists')
-		let account = Web3Util.getAccount(this.tenant)
-		if (account.type !== 'tenant') {
-			// TODO: Generate tenant EC account for public key
-		}
+		Loading.add('account', 'Fetching or creating tenant account')
+		let ecAccount = Cryptography.getOrCreateEcAccount(this.tenant)
+		Loading.success('account')
 
 		// Get a public key buffer from the interaction key for encryption of the details
 		let
@@ -150,9 +156,38 @@ export class Rental {
 			this.interactionAddress,
 			this.apartmentHash,
 			this.detailsIpfsHash,
-			this.detailsHash
-			// TODO: Add tenant public key
+			this.detailsHash,
+			ecAccount.public.x,
+			ecAccount.public.y
 		]
+		Loading.success('compile')
+
+		// Estimate gas and call the requestRental function
+		Loading.add('add.blockchain', 'Sending rental request to blockchain')
+		let method = Web3Util.contract.methods.requestRental(...parameters)
+		return new Promise((resolve, reject) => {
+			method.estimateGas().then(gasAmount => {
+				method.send({from: account.address, gas: gasAmount})
+					.on('receipt', () => {
+						Loading.success('add.blockchain')
+						Loading.hide()
+
+						this.status = 'requested'
+						this.removeFromLocalStorage()
+
+						resolve()
+					})
+					.on('error', (error) => {
+						console.error(error)
+						Loading.error('add.blockchain')
+						Loading.hide()
+
+						this.removeFromLocalStorage()
+
+						reject(error)
+					})
+			})
+		})
 	}
 
 	/**
@@ -245,6 +280,7 @@ export class Rental {
 			}
 
 			let rental = new Rental()
+			rental.localStorageId = request.id
 			rental.tenant = request.tenant
 			rental.fee = request.fee
 			rental.deposit = request.deposit
@@ -263,6 +299,17 @@ export class Rental {
 		await Promise.all(promises)
 
 		return rentals
+	}
+
+	/**
+	 * Remove the current request from local storage
+	 */
+	removeFromLocalStorage () {
+		let pendingRentalRequests = JSON.parse(window.localStorage.setItem('pendingRentalRequests') || '[]')
+
+		let filteredRequests = pendingRentalRequests.filter(request => request.id !== this.localStorageId)
+
+		window.localStorage.setItem('pendingRentalRequests', JSON.stringify(filteredRequests))
 	}
 
 	static async findByTenant (address) {

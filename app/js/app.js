@@ -29,6 +29,7 @@ import { Conversion } from './utils/Conversion'
 
 // Classes
 import { Rental } from './classes/Rental'
+import { Cryptography } from './utils/Cryptography'
 
 // Blockies for account icons
 require('./blockies.min.js')
@@ -238,11 +239,44 @@ let app = new Vue({
 			Rental.addRequest(app.rentalRequest.account, app.rentalRequest)
 		},
 
-		issueInteractionToken: tenantPublicKey => {
+		issueInteractionToken: async tenantPublicKey => {
+			Notifications.show('Issueing interaction key for rental request')
+
+			// Create the tenant's public key buffer
+			let publicKeyBuffer = Conversion.getUint8ArrayBufferFromXY(tenantPublicKey.x, tenantPublicKey.y)
+
+			// Try to encrypt something with the public key buffer to ensure it's valid before we create an EC account
+			try {
+				await Cryptography.encryptString('test', publicKeyBuffer)
+			} catch (e) {
+				console.error('Invalid tenant public key', tenantPublicKey, e)
+				return
+			}
+
+			// Generate a new EC account => the interaction key
+			let ecAccount = await Cryptography.generateEcAccount()
+
+			// Extract the public key and encode it for transmission
+			let interactionKey = JSON.stringify({
+				x: ecAccount.public.x,
+				y: ecAccount.public.y
+			})
+
+			// Encrypt the interaction key with the tenant's public key
+			let responseString = await Cryptography.encryptString(interactionKey, publicKeyBuffer)
+
+			// Publish the interaction key
+			await PubSub.publishMessage(responseString, 'issue-interaction-key')
+
+			// Add the key to the keys in localStorage
+			let interactionKeys = JSON.parse(window.localStorage.getItem('interactionKeys') || '[]')
+			interactionKeys.push(ecAccount.address)
+			window.localStorage.setItem('interactionKeys', interactionKeys)
+
 			console.log('request ' + tenantPublicKey)
 		},
 
-		addRentalRequestToBlockchain: interactionKey => {
+		addRentalRequestToBlockchain: async interactionKey => {
 			console.log('issue ' + interactionKey)
 		},
 

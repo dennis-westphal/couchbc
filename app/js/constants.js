@@ -22,7 +22,7 @@ export const googleAckUrl = 'https://pubsub.googleapis.com/v1/projects/' + googl
 
 // Options for displaying notifications
 export const defaultToastOptions = {
-	duration: 3000
+	duration: 5000
 }
 
 // Options for loading screens
