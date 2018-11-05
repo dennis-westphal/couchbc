@@ -210,6 +210,10 @@ export class Rental {
 		})
 	}
 
+	async accept () {
+
+	}
+
 	/**
 	 * Get the apartment hash based on the apartment id and a generated nonce
 	 * @returns {string}
@@ -294,6 +298,7 @@ export class Rental {
 			let rental = new Rental()
 			rental.localStorageId = request.localStorageId
 			rental.tenant = request.tenant
+			rental.role = 'tenant'
 			rental.fee = request.fee
 			rental.deposit = request.deposit
 			rental.details = request.details
@@ -378,6 +383,7 @@ export class Rental {
 				console.log(rentalData)
 				Object.assign(rental, rentalData)
 				rental.tenant = address
+				rental.role = 'tenant'
 
 				// Fetch the locally stored data
 				rental.loadLocalData()
@@ -391,5 +397,32 @@ export class Rental {
 		}
 
 		return rentals
+	}
+
+	/**
+	 * Find a rental for the provided interaction address
+	 *
+	 * @param address
+	 * @returns {Promise<Array>}
+	 */
+	static async findByInteractionAddress (address) {
+		// Check if we have a rental
+		let hasRental = await Web3Util.contract.methods.hasInteractionAddressRental(address).call()
+		if (!hasRental) {
+			return null
+		}
+
+		let rentalData = await Web3Util.contract.methods.getInteractionAddressRental(address).call()
+
+		// Create a new rental and assign the fetched data
+		let rental = new Rental()
+		console.log(rentalData)
+		Object.assign(rental, rentalData)
+		rental.role = 'owner'
+
+		// Fetch the apartment
+		rental.apartment = await Apartment.findById(rental.details.apartmentId)
+
+		return rental
 	}
 }

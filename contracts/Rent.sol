@@ -7,7 +7,7 @@ import "./Verifier.sol";
 contract Rent {
 	using strings for *;
 
-	uint8 constant mediatorFee = 25; // In Finney (1/1000 eth)
+	uint8 constant mediatorFee = 50; // In Finney (1/1000 eth)
 
 	// -------------------------------------------------------------
 	// ------------------------ Definitions ------------------------
@@ -105,8 +105,9 @@ contract Rent {
 		uint fee;           // Total fee for this rental in finney
 		uint128 deposit;    // Deposit for this rental in finney
 
-		address tenant;     // The tenant profile address
-		address mediator;   // The mediator determined for this rental (as soon as the rental is accepted)
+		address tenant;             // The tenant profile address
+		address mediator;           // The mediator determined for this rental (as soon as the rental is accepted)
+		address ownerAddress;       // The addressed used for payments towards the apartment owner and after accept/refuse also as means of authentication
 
 		RentalStatus status;                // Status for the rental
 		DepositStatus depositStatus;        // Status of the deposit
@@ -169,7 +170,7 @@ contract Rent {
 	Apartment[] private apartments;                                        // List of apartments
 
 	mapping(bytes32 => uint[]) private cityApartments;                     // Country+City SHA256 hash => apartment ids; to allow fetching apartments of a city
-	mapping(address => uint[]) private ownerApartments;                    // Mapping to get the apartments of an owner
+	mapping(address => uint[]) private ownerApartments;                    // Mapping to get the apartments of an owner and to check if the address has been used
 	mapping(bytes32 => mapping(bytes32 => bool)) private ownerPublicKeys;  // Mapping to check whether a public key has been used in an apartment
 	mapping(bytes32 => mapping(bytes32 => bool)) private interactionKeys;  // Mapping to check whether a public key has already been used in another interaction
 	mapping(address => uint) private interactionAddressRental;             // Mapping to get the rental for a interaction address
@@ -674,16 +675,41 @@ contract Rent {
 		uint rentalId,
 		string signature // Signature for 'refuse:' + rentalId
 	) public {
-		string memory message = "refuse:".toSlice().concat(Library.uintToString(rentalId).toSlice());
+		// Check that the sender address has not been used yet
+		require(!tenants[msg.sender].initialized);
+		require(!ownerApartments[msg.sender].length == 0);
+		require(!rentalAddresses[msg.sender]);
 
+		// Check that the rental exists
+		require(rentals.length > rentalId);
+
+		Rental storage rental = rentals[rentalId];
+
+		// Check that the rental has the right state
+		require(rental.status == RentalStatus.Requested);
+
+		// Recover the expected signer address
+		string memory message = "refuse:".toSlice().concat(Library.uintToString(rentalId).toSlice());
 		address recovered = Verifier.verifyString(
 			message,
 			signature
 		);
 
-		emit Test("Concat", message);
-		emit Test("Signature", signature);
-		emit TestAddr("Recovered signer address", recovered);
+		// Check authorization of the owner
+		require(recovered == rental.interactionAddress);
+
+		// Change the rental's status
+		rental.status = RentalStatus.Refused;
+
+		// Mark the sender address as used in a rental
+		rentalAddresses[msg.sender] = true;
+
+		// Transfer fee and deposit back to the tenant
+		rental.tenant.transfer(Library.finneyToWei(rental.fee + rental.deposit));
+
+		//emit Test("Concat", message);
+		//emit Test("Signature", signature);
+		//emit TestAddr("Recovered signer address", recovered);
 	}
 
 	// Accept a rental request.
@@ -691,25 +717,103 @@ contract Rent {
 	function acceptRental(
 		uint rentalId,
 		bytes32 contactDataIpfsHash,
-		string signature  // Signature for 'accept:' + rentalId + contactDataIpfsHash
+		string signature  // Signature for 'accept:' + rentalId + contactDataIpfsHash + msg.sender address
 	) public {
+		// Check that the sender address has not been used yet
+		require(!tenants[msg.sender].initialized);
+		require(!ownerApartments[msg.sender].length == 0);
+		require(!rentalAddresses[msg.sender]);
 
+		// Check that the rental exists
+		require(rentals.length > rentalId);
+
+		Rental storage rental = rentals[rentalId];
+
+		// Check that the rental has the right state
+		require(rental.status == RentalStatus.Requested);
+
+		// Recover the expected signer address
+		string memory message = "accept:".toSlice().join(
+			Library.uintToString(rentalId).toSlice(),
+			contactDataIpfsHash.toSliceB32(),
+			msg.sender.toSliceB32()
+		);
+		address recovered = Verifier.verifyString(
+			message,
+			signature
+		);
+
+		// Check authorization of the owner
+		require(recovered == rental.interactionAddress);
+
+		// Change the rental's status
+		rental.status = RentalStatus.Accepted;
+
+		// Store the contact data
+		rental.contactDataIpfsHash = contactDataIpfsHash;
+
+		// Use the sender address as owner address
+		rental.ownerAddress = msg.sender;
+
+		// Mark the sender address as used in a rental
+		rentalAddresses[msg.sender] = true;
+
+		// Transfer the rental fee to the sender (= payment address)
+		msg.sender.transfer(Library.finneyToWei(rental.fee));
 	}
 
 	// --------------------- Owner review ---------------------
 
-	// End a rental as an apartment owner.
-	// Uses the supplied signature to authenticate against the rentals interaction public key.
+	// End a rental as an apartment owner
 	function endRental(
 		uint rentalId,
 		uint8 reviewScore,
+		bytes32 reviewTextHash,
 		bytes32 reviewTextIpfsHash,
 		uint128 deductionAmount, // Requested deposit deduction; can be 0
 		bytes32 deductionReasonIpfsHash, // Reason for deposit deduction; can be empty if no deduction requested
-		bytes32 contactDetailsIpfsHash, // Contact details for the mediator
-		string signature // Signature for the above
+		bytes32 contactDetailsIpfsHash // Contact details for the mediator
 	) public {
+		// Check that the rental exists
+		require(rentals.length > rentalId);
 
+		Rental storage rental = rentals[rentalId];
+		Tenant storage tenant = tenants[rental.tenant];
+
+		// Check the score makes sense
+		require(reviewScore < 6 && reviewScore > 0);
+
+		// Check that the deduction amount (if specified) is larger than 0 but smaller of equal to the deposit
+		require(deductionAmount >= 0 && deductionAmount <= rental.deposit);
+
+		// Check that the sender is the owner
+		require(msg.sender == rental.ownerAddress);
+
+		// Check that the rental has not ended yet => the deposit is still open
+		require(rental.depositStatus == DepositStatus.Open);
+
+		// Assign the review to the tenant
+		TenantReview memory review = TenantReview(reviewScore, reviewTextHash, reviewTextIpfsHash);
+		tenant.reviews[tenant.numReviews] = review;
+
+		// If no deduction was requested, we can directly transfer the deposit back to the tenant
+		if (deductionAmount == 0) {
+			rental.depositStatus = DepositStatus.Processed;
+
+			rental.tenant.transfer(rental.deposit);
+
+			return;
+		}
+
+		// Otherwise, create a deposit deduction
+		DepositDeduction depositDeduction = DepositDeduction(
+			block.timestamp / 86400,
+			deductionAmount,
+			deductionReasonIpfsHash,
+			contactDetailsIpfsHash
+		);
+
+		// TODO: Save
 	}
 
 	// ---------------------- Deductions ----------------------
