@@ -536,8 +536,8 @@ contract Rent {
 		bytes32 publicKey_y
 	) private returns (Tenant) {
 		// Check that the address has not been used by an owner or in an interaction
-		require(ownerApartments[msg.sender].length == 0);
-		require(!rentalAddresses[msg.sender]);
+		require(ownerApartments[addr].length == 0);
+		require(!rentalAddresses[addr]);
 
 		// Check that the public key has not been used yet
 		require(!tenantPublicKeys[publicKey_x][publicKey_y]);
