@@ -29,7 +29,7 @@ export class Loading {
 		store.commit('addLoadingElement', {
 			id:     id,
 			text:   text,
-			status: status
+			status: status || 'active'
 		})
 	}
 

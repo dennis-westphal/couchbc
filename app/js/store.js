@@ -44,6 +44,9 @@ export default new Vuex.Store({
 		loading:            state => {
 			return state.loading
 		},
+		loadingElements:    state => {
+			return state.loading.elements
+		},
 		googleMapsGeocoder: state => {
 			return state.googleMapsGeocoder
 		}

@@ -1,5 +1,4 @@
 import { default as $ } from 'jquery'
-import { default as uniqid } from 'uniqid'
 import {
 	googleAckUrl,
 	googleApiProject,
@@ -10,8 +9,7 @@ import {
 	pullInterval
 } from '../constants'
 import { Cryptography } from './Cryptography'
-import { Web3Util } from './Web3Util'
-import { googlePubSubEmail, googlePubSubKey, salt } from '../credentials'
+import { googlePubSubEmail, googlePubSubKey } from '../credentials'
 
 const {GoogleToken} = require('gtoken')
 
@@ -113,7 +111,7 @@ class PubSubClass {
 
 		// Create a new subscription
 		subscription = {
-			id:               this.getRandomSubscriptionId(),
+			id:               PubSubClass.getRandomSubscriptionId(),
 			topic:            topic,
 			ecAccountAddress: ecAccountAddress || null
 		}
@@ -151,8 +149,8 @@ class PubSubClass {
 	 *
 	 * @returns {string}
 	 */
-	getRandomSubscriptionId () {
-		return 'sub-' + Web3Util.web3.utils.sha3(uniqid() + salt + uniqid() + Math.round(Math.random() * Math.pow(10, 20)))
+	static getRandomSubscriptionId () {
+		return 'sub-' + Cryptography.getRandomString()
 	}
 
 	/**
@@ -204,6 +202,8 @@ class PubSubClass {
 		if (typeof result.receivedMessages === 'undefined') {
 			return
 		}
+
+		console.debug('Received subscription messages', result.receivedMessages)
 
 		// Construct a new request
 		url = googleAckUrl.replace('{subscription}', subscription.id)
@@ -269,6 +269,8 @@ class PubSubClass {
 	 * @param message
 	 */
 	processTopicMessage (topic, message) {
+		console.debug('Processing topic ' + topic + ' message', message)
+
 		if (this.topicProcessors[topic]) {
 			this.topicProcessors[topic](message, topic)
 			return

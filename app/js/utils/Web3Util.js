@@ -1,24 +1,25 @@
 import { useInjectedWeb3, websocketAddress } from '../constants'
 import { default as Web3 } from 'web3'
 import { Notifications } from './Notifications'
-import rent_artifacts from '../../../build/contracts/Rent'
+import rentArtifacts from '../../../build/contracts/Rent'
 
 class Web3UtilClass {
 	constructor () {
 		// Check if we can use an injected web3
-		if (typeof web3 !== 'undefined' && useInjectedWeb3) {
+		if (typeof window.web3 !== 'undefined' && useInjectedWeb3) {
 			// Use Mist/MetaMask's provider
-			this.web3 = new Web3(web3.currentProvider)
+			this.web3 = new Web3(window.web3.currentProvider)
 		} else {
 			console.warn(
 				'No web3 detected. Falling back to ' + websocketAddress +
-				'. You should remove this fallback when you deploy live, as it\'s inherently insecure. Consider switching to Metamask for development. More info here: http://truffleframework.com/tutorials/truffle-and-metamask')
+				'. You should remove this fallback when you deploy live, as it\'s inherently insecure. ' +
+				'Consider switching to Metamask for development. More info here: http://truffleframework.com/tutorials/truffle-and-metamask')
 			// Connect via websocket for test purposes
 			this.web3 = new Web3(websocketAddress)
 		}
 
 		this.accounts = []
-		this.contract = new this.web3.eth.Contract(rent_artifacts.abi, rent_artifacts.networks[4447].address)
+		this.contract = new this.web3.eth.Contract(rentArtifacts.abi, rentArtifacts.networks[4447].address)
 	}
 
 	/**
@@ -40,8 +41,8 @@ class Web3UtilClass {
 					return
 				}
 
-				let accounts = this.determineAccounts(bcAddresses)
-				resolve(accounts)
+				this.accounts = this.determineAccounts(bcAddresses)
+				resolve(this.accounts)
 			})
 		})
 	}
@@ -87,8 +88,6 @@ class Web3UtilClass {
 
 		// Wait till we got all account's details
 		await Promise.all(promises)
-
-		this.accounts = accounts
 
 		return accounts
 	}

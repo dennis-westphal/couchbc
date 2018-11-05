@@ -5,7 +5,6 @@ import { Conversion } from '../utils/Conversion'
 import { Apartment } from './Apartment'
 import { Web3Util } from '../utils/Web3Util'
 import { IpfsUtil } from '../utils/IpfsUtil'
-import { default as uniqid } from 'uniqid'
 
 export class Rental {
 	constructor () {
@@ -37,19 +36,27 @@ export class Rental {
 		this.ownerDataForMediator = {}
 	}
 
+	/**
+	 * Add a new rental request
+	 *
+	 * @param account
+	 * @param data
+	 * @returns {Promise<Rental>}
+	 */
 	static async addRequest (account, data) {
 		let rental = new Rental()
 		rental.tenant = account.address
-		rental.details.apartment = data.apartment
+		rental.apartment = data.apartment
+		rental.details.apartmentId = data.apartment.id
 		rental.details.fromDay = data.fromDay
 		rental.details.tillDay = data.tillDay
 		rental.details.contact = data.contact
-		rental.fee = data.fee
-		rental.deposit = data.deposit
+		rental.fee = parseInt(data.fee)
+		rental.deposit = parseInt(data.apartment.deposit)
 		rental.status = 'pending'
 
-		// TODO: Assign manually
-		Object.assign(rental, data)
+		// Assign a random local id so we can associate for now so we can identify the request later on
+		rental.localStorageId = Cryptography.getRandomString()
 
 		// Show the load message. Wait for the response, as following steps might freeze the browser for a second.
 		await Loading.show('Adding rental request')
@@ -75,8 +82,9 @@ export class Rental {
 		await PubSub.publishMessage(
 			// Send the tenants public key
 			JSON.stringify({
-				x: ecAccount.public.x,
-				y: ecAccount.public.y
+				id: rental.localStorageId,
+				x:  ecAccount.public.x,
+				y:  ecAccount.public.y
 			}),
 
 			// Topic to send the message to
@@ -89,7 +97,7 @@ export class Rental {
 
 		// Add the request to the pending requests
 		Loading.add('save', 'Saving pending rental requests')
-		rental.saveInLocalStorage()
+		rental.savePendingRequest()
 		Loading.success('save')
 
 		Loading.hide()
@@ -100,17 +108,15 @@ export class Rental {
 	/**
 	 * Save the (pending) rental request in local storage to allow restoring it after a browser refresh
 	 */
-	saveInLocalStorage () {
-		let pendingRentalRequests = JSON.parse(window.localStorage.setItem('pendingRentalRequests') || '[]')
+	savePendingRequest () {
+		let pendingRentalRequests = JSON.parse(window.localStorage.getItem('pendingRentalRequests') || '[]')
 
 		pendingRentalRequests.push({
-			// Assign a unique id to the request so we know which one to remove from local storage later on
-			id:        uniqid(),
-			tenant:    this.tenant,
-			apartment: this.apartment.id,
-			fee:       this.fee,
-			deposit:   this.deposit,
-			details:   this.details
+			localStorageId: this.localStorageId,
+			tenant:         this.tenant,
+			fee:            this.fee,
+			deposit:        this.deposit,
+			details:        this.details
 		})
 
 		// Save the tenant's data in local storage for autocompletion of further actions
@@ -132,7 +138,7 @@ export class Rental {
 		await Loading.show('Sending rental request')
 
 		Loading.add('account', 'Fetching or creating tenant account')
-		let ecAccount = Cryptography.getOrCreateEcAccount(this.tenant)
+		let ecAccount = await Cryptography.getOrCreateEcAccount(this.tenant)
 		Loading.success('account')
 
 		// Get a public key buffer from the interaction key for encryption of the details
@@ -140,15 +146,14 @@ export class Rental {
 			publicKeyBuffer = Conversion.getUint8ArrayBufferFromXY(this.interactionPublicKey_x, this.interactionPublicKey_y)
 
 		Loading.add('upload', 'Uploading details to IPFS')
-		let detailsIpfsAddress = await IpfsUtil.uploadData(this.details, publicKeyBuffer)
-		this.detailsIpfsHash = IpfsUtil.ipfsAddrToHash(detailsIpfsAddress)
+		this.detailsIpfsHash = await IpfsUtil.uploadData(this.details, publicKeyBuffer)
 		Loading.success('upload')
 
 		Loading.add('compile', 'Compiling data')
 		let detailsString = JSON.stringify(this.details)
-		this.detailsHash = Web3Util.web3.utils.sha3(JSON.stringify())
+		this.detailsHash = Web3Util.web3.utils.sha3(JSON.stringify(detailsString))
 
-		let params = [
+		let parameters = [
 			this.fee,
 			this.deposit,
 			this.interactionPublicKey_x,
@@ -160,34 +165,48 @@ export class Rental {
 			ecAccount.public.x,
 			ecAccount.public.y
 		]
+		let value = Conversion.finneyToWei(this.fee + this.deposit)
+
 		Loading.success('compile')
 
 		// Estimate gas and call the requestRental function
-		Loading.add('add.blockchain', 'Sending rental request to blockchain')
+		Loading.add('request.blockchain', 'Sending rental request to blockchain')
 		let method = Web3Util.contract.methods.requestRental(...parameters)
 		return new Promise((resolve, reject) => {
-			method.estimateGas().then(gasAmount => {
-				method.send({from: account.address, gas: gasAmount})
-					.on('receipt', () => {
-						Loading.success('add.blockchain')
-						Loading.hide()
+			console.log(parameters, this.tenant)
 
-						this.status = 'requested'
-						this.removeFromLocalStorage()
+			//method.estimateGas({from: this.tenant, value: value})
+			//	.then(gasAmount => {
+			method.send({from: this.tenant, gas: 4000000, value: value})
+				.on('receipt', () => {
+					Loading.success('request.blockchain')
+					Loading.hide()
 
-						resolve()
-					})
-					.on('error', (error) => {
-						console.error(error)
-						Loading.error('add.blockchain')
-						Loading.hide()
+					this.status = 'requested'
+					this.removePendingRequest()
 
-						this.removeFromLocalStorage()
+					resolve()
+				})
+				.on('error', (error) => {
+					console.error(error)
+					Loading.error('request.blockchain')
+					Loading.hide()
 
-						reject(error)
-					})
-			})
+					this.removePendingRequest()
+
+					reject(error)
+				})
 		})
+		/*	.catch(error => {
+				console.error(error)
+				Loading.error('request.blockchain')
+				Loading.hide()
+
+				this.removePendingRequest()
+
+				reject(error)
+			})
+	})*/
 	}
 
 	/**
@@ -200,27 +219,19 @@ export class Rental {
 
 	/**
 	 * Get a nonce to be used in the generation of the apartment hash.
-	 * Is stored locally to allow later proving of knowledge of this nonce to prove the apartment contained in a hash
-	 * @returns {*}
+	 * The nonce is stored in the rental, but not persisted in any way.
+	 * @returns {number}
 	 */
 	getApartmentNonce () {
-		// Get the nonce id based on the interaction key
-		let nonceId = 'nonce.' + (Web3Util.web3.utils.sha3(this.interactionPublicKey_x + this.interactionPublicKey_y))
-
-		// Check if we already have a none
-		let nonce = window.localStorage.getItem(nonceId)
-
-		if (nonce !== null) {
-			return nonce
+		if (this.apartmentNonce) {
+			return this.apartmentNonce
 		}
 
 		// Generate a random number
 		// While this doesn't strictly generate a number only used used, it's sufficient for our purposes
-		nonce = Math.round(Math.random() * Math.pow(10, 20))
+		this.apartmentNonce = Math.round(Math.random() * Math.pow(10, 20))
 
-		window.localStorage.setItem(nonceId, nonce)
-
-		return nonce
+		return this.apartmentNonce
 	}
 
 	/**
@@ -234,7 +245,7 @@ export class Rental {
 		let promises = []
 
 		// Restore pending rentals from local storage
-		promises.push(this.restoreFromLocalStorage().then(localRentals => {
+		promises.push(this.fetchPendingRequests(accounts).then(localRentals => {
 			rentals = rentals.concat(localRentals)
 		}))
 
@@ -262,12 +273,12 @@ export class Rental {
 	 *
 	 * @returns {Promise<Array>}
 	 */
-	static async restoreFromLocalStorage (accounts) {
+	static async fetchPendingRequests (accounts) {
 		let addresses = accounts.map(account => {
 			return account.address
 		})
 
-		let pendingRentalRequests = JSON.parse(window.localStorage.setItem('pendingRentalRequests') || '[]')
+		let pendingRentalRequests = JSON.parse(window.localStorage.getItem('pendingRentalRequests') || '[]')
 
 		let promises = []
 		let rentals = []
@@ -280,7 +291,7 @@ export class Rental {
 			}
 
 			let rental = new Rental()
-			rental.localStorageId = request.id
+			rental.localStorageId = request.localStorageId
 			rental.tenant = request.tenant
 			rental.fee = request.fee
 			rental.deposit = request.deposit
@@ -288,7 +299,7 @@ export class Rental {
 
 			// Fetch the apartment
 			promises.push(new Promise(async (resolve, reject) => {
-				rental.apartment = await Apartment.findById(request.apartment)
+				rental.apartment = await Apartment.findById(request.details.apartmentId)
 				rentals.push(rental)
 
 				resolve()
@@ -302,16 +313,51 @@ export class Rental {
 	}
 
 	/**
-	 * Remove the current request from local storage
+	 * Remove the pending request from local storage
 	 */
-	removeFromLocalStorage () {
-		let pendingRentalRequests = JSON.parse(window.localStorage.setItem('pendingRentalRequests') || '[]')
+	removePendingRequest () {
+		let pendingRentalRequests = JSON.parse(window.localStorage.getItem('pendingRentalRequests') || '[]')
 
 		let filteredRequests = pendingRentalRequests.filter(request => request.id !== this.localStorageId)
 
 		window.localStorage.setItem('pendingRentalRequests', JSON.stringify(filteredRequests))
 	}
 
+	/**
+	 * Save data about the rental locally to be used by the tenant
+	 */
+	saveLocalData () {
+		let rentalData = {
+			details:        this.details,
+			apartmentNonce: this.apartmentNonce
+		}
+
+		let allLocalData = JSON.parse(window.localStorage.getItem('rentalsData') || '{}')
+
+		// Add the local data, addressed through the interaction address (as we don't have a rental id yet at this point)
+		allLocalData[this.interactionAddress] = rentalData
+
+		window.localStorage.setItem('rentalsData', JSON.stringify(allLocalData))
+	}
+
+	/**
+	 * Retrieve the locally stored data
+	 */
+	loadLocalData () {
+		let allLocalData = JSON.parse(window.localStorage.getItem('rentalsData') || '{}')
+
+		if (allLocalData[this.interactionAddress]) {
+			this.details = allLocalData[this.interactionAddress]
+			this.apartmentNonce = allLocalData[this.interactionAddress]
+		}
+	}
+
+	/**
+	 * Find rentals for the provided tenant address
+	 *
+	 * @param address
+	 * @returns {Promise<Array>}
+	 */
 	static async findByTenant (address) {
 		let rentals = []
 		let promises = []
@@ -329,7 +375,8 @@ export class Rental {
 				Object.assign(rental, rentalData)
 				rental.tenant = address
 
-				// TODO: Get rental details; possibly from local storage (in IPFS: encrypted with interaction key)
+				// Fetch the locally stored data
+				rental.loadLocalData()
 
 				rentals.push(rental)
 				resolve()

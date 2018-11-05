@@ -125,8 +125,7 @@ let app = new Vue({
 				email: window.localStorage.getItem('userEmail') || ''
 			},
 			fee:       0,
-			feeInEth:  0,
-			deposit:   0
+			feeInEth:  0
 		},
 
 		userApartments:   [],
@@ -236,20 +235,29 @@ let app = new Vue({
 		 * Request a new rental. Will request an interaction key from the owner first and add the rental to the pending rentals.
 		 */
 		requestRental: async () => {
-			Rental.addRequest(app.rentalRequest.account, app.rentalRequest)
+			let rental = await Rental.addRequest(app.rentalRequest.account, app.rentalRequest)
+			app.rentals.push(rental)
 		},
 
-		issueInteractionToken: async tenantPublicKey => {
+		/**
+		 * Issue an interaction token based and publish it encrypted with the provided public key point
+		 *
+		 * @param requestData
+		 * @returns {Promise<void>}
+		 */
+		issueInteractionToken: async requestData => {
+			console.debug('Received interaction key request', requestData)
+
 			Notifications.show('Issueing interaction key for rental request')
 
 			// Create the tenant's public key buffer
-			let publicKeyBuffer = Conversion.getUint8ArrayBufferFromXY(tenantPublicKey.x, tenantPublicKey.y)
+			let publicKeyBuffer = Conversion.getUint8ArrayBufferFromXY(requestData.x, requestData.y)
 
 			// Try to encrypt something with the public key buffer to ensure it's valid before we create an EC account
 			try {
 				await Cryptography.encryptString('test', publicKeyBuffer)
 			} catch (e) {
-				console.error('Invalid tenant public key', tenantPublicKey, e)
+				console.error('Invalid tenant public key', requestData, e)
 				return
 			}
 
@@ -258,26 +266,48 @@ let app = new Vue({
 
 			// Extract the public key and encode it for transmission
 			let interactionKey = JSON.stringify({
-				x: ecAccount.public.x,
-				y: ecAccount.public.y
+				id:      requestData.id,
+				x:       ecAccount.public.x,
+				y:       ecAccount.public.y,
+				address: ecAccount.address
 			})
 
-			// Encrypt the interaction key with the tenant's public key
-			let responseString = await Cryptography.encryptString(interactionKey, publicKeyBuffer)
-
-			// Publish the interaction key
-			await PubSub.publishMessage(responseString, 'issue-interaction-key')
+			// Publish the interaction key encrypted with the tenant's public key
+			await PubSub.publishMessage(interactionKey, 'issue-interaction-key', publicKeyBuffer)
 
 			// Add the key to the keys in localStorage
 			let interactionKeys = JSON.parse(window.localStorage.getItem('interactionKeys') || '[]')
 			interactionKeys.push(ecAccount.address)
-			window.localStorage.setItem('interactionKeys', interactionKeys)
+			window.localStorage.setItem('interactionKeys', JSON.stringify(interactionKeys))
 
-			console.log('request ' + tenantPublicKey)
+			console.debug('Issued interaction key ' + interactionKey)
 		},
 
-		addRentalRequestToBlockchain: async interactionKey => {
-			console.log('issue ' + interactionKey)
+		/**
+		 * Send the rental request to the blockchain as soon as an interaction key for it was received
+		 *
+		 * @param responseData
+		 * @returns {Promise<void>}
+		 */
+		sendRentalRequestToBlockchain: async responseData => {
+			console.debug('Received interaction key', responseData)
+
+			// Find the rental request with the matching local storage id
+			let filteredRentals = app.rentals.filter(rental => rental.localStorageId === responseData.id)
+
+			if (filteredRentals.length !== 1) {
+				console.warn('Could not find any rental with the specified id')
+				return
+			}
+
+			// Add the interaction key to the rental
+			let rental = filteredRentals[0]
+			rental.interactionPublicKey_x = responseData.x
+			rental.interactionPublicKey_y = responseData.y
+			rental.interactionAddress = responseData.address
+
+			// Send the rental request to the blockchain
+			rental.sendRequest()
 		},
 
 		/*
@@ -446,11 +476,13 @@ let app = new Vue({
 			app.accounts = await Web3Util.fetchAccounts()
 			app.assignDefaultAccounts()
 
-			app.registerSubscriptions()
-
 			app.registerEvents()
 
-			app.loadRentals()
+			// Load the rentals before we register to the subscriptions so we already have rental requests from
+			// local storage loaded before we try to send them using a received interaction key
+			await app.loadRentals()
+
+			app.registerSubscriptions()
 		},
 
 		loadRentals: async () => {
@@ -477,11 +509,11 @@ let app = new Vue({
 		 */
 		registerSubscriptions: () => {
 			// Register topic processors
-			PubSub.registerTopicProcessor('request-interaction-token', (message) => {
+			PubSub.registerTopicProcessor('request-interaction-key', (message) => {
 				app.issueInteractionToken(JSON.parse(message))
 			})
-			PubSub.registerTopicProcessor('issue-interaction-token', (message) => {
-				app.addRentalRequestToBlockchain(JSON.parse(message))
+			PubSub.registerTopicProcessor('issue-interaction-key', (message) => {
+				app.sendRentalRequestToBlockchain(JSON.parse(message))
 			})
 
 			// Check if we have subscriptions

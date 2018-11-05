@@ -115,22 +115,33 @@ export class Apartment {
 		// Estimate gas and call the addApartment function
 		let method = Web3Util.contract.methods.addApartment(...parameters)
 		return new Promise((resolve, reject) => {
-			method.estimateGas().then(gasAmount => {
-				method.send({from: account.address, gas: gasAmount})
-					.on('receipt', () => {
-						Loading.success('add.blockchain')
-						Loading.hide()
+			method.estimateGas({from: account.address})
+				.then(gasAmount => {
+					method.send({from: account.address, gas: gasAmount})
+						.on('receipt', () => {
+							Loading.success('add.blockchain')
+							Loading.hide()
 
-						resolve(apartment)
-					})
-					.on('error', (error) => {
-						console.error(error)
-						Loading.error('add.blockchain')
-						Loading.hide()
+							resolve(apartment)
+						})
+						.on('error', (error) => {
+							console.error(error)
+							Loading.error('add.blockchain')
+							Loading.hide()
 
-						reject(apartment, error)
-					})
-			})
+							reject(apartment, error)
+						})
+				})
+
+				.catch(error => {
+					console.error(error)
+					Loading.error('add.blockchain')
+					Loading.hide()
+
+					this.removePendingRequest()
+
+					reject(error)
+				})
 		})
 	}
 

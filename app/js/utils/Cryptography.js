@@ -1,6 +1,8 @@
 import { Conversion } from './Conversion'
 import { Web3Util } from './Web3Util'
 import { Notifications } from './Notifications'
+import { default as uniqid } from 'uniqid'
+import { salt } from '../credentials'
 
 // Elliptic for elliptic curve cryptography
 const EC = require('elliptic').ec
@@ -9,13 +11,13 @@ const ec = new EC('secp256k1')
 // Eccrypto for ECIES
 const eccrypto = require('eccrypto')
 
-class CryptographyClass {
+export class Cryptography {
 	/**
 	 * Get the wallet. Asks user for password if wallet hasn't been decrypted or created yet
 	 *
 	 * @return {web3.eth.accounts.wallet}
 	 */
-	async getWallet () {
+	static async getWallet () {
 		if (this.wallet) {
 			return this.wallet
 		}
@@ -60,7 +62,7 @@ class CryptographyClass {
 	 *   address:     "0x0000..."        (0x + 32 bytes hex address as would be used in blockchain account and can be used for signature validation)
 	 * }
 	 */
-	async getOrCreateEcAccount (bcAccount) {
+	static async getOrCreateEcAccount (bcAccount) {
 		// Try to catch the ec account associated with the address
 		let ecAccount = await this.getEcAccountForBcAccount(bcAccount.address)
 
@@ -103,7 +105,7 @@ class CryptographyClass {
 	 *   address:     "0x0000..."        (0x + 32 bytes hex address as would be used in blockchain account and can be used for signature validation)
 	 * }
 	 */
-	async getEcAccountForBcAccount (bcAddress) {
+	static async getEcAccountForBcAccount (bcAddress) {
 		// Local storage is acting as hashmap: BC account address => EC account address
 
 		// The account address is used to find the key; the address contained within is NOT the same as the account address
@@ -133,12 +135,12 @@ class CryptographyClass {
 	 *   address:     "0x0000..."        (0x + 32 bytes hex address as would be used in blockchain account and can be used for signature validation)
 	 * }
 	 */
-	async getEcAccount (address) {
+	static async getEcAccount (address) {
 		// Get the wallet
 		let wallet = await this.getWallet()
 
 		// Check if an Ec account exists at the address
-		if (typeof(wallet[address]) === 'undefined') {
+		if (typeof wallet[address] === 'undefined') {
 			return null
 		}
 
@@ -160,10 +162,11 @@ class CryptographyClass {
 	 *       y:         "0x0000...",     (0x + 32y bytes hex = 66 chars)
 	 *       buffer:    Uint8Array(65)   Buffer to be used with eccrypto
 	 *   }
-	 *   address:     "0x0000..."        (0x + 32 bytes hex address as would be used in blockchain account. Can be used for signature validation and to fetch account from wallet.)
+	 *   address:     "0x0000..."
+	 *     (0x + 32 bytes hex address as would be used in blockchain account. Can be used for signature validation and to fetch account from wallet.)
 	 * }
 	 */
-	async generateEcAccount () {
+	static async generateEcAccount () {
 		// Get the wallet
 		let wallet = await this.getWallet()
 
@@ -173,8 +176,8 @@ class CryptographyClass {
 		let publicKey = keyPair.getPublic()
 
 		// This is the same: (eccrypto always adds 04 in front of x and y point of public key)
-		//console.log('0x' + Buffer(eccrypto.getPublic(privateKey)).toString('hex'));
-		//console.log('0x04' + (keyPair.getPublic().x.toString(16)) + (keyPair.getPublic().y.toString(16)));
+		// console.log('0x' + Buffer(eccrypto.getPublic(privateKey)).toString('hex'));
+		// console.log('0x04' + (keyPair.getPublic().x.toString(16)) + (keyPair.getPublic().y.toString(16)));
 
 		let pkHex = '0x' + privateKey.toString('hex')
 		let account = Web3Util.web3.eth.accounts.privateKeyToAccount(pkHex)
@@ -217,7 +220,7 @@ class CryptographyClass {
 	 * @param account
 	 * @return {{private: {hex: string, buffer: Uint8Array}, public: {x: string, y: string, buffer: Uint8Array}, address: string}}
 	 */
-	getEcAccountForWalletAccount (account) {
+	static getEcAccountForWalletAccount (account) {
 		// Get the public key for the private key
 		let privateKeyArray = Conversion.hexToUint8Array(account.privateKey.substr(2))
 
@@ -247,7 +250,7 @@ class CryptographyClass {
 	 * @param publicKeyBuffer
 	 * @return {Promise<Buffer>}
 	 */
-	async encryptString (str, publicKeyBuffer) {
+	static async encryptString (str, publicKeyBuffer) {
 		console.debug('Encrypting ' + str + ' with:', publicKeyBuffer)
 
 		// Encrypt the message
@@ -274,7 +277,7 @@ class CryptographyClass {
 	 * @param privateKeyBuffer
 	 * @return {Promise<Buffer>}
 	 */
-	async decryptString (str, privateKeyBuffer) {
+	static async decryptString (str, privateKeyBuffer) {
 		console.debug('Trying to decrypt ' + str + ' with:', privateKeyBuffer)
 
 		try {
@@ -294,12 +297,18 @@ class CryptographyClass {
 			console.debug('Decryption successful: ', resultString)
 
 			return resultString
-		}
-		catch (e) {
+		} catch (e) {
 			console.debug('Decryption failed; returning null')
 			return null
 		}
 	}
-}
 
-export const Cryptography = new CryptographyClass()
+	/**
+	 * Get a random 64 char hex string
+	 *
+	 * @returns {*}
+	 */
+	static getRandomString () {
+		return Web3Util.web3.utils.sha3(uniqid() + salt + uniqid() + Math.round(Math.random() * Math.pow(10, 20))).substr(2)
+	}
+}

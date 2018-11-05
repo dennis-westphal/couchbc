@@ -3,11 +3,11 @@ import { ipfsHost, ipfsGatewayUrl } from '../constants'
 import { default as bs58 } from 'bs58'
 import { Cryptography } from './Cryptography'
 
-class IpfsUtilClass {
+export class IpfsUtil {
 	/**
 	 * Get an IpfsApi connection
 	 */
-	getConnection () {
+	static getConnection () {
 		if (this.connection) {
 			return this.connection
 		}
@@ -22,7 +22,7 @@ class IpfsUtilClass {
 	 * @param str
 	 * @return {Promise<string>}
 	 */
-	async uploadString (str) {
+	static async uploadString (str) {
 		// Get an IPFS connection
 		let ipfsConnection = this.getConnection()
 
@@ -39,7 +39,7 @@ class IpfsUtilClass {
 					throw('Could not upload image to IPFS: ' + err)
 				}
 
-				console.log('String uploaded to ' + result[0].hash)
+				console.debug('String uploaded to ' + result[0].hash)
 
 				resolve(result[0].hash)
 			})
@@ -52,10 +52,10 @@ class IpfsUtilClass {
 	 * @param inputElement
 	 * @return {Promise<string>}
 	 */
-	async uploadImage (inputElement) {
+	static async uploadImage (inputElement) {
 		// Return a promise that is resolved if the image upload succeeded
 		return new Promise((resolve, reject) => {
-			let reader = new FileReader()
+			let reader = new window.FileReader()
 			reader.onloadend = () => {
 				// Get an IPFS connection
 				let ipfsConnection = this.getConnection()
@@ -72,7 +72,7 @@ class IpfsUtilClass {
 						throw('Could not upload image to IPFS: ' + err)
 					}
 
-					console.log('Image uploaded to ' + result[0].hash)
+					console.debug('Image uploaded to ' + result[0].hash)
 
 					resolve(result[0].hash)
 				})
@@ -88,7 +88,7 @@ class IpfsUtilClass {
 	 * @param ipfsAddr
 	 * @return {Promise<string>}
 	 */
-	async downloadString (ipfsAddr) {
+	static async downloadString (ipfsAddr) {
 		// Return a promise that is resolved with the ipfs string downloaded
 		return new Promise((resolve, reject) => {
 			let ipfsConnection = this.getConnection()
@@ -115,7 +115,7 @@ class IpfsUtilClass {
 	 * @param ecAccount EC account used for decryption or null
 	 * @return {Promise<object>}
 	 */
-	async downloadDataFromHexHash (hexHash, ecAccount) {
+	static async downloadDataFromHexHash (hexHash, ecAccount) {
 		let ipfsAddress = this.hexHashToIpfsAddr(hexHash)
 
 		let str = await this.downloadString(ipfsAddress)
@@ -134,7 +134,7 @@ class IpfsUtilClass {
 	 * @param publicKeyBuffer Buffer containing the public key to be used for encryption, if any
 	 * @return {Promise<string>}
 	 */
-	async uploadData (data, publicKeyBuffer) {
+	static async uploadData (data, publicKeyBuffer) {
 		let str = JSON.stringify(data)
 
 		if (publicKeyBuffer) {
@@ -152,7 +152,7 @@ class IpfsUtilClass {
 	 * @param address
 	 * @return {string}
 	 */
-	getImageUrl (address) {
+	static getImageUrl (address) {
 		// Check if we need to decode an IPFS hex hash
 		if (address.substr(0, 2) === '0x') {
 			return ipfsGatewayUrl + this.hexHashToIpfsAddr(address)
@@ -168,7 +168,7 @@ class IpfsUtilClass {
 	 * @param address
 	 * @return {string}
 	 */
-	ipfsAddrToHash (address) {
+	static ipfsAddrToHash (address) {
 		return '0x' + (bs58.decode(address).slice(2).toString('hex'))
 	}
 
@@ -178,9 +178,7 @@ class IpfsUtilClass {
 	 * @param hexHash
 	 * @return {string}
 	 */
-	hexHashToIpfsAddr (hexHash) {
+	static hexHashToIpfsAddr (hexHash) {
 		return bs58.encode(Buffer.from('1220' + hexHash.substr(2), 'hex'))
 	}
 }
-
-export const IpfsUtil = new IpfsUtilClass()
