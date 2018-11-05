@@ -44,11 +44,22 @@ require('webpack-jquery-ui/tooltip.js')
 // Add date filters
 Vue.filter('formatDate', function (date) {
 	if (date) {
+		// Check if we have a unix day
+		if (typeof date === 'number' && date < 99999 && date > 17000) {
+			date = Conversion.unixDayToDate(date)
+		}
+		console.log(date)
+
 		return moment(date).format('DD.MM.YYYY')
 	}
 })
 Vue.filter('formatDateTime', function (date) {
 	if (date) {
+		// Check if we have a unix day
+		if (typeof date === 'number' && date < 99999 && date > 17000) {
+			date = Conversion.unixDayToDate(date)
+		}
+
 		return moment(date).format('DD.MM.YYYY hh:mm')
 	}
 })

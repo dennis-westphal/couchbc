@@ -5,6 +5,7 @@ import { Conversion } from '../utils/Conversion'
 import { Apartment } from './Apartment'
 import { Web3Util } from '../utils/Web3Util'
 import { IpfsUtil } from '../utils/IpfsUtil'
+import { Notifications } from '../utils/Notifications'
 
 export class Rental {
 	constructor () {
@@ -173,21 +174,31 @@ export class Rental {
 		Loading.add('request.blockchain', 'Sending rental request to blockchain')
 		let method = Web3Util.contract.methods.requestRental(...parameters)
 		return new Promise((resolve, reject) => {
-			console.log(parameters, this.tenant)
+			method.estimateGas({from: this.tenant, value: value})
+				.then(gasAmount => {
+					method.send({from: this.tenant, gas: 4000000, value: value})
+						.on('receipt', () => {
+							Notifications.show('Rental request sent')
+							Loading.success('request.blockchain')
+							Loading.hide()
 
-			//method.estimateGas({from: this.tenant, value: value})
-			//	.then(gasAmount => {
-			method.send({from: this.tenant, gas: 4000000, value: value})
-				.on('receipt', () => {
-					Loading.success('request.blockchain')
-					Loading.hide()
+							this.status = 'requested'
+							this.removePendingRequest()
+							this.saveLocalData()
 
-					this.status = 'requested'
-					this.removePendingRequest()
+							resolve()
+						})
+						.on('error', (error) => {
+							console.error(error)
+							Loading.error('request.blockchain')
+							Loading.hide()
 
-					resolve()
+							this.removePendingRequest()
+
+							reject(error)
+						})
 				})
-				.on('error', (error) => {
+				.catch(error => {
 					console.error(error)
 					Loading.error('request.blockchain')
 					Loading.hide()
@@ -197,16 +208,6 @@ export class Rental {
 					reject(error)
 				})
 		})
-		/*	.catch(error => {
-				console.error(error)
-				Loading.error('request.blockchain')
-				Loading.hide()
-
-				this.removePendingRequest()
-
-				reject(error)
-			})
-	})*/
 	}
 
 	/**
@@ -296,6 +297,7 @@ export class Rental {
 			rental.fee = request.fee
 			rental.deposit = request.deposit
 			rental.details = request.details
+			rental.status = 'pending'
 
 			// Fetch the apartment
 			promises.push(new Promise(async (resolve, reject) => {
@@ -346,6 +348,7 @@ export class Rental {
 	loadLocalData () {
 		let allLocalData = JSON.parse(window.localStorage.getItem('rentalsData') || '{}')
 
+		console.log(allLocalData, this.interactionAddress)
 		if (allLocalData[this.interactionAddress]) {
 			this.details = allLocalData[this.interactionAddress]
 			this.apartmentNonce = allLocalData[this.interactionAddress]
@@ -368,15 +371,19 @@ export class Rental {
 		for (let i = 0; i < numRentals; i++) {
 			promises.push(new Promise(async (resolve, reject) => {
 				// Fetch the rental from the blockchain
-				let rentalData = await Web3Util.contract.methods.getTenantRental(address, i)
+				let rentalData = await Web3Util.contract.methods.getTenantRental(address, i).call()
 
 				// Create a new rental and assign the fetched data
 				let rental = new Rental()
+				console.log(rentalData)
 				Object.assign(rental, rentalData)
 				rental.tenant = address
 
 				// Fetch the locally stored data
 				rental.loadLocalData()
+
+				// Fetch the apartment
+				rental.apartment = await Apartment.findById(rental.details.apartmentId)
 
 				rentals.push(rental)
 				resolve()

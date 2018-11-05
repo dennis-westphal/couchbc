@@ -162,22 +162,22 @@ contract Rent {
 	// ------------------------- Properties -----------------------
 	// ------------------------------------------------------------
 	mapping(address => Tenant) private tenants;
-	mapping(bytes32 => mapping(bytes32 => bool)) private tenantPublicKeys;      // Mapping to check whether a public key has been used in a tenant's profile
-	mapping(bytes32 => bool) private tenantPublicKeys_y;                        // Mapping to check whether a public key has been used in a tenant's profile
+	mapping(bytes32 => mapping(bytes32 => bool)) private tenantPublicKeys; // Mapping to check whether a public key has been used in a tenant's profile
 
-	address[] private mediators;                                                // List of mediators
+	address[] private mediators;                                           // List of mediators
 
-	Apartment[] private apartments;                                             // List of apartments
+	Apartment[] private apartments;                                        // List of apartments
 
-	mapping(bytes32 => uint[]) private cityApartments;                          // Country+City SHA256 hash => apartment ids; to allow fetching apartments of a city
-	mapping(address => uint[]) private ownerApartments;                         // Mapping to get the apartments of an owner
-	mapping(bytes32 => mapping(bytes32 => bool)) private ownerPublicKeys;       // Mapping to check whether a public key has been used in an apartment
-	mapping(bytes32 => mapping(bytes32 => uint)) private interactionKeyRental;  // Mapping to get the rental for a interaction public key and to check whether a key has already been used
-	mapping(address => bool) private rentalAddresses;                           // Mapping to check if an address has already been used in an interaction and prevent it from other uses
+	mapping(bytes32 => uint[]) private cityApartments;                     // Country+City SHA256 hash => apartment ids; to allow fetching apartments of a city
+	mapping(address => uint[]) private ownerApartments;                    // Mapping to get the apartments of an owner
+	mapping(bytes32 => mapping(bytes32 => bool)) private ownerPublicKeys;  // Mapping to check whether a public key has been used in an apartment
+	mapping(bytes32 => mapping(bytes32 => bool)) private interactionKeys;  // Mapping to check whether a public key has already been used in another interaction
+	mapping(address => uint) private interactionAddressRental;             // Mapping to get the rental for a interaction address
+	mapping(address => bool) private rentalAddresses;                      // Mapping to check if an address has already been used in an interaction and prevent it from other uses
 
-	Rental[] private rentals;                                                   // List of rentals
+	Rental[] private rentals;                                              // List of rentals
 
-	mapping(uint => DepositDeduction) private depositDeductions;                // Deposit deductions for a rental (id => deduction)
+	mapping(uint => DepositDeduction) private depositDeductions;           // Deposit deductions for a rental (id => deduction)
 
 	// ---------------------------------------------------------
 	// ------------------------ Getters ------------------------
@@ -373,6 +373,7 @@ contract Rent {
 		uint id,
 		bytes32 interactionPublicKey_x,
 		bytes32 interactionPublicKey_y,
+		address interactionAddress,
 		bytes32 detailsIpfsHash,
 		uint fee,
 		uint deposit,
@@ -393,6 +394,7 @@ contract Rent {
 		// Assign the return variables
 		interactionPublicKey_x = rental.interactionPublicKey_x;
 		interactionPublicKey_y = rental.interactionPublicKey_y;
+		interactionAddress = rental.interactionAddress;
 		detailsIpfsHash = rental.detailsIpfsHash;
 		fee = rental.fee;
 		deposit = rental.deposit;
@@ -400,23 +402,23 @@ contract Rent {
 		depositStatus = getDepositStatusString(rental.depositStatus);
 	}
 
-	// Check whether a rental exists for the interaction public key
-	function hasInteractionKeyRental(bytes32 key_x, bytes32 key_y) public view returns (bool) {
+	// Check whether a rental exists for the interaction address
+	function hasInteractionAddressRental(address interactionAddress) public view returns (bool) {
 		return
-		// If the mapping has a (not 0) value for the interaction key, we got a rental for it
-		interactionKeyRental[key_x][key_y] != 0 ||
+		// If the mapping has a (not 0) value for the interaction address, we got a rental for it
+		interactionAddressRental[interactionAddress] != 0 ||
 
-		// Otherwise, check if we have rentals and the rental at id 0 has the key as interactionPublicKey
+		// Otherwise, check if we have rentals and the rental at id 0 has the same interactionAddress
 		rentals.length != 0 &&
-		rentals[0].interactionPublicKey_x == key_x &&
-		rentals[0].interactionPublicKey_y == key_y;
+		rentals[0].interactionAddress == interactionAddress;
 	}
 
-	// Get the rental for the specified interaction public key
-	function getInteractionKeyRental(bytes32 key_x, bytes32 key_y) public view returns (
+	// Get the rental for the specified interaction address
+	function getInteractionAddressRental(address addr) public view returns (
 		uint id,
 		bytes32 interactionPublicKey_x,
 		bytes32 interactionPublicKey_y,
+		address interactionAddress,
 		bytes32 detailsIpfsHash,
 		uint fee,
 		uint deposit,
@@ -424,9 +426,9 @@ contract Rent {
 		string depositStatus
 	) {
 		// Check that we have a rental for the interaction key
-		require(hasInteractionKeyRental(key_x, key_y));
+		require(hasInteractionAddressRental(addr));
 
-		id = interactionKeyRental[key_x][key_y];
+		id = interactionAddressRental[addr];
 
 		// Fetch the rental from the storage using the id
 		Rental storage rental = rentals[id];
@@ -434,6 +436,7 @@ contract Rent {
 		// Assign the return variables
 		interactionPublicKey_x = rental.interactionPublicKey_x;
 		interactionPublicKey_y = rental.interactionPublicKey_y;
+		interactionAddress = rental.interactionAddress;
 		detailsIpfsHash = rental.detailsIpfsHash;
 		fee = rental.fee;
 		deposit = rental.deposit;
@@ -499,6 +502,9 @@ contract Rent {
 
 		// Add the apartment to the owner's apartments
 		ownerApartments[msg.sender].push(apartments.length - 1);
+
+		// Add the owner public key to the list of used public keys
+		ownerPublicKeys[ownerPublicKey_x][ownerPublicKey_y] = true;
 
 		// Emit an event for the added apartment
 		emit ApartmentAdded(msg.sender, apartments.length - 1);
@@ -582,15 +588,19 @@ contract Rent {
 		// Check if the transferred value matches the fee and deposit
 		require(fee + deposit == Library.weiToFinney(msg.value));
 
-		// Check that the interaction key does not match an owner or tenant key
+		// Check that the interaction key does not match an existing key
 		require(!tenantPublicKeys[interactionKey_x][interactionKey_y]);
 		require(!ownerPublicKeys[interactionKey_x][interactionKey_y]);
+		require(!interactionKeys[interactionKey_x][interactionKey_y]);
 
 		// Check that the interaction address isn't empty
 		require(interactionAddress != 0x0);
 
 		// Check that the interactionAddress does not match a tenant's address
 		require(!tenants[interactionAddress].initialized);
+
+		// Check that the interactionAddress hasn't been used in a rental
+		require(!hasInteractionAddressRental(interactionAddress));
 
 		// Check that the interactionAddress isn't the current address
 		require(interactionAddress != msg.sender);
@@ -624,8 +634,12 @@ contract Rent {
 				DepositStatus.Open
 			));
 
-		// Link the rental to the interaction key
-		interactionKeyRental[interactionKey_x][interactionKey_y] = rentals.length - 1;
+		// Add the rental in the tenant's profile
+		tenants[msg.sender].rentals.push(rentals.length - 1);
+
+		// Link the rental to the interaction key and address
+		interactionKeys[interactionKey_x][interactionKey_y] = true;
+		interactionAddressRental[interactionAddress] = rentals.length - 1;
 
 		emit RentalRequested(msg.sender, interactionAddress, rentals.length - 1);
 	}

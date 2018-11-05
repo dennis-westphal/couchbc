@@ -36,9 +36,9 @@
                                 </a>
                             </li>
 
-                            <li v-if="false">
+                            <li v-if="rentals.length > 0">
                                 <a href="#" @click.stop="page = 'rentals'">
-                                    My rentals
+                                    Rentals
                                 </a>
                             </li>
                         </ul>
@@ -287,7 +287,13 @@
                 </thead>
                 <tbody>
                 <tr v-for="rental in rentals">
-
+                    <td></td>
+                    <td>{{rental.tenant}}</td>
+                    <td>{{rental.apartment.title}}</td>
+                    <td>{{rental.details.fromDay|formatDate}}</td>
+                    <td>{{rental.details.tillDay|formatDate}}</td>
+                    <td>{{rental.status}}</td>
+                    <td></td>
                 </tr>
                 </tbody>
             </table>

@@ -41,11 +41,22 @@ export class Conversion {
 	// Date
 	/**
 	 * Convert a date to a unix day integer
+	 *
 	 * @param date
 	 * @returns {number}
 	 */
 	static dateToUnixDay (date) {
 		return Math.floor(date.getTime() / (1000 * 60 * 60 * 24))
+	}
+
+	/**
+	 * Convert a unix day to a date
+	 *
+	 * @param day
+	 * @returns {Date}
+	 */
+	static unixDayToDate (day) {
+		return new Date(day * 1000 * 60 * 60 * 24)
 	}
 
 	// Units
