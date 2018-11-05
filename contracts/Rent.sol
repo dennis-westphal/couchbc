@@ -64,7 +64,7 @@ contract Rent {
 
 	// ------------------------ Rentals ------------------------
 	enum RentalStatus {
-		Requested, Accepted, Reviewed
+		Requested, Accepted, Refused, Reviewed
 	}
 	enum DepositStatus {
 		Open, // When no claim to the deposit has been made or is valid yet
@@ -72,7 +72,6 @@ contract Rent {
 		Processed // When the deposit was processed => (partly) refunded / deduction transferred
 	}
 	enum DeductionStatus {
-		None, // When no deduction has been requested
 		Requested, // When a deduction has been requested, but the tenant hasn't responded
 		Objected, // When the tenant has objected to the deduction
 		Resolved // When the deduction has been resolved by mediation or timeout
@@ -125,6 +124,9 @@ contract Rent {
 		if (status == RentalStatus.Accepted) {
 			return "accepted";
 		}
+		if (status == RentalStatus.Refused) {
+			return "refused";
+		}
 		if (status == RentalStatus.Reviewed) {
 			return "reviewed";
 		}
@@ -132,9 +134,6 @@ contract Rent {
 
 	// Get the string representation for the deduction status, lowercase
 	function getDeductionStatusString(DeductionStatus status) private pure returns (string) {
-		if (status == DeductionStatus.None) {
-			return "none";
-		}
 		if (status == DeductionStatus.Requested) {
 			return "requested";
 		}
@@ -631,6 +630,7 @@ contract Rent {
 				deposit,
 				msg.sender,
 				0x0,
+				0x0,
 				RentalStatus.Requested,
 				DepositStatus.Open
 			));
@@ -677,7 +677,7 @@ contract Rent {
 	) public {
 		// Check that the sender address has not been used yet
 		require(!tenants[msg.sender].initialized);
-		require(!ownerApartments[msg.sender].length == 0);
+		require(ownerApartments[msg.sender].length == 0);
 		require(!rentalAddresses[msg.sender]);
 
 		// Check that the rental exists
@@ -721,7 +721,7 @@ contract Rent {
 	) public {
 		// Check that the sender address has not been used yet
 		require(!tenants[msg.sender].initialized);
-		require(!ownerApartments[msg.sender].length == 0);
+		require(ownerApartments[msg.sender].length == 0);
 		require(!rentalAddresses[msg.sender]);
 
 		// Check that the rental exists
@@ -732,12 +732,13 @@ contract Rent {
 		// Check that the rental has the right state
 		require(rental.status == RentalStatus.Requested);
 
+		strings.slice[] memory parts = new strings.slice[](3);
+		parts[0] = Library.uintToString(rentalId).toSlice();
+		parts[1] = contactDataIpfsHash.toSliceB32();
+		parts[2] = Library.addressToString(msg.sender).toSlice();
+
 		// Recover the expected signer address
-		string memory message = "accept:".toSlice().join(
-			Library.uintToString(rentalId).toSlice(),
-			contactDataIpfsHash.toSliceB32(),
-			msg.sender.toSliceB32()
-		);
+		string memory message = "accept:".toSlice().join(parts);
 		address recovered = Verifier.verifyString(
 			message,
 			signature
@@ -806,11 +807,13 @@ contract Rent {
 		}
 
 		// Otherwise, create a deposit deduction
-		DepositDeduction depositDeduction = DepositDeduction(
-			block.timestamp / 86400,
+		DepositDeduction memory depositDeduction = DepositDeduction(
+			uint16(block.timestamp / 86400),
 			deductionAmount,
 			deductionReasonIpfsHash,
-			contactDetailsIpfsHash
+			0,
+			0,
+			DeductionStatus.Requested
 		);
 
 		// TODO: Save
