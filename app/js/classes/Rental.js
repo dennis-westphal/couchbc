@@ -219,7 +219,7 @@ export class Rental {
 	 * @returns {string}
 	 */
 	get apartmentHash () {
-		return Web3Util.web3.utils.sha3(JSON.stringify([this.apartment.id, this.getApartmentNonce()]))
+		return Web3Util.web3.utils.sha3(this.apartment.id + '-' + this.getApartmentNonce())
 	}
 
 	/**

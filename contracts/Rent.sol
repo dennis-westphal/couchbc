@@ -1,4 +1,4 @@
-pragma solidity ^0.4.24;
+pragma solidity ^0.4.25;
 
 import "./Library.sol";
 import "./strings/src/strings.sol";
@@ -58,6 +58,7 @@ contract Rent {
 	}
 
 	struct ApartmentReview {
+		address tenant;
 		uint8 score;        // Score 1-5
 		bytes32 ipfsHash;   // Hash part of IPFS address
 	}
@@ -192,9 +193,11 @@ contract Rent {
 		if (ownsApartments()) {
 			return "owner";
 		}
-		// TODO: Determine if address has been used by an owner in a rental
-		if (false) {
-			return "rental";
+		if (hasInteractionAddressRental(msg.sender)) {
+			return "interaction";
+		}
+		if (rentalAddresses[msg.sender]) {
+			return "rentalOwner";
 		}
 
 		return "unknown";
@@ -338,6 +341,7 @@ contract Rent {
 
 	// -------------------- Apartment reviews ------------------
 	function getApartmentReview(uint apartmentId, uint reviewId) public view returns (
+		address tenant,
 		uint8 score,
 		bytes32 ipfsHash
 	) {
@@ -351,6 +355,7 @@ contract Rent {
 		ApartmentReview storage review = apartments[apartmentId].reviews[reviewId];
 
 		// Assign the return variables
+		tenant = review.tenant;
 		score = review.score;
 		ipfsHash = review.ipfsHash;
 	}
@@ -451,19 +456,21 @@ contract Rent {
 
 	event ApartmentAdded(address indexed owner, uint apartmentId);
 
-	event RentalRequested(address indexed tenant, address interactionAddress, uint rentalId);
-	event RentalRequestWithdrawn(address indexed tenant, address interactionAddress, uint rentalId);
-	event RentalRequestApproved(address indexed tenant, address interactionAddress, uint rentalId);
-	event RentalRequestRefused(address indexed tenant, address interactionAddress, uint rentalId);
+	event RentalRequested(address interactionAddress, uint rentalId);
+	event RentalRequestWithdrawn(address interactionAddress, uint rentalId);
 
-	event DeductionRequested(address indexed tenant, address interactionAddress, uint rentalId);
-	event DeductionAccepted(address indexed tenant, address interactionAddress, uint rentalId);
-	event DeductionRefused(address indexed tenant, address interactionAddress, uint rentalId);
+	event RentalRequestRefused(address indexed tenant, uint rentalId);
+	event RentalRequestApproved(address indexed tenant, uint rentalId);
 
-	event DeductionMediated(address indexed tenant, address interactionAddress, uint rentalId);
+	event DepositRefunded(address indexed tenant, uint rentalId);
+	event DeductionRequested(address indexed tenant, uint rentalId);
 
-	event TenantReviewCreated(address indexed tenant, uint rentalId);
-	event ApartmentReviewCreated(address indexed tenant, address indexed owner, uint apartmentId, uint rentalId);
+	event DeductionAccepted(address indexed interactionAddress, uint rentalId);
+	event DeductionRefused(address indexed interactionAddress, address indexed mediatorAddress, uint rentalId);
+
+	event DeductionMediated(address indexed tenant, address indexed interactionAddress, uint rentalId);
+
+	event ApartmentReviewed(address indexed owner, uint apartmentId, uint rentalId);
 
 	event Test(string title, string text);
 	event TestAddr(string title, address addr);
@@ -642,7 +649,7 @@ contract Rent {
 		interactionKeys[interactionKey_x][interactionKey_y] = true;
 		interactionAddressRental[interactionAddress] = rentals.length - 1;
 
-		emit RentalRequested(msg.sender, interactionAddress, rentals.length - 1);
+		emit RentalRequested(interactionAddress, rentals.length - 1);
 	}
 
 	// Withdraw a rental request as a tenant
@@ -663,7 +670,7 @@ contract Rent {
 		);
 
 		// Emit an event to notify about the withdrawn rental request
-		emit RentalRequestWithdrawn(rental.tenant, rental.interactionAddress, rentalId);
+		emit RentalRequestWithdrawn(rental.interactionAddress, rentalId);
 
 		// Delete the rental
 		delete rentals[rentalId];
@@ -706,6 +713,9 @@ contract Rent {
 
 		// Transfer fee and deposit back to the tenant
 		rental.tenant.transfer(Library.finneyToWei(rental.fee + rental.deposit));
+
+		// Notify about the refused rental request
+		emit RentalRequestRefused(rental.tenant, rentalId);
 
 		//emit Test("Concat", message);
 		//emit Test("Signature", signature);
@@ -759,8 +769,35 @@ contract Rent {
 		// Mark the sender address as used in a rental
 		rentalAddresses[msg.sender] = true;
 
+		// Assign a random mediator for the case of a dispute
+		rental.mediator = getRandomMediator();
+
 		// Transfer the rental fee to the sender (= payment address)
 		msg.sender.transfer(Library.finneyToWei(rental.fee));
+
+		// Notify about the accepted rental request
+		emit RentalRequestApproved(rental.tenant, rentalId);
+	}
+
+	// Get a pseudo-random mediator
+	function getRandomMediator() private view returns (address) {
+		// If we don't have mediators, return an empty address
+		if (mediators.length == 0) {
+			return 0x0;
+		}
+
+		// If we only have one mediator, return him
+		if (mediators.length == 1) {
+			return mediators[0];
+		}
+
+		// Get the mediator based on a pseudo-random number generated using the block timestamp and difficulty
+		return mediators[
+		uint256(keccak256(bytes(
+				Library.uintToString(block.timestamp).toSlice()
+				.concat(Library.uintToString(block.difficulty).toSlice())
+			))) % mediators.length
+		];
 	}
 
 	// --------------------- Owner review ---------------------
@@ -773,7 +810,7 @@ contract Rent {
 		bytes32 reviewTextIpfsHash,
 		uint128 deductionAmount, // Requested deposit deduction; can be 0
 		bytes32 deductionReasonIpfsHash, // Reason for deposit deduction; can be empty if no deduction requested
-		bytes32 contactDetailsIpfsHash // Contact details for the mediator
+		bytes32 contactDataForMediatorIpfsHash // Contact data for the mediator
 	) public {
 		// Check that the rental exists
 		require(rentals.length > rentalId);
@@ -784,8 +821,8 @@ contract Rent {
 		// Check the score makes sense
 		require(reviewScore < 6 && reviewScore > 0);
 
-		// Check that the deduction amount (if specified) is larger than 0 but smaller of equal to the deposit
-		require(deductionAmount >= 0 && deductionAmount <= rental.deposit);
+		// Check that the deduction amount (if specified) is smaller or equal to the deposit
+		require(deductionAmount <= rental.deposit);
 
 		// Check that the sender is the owner
 		require(msg.sender == rental.ownerAddress);
@@ -796,6 +833,7 @@ contract Rent {
 		// Assign the review to the tenant
 		TenantReview memory review = TenantReview(reviewScore, reviewTextHash, reviewTextIpfsHash);
 		tenant.reviews[tenant.numReviews] = review;
+		tenant.numReviews ++;
 
 		// If no deduction was requested, we can directly transfer the deposit back to the tenant
 		if (deductionAmount == 0) {
@@ -803,10 +841,23 @@ contract Rent {
 
 			rental.tenant.transfer(rental.deposit);
 
+			// Notify about the refund
+			emit DepositRefunded(rental.tenant, rentalId);
+
 			return;
 		}
 
-		// Otherwise, create a deposit deduction
+		// If we don't have any mediators, grant half of the deduction and transfer the rest back to the tenant.
+		// This should rarely ever be the case, so we also don't emit events.
+		if (mediators.length == 0) {
+			uint128 grantedDeduction = deductionAmount / 2;
+			rental.ownerAddress.transfer(grantedDeduction);
+			rental.tenant.transfer(rental.deposit - grantedDeduction);
+
+			return;
+		}
+
+		// Otherwise, create a deposit deduction and it add to the rental
 		DepositDeduction memory depositDeduction = DepositDeduction(
 			uint16(block.timestamp / 86400),
 			deductionAmount,
@@ -815,8 +866,14 @@ contract Rent {
 			0,
 			DeductionStatus.Requested
 		);
+		depositDeductions[rentalId] = depositDeduction;
+		rental.depositStatus = DepositStatus.Pending;
 
-		// TODO: Save
+		// Add the contact data ipfs hash for the mediator to the rental
+		rental.contactDataForMediatorIpfsHash = contactDataForMediatorIpfsHash;
+
+		// Notify about the requested deduction
+		emit DeductionRequested(rental.tenant, rentalId);
 	}
 
 	// ---------------------- Deductions ----------------------
@@ -825,16 +882,61 @@ contract Rent {
 	function acceptDeduction(
 		uint rentalId
 	) public {
+		require(rentals.length > rentalId);
 
+		Rental storage rental = rentals[rentalId];
+
+		// Only allow accepting deductions from the tenant
+		require(msg.sender == rental.tenant);
+
+		// Only allow accepting the deduction if the depositStatus and the deduction status match
+		require(rental.depositStatus == DepositStatus.Pending);
+		require(depositDeductions[rentalId].status == DeductionStatus.Requested);
+
+		// Change the status
+		rental.depositStatus = DepositStatus.Processed;
+		depositDeductions[rentalId].status = DeductionStatus.Resolved;
+
+		// Transfer the deducted amount to the owner and the rest to the tenant
+		rental.ownerAddress.transfer(Library.finneyToWei(depositDeductions[rentalId].amount));
+		rental.tenant.transfer(Library.finneyToWei(rental.deposit - depositDeductions[rentalId].amount));
+
+		// Delete the deposit deduction
+		delete depositDeductions[rentalId];
+
+		// Notify about the accepted deduction
+		emit DeductionAccepted(rental.interactionAddress, rentalId);
 	}
 
 	// Object to the requested deduction as a tenant
 	function refuseDeduction(
 		uint rentalId,
 		bytes32 objectionIpfsHash,
-		bytes32 rentalDetailsIpfsHash // Rental details for mediator, encrypted with mediator public key
+		bytes32 detailsForMediatorIpfsHash // Rental details for mediator, encrypted with mediator public key
 	) public {
+		require(rentals.length > rentalId);
 
+		Rental storage rental = rentals[rentalId];
+
+		// Only allow objections from the tenant
+		require(msg.sender == rental.tenant);
+
+		// Only allow objections if the depositStatus and the deduction status match
+		require(rental.depositStatus == DepositStatus.Pending);
+		require(depositDeductions[rentalId].status == DeductionStatus.Requested);
+
+		// Add the rental details for the mediator to the rental
+		rental.detailsForMediatorIpfsHash = detailsForMediatorIpfsHash;
+
+		// Change the status and add the objection
+		depositDeductions[rentalId].status = DeductionStatus.Objected;
+		depositDeductions[rentalId].objectionIpfsHash = objectionIpfsHash;
+
+		// Update the lastChange day
+		depositDeductions[rentalId].lastChange = uint16(block.timestamp / 86400);
+
+		// Notify about the refused deduction request
+		emit DeductionRefused(rental.interactionAddress, rental.mediator, rentalId);
 	}
 
 	// Mediate in a deduction request dispute
@@ -842,8 +944,34 @@ contract Rent {
 		uint rentalId,
 		uint128 deductionAmount,
 		bytes32 conclusionIpfsHash // Conclusion encrypted with tenant and interaction public key
-	) {
+	) public {
+		// Check that the rental exists
+		require(rentals.length > rentalId);
 
+		Rental storage rental = rentals[rentalId];
+
+		// Check that the sender is assigned to the rental as mediator
+		rental.mediator = msg.sender;
+
+		// Check that the rental requires mediation
+		require(rental.depositStatus == DepositStatus.Pending);
+		require(depositDeductions[rentalId].status == DeductionStatus.Objected);
+
+		// Check that the determined deductionAmount is smaller or equal to the deposit + mediatorFee
+		require(rental.deposit >= deductionAmount + mediatorFee);
+
+		// Set the deduction to resolved and the deposit to processed
+		depositDeductions[rentalId].status = DeductionStatus.Resolved;
+		depositDeductions[rentalId].conclusionIpfsHash = conclusionIpfsHash;
+		rental.depositStatus = DepositStatus.Processed;
+
+		// Transfer the mediatorFee to the mediator, the deduction to the owner and the rest to the tenant
+		msg.sender.transfer(Library.finneyToWei(mediatorFee));
+		rental.ownerAddress.transfer(Library.finneyToWei(deductionAmount));
+		rental.tenant.transfer(Library.finneyToWei(rental.deposit - deductionAmount - mediatorFee));
+
+		// Notify about the mediation
+		emit DeductionMediated(rental.tenant, rental.interactionAddress, rentalId);
 	}
 
 	// -------------------- Tenant review --------------------
@@ -855,7 +983,43 @@ contract Rent {
 		uint nonce, // Nonce involved in created apartmentHash
 		uint8 score,
 		bytes32 textIpfsHash // Hash of unencrypted review
-	) {
+	) public {
+		// Check that the rental and apartment exist
+		require(rentals.length > rentalId);
+		require(apartments.length > apartmentId);
 
+		Rental storage rental = rentals[rentalId];
+		Apartment storage apartment = apartments[apartmentId];
+
+		// Check that the sender is the tenant
+		rental.tenant = msg.sender;
+
+		// Check that the rental has not been reviewed yet
+		require(rental.status == RentalStatus.Accepted);
+
+		// Check authorization: rentals apartment hash has match the sha3 of apartmentId + "-" + nonce
+		strings.slice[] memory parts = new strings.slice[](2);
+		parts[0] = "-".toSlice();
+		parts[1] = Library.uintToString(nonce).toSlice();
+
+		require(rental.apartmentHash == keccak256(bytes(
+				Library.uintToString(nonce).toSlice().join(parts)
+			)));
+
+		// Change the rental status to reviewed
+		rental.status = RentalStatus.Reviewed;
+
+		// Add the review
+		ApartmentReview memory apartmentReview = ApartmentReview(
+			msg.sender,
+			score,
+			textIpfsHash
+		);
+
+		apartment.reviews[apartment.numReviews] = apartmentReview;
+		apartment.numReviews ++;
+
+		// Notify about the review
+		emit ApartmentReviewed(apartment.owner, apartmentId, rentalId);
 	}
 }

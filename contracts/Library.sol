@@ -1,4 +1,4 @@
-pragma solidity ^0.4.24;
+pragma solidity ^0.4.25;
 
 library Library {
 	// Convert finney to wei
@@ -44,7 +44,7 @@ library Library {
 	}
 
 	// Convert address to string
-	function addressToString(address addr) returns (string) {
+	function addressToString(address addr) public pure returns (string) {
 		bytes memory byteArray = new bytes(20);
 
 		for (uint i = 0; i < 20; i++) {

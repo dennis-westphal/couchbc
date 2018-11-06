@@ -81,8 +81,6 @@ class Web3UtilClass {
 				}
 
 				accounts.push(account)
-
-				// TODO: Determine accounts with interaction keys (locally)
 			}))
 		}
 
