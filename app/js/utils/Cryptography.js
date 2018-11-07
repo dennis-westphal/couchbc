@@ -196,7 +196,10 @@ export class Cryptography {
 		wallet.save(this.walletPassword)
 
 		return {
-			private: pkHex,
+			private: {
+				hex:    pkHex,
+				buffer: privateKey
+			},
 			public:  {
 				x:      xHex,
 				y:      yHex,
@@ -417,11 +420,11 @@ export class Cryptography {
 	}
 
 	/**
-	 * Get a random 64 char hex string
+	 * Get a random 32 byte (0x prefixed) hex string (=> 66 chars)
 	 *
 	 * @returns {*}
 	 */
 	static getRandomString () {
-		return Web3Util.web3.utils.sha3(uniqid() + salt + uniqid() + Math.round(Math.random() * Math.pow(10, 20))).substr(2)
+		return '0x' + Web3Util.web3.utils.sha3(uniqid() + salt + uniqid() + Math.round(Math.random() * Math.pow(10, 20))).substr(2)
 	}
 }

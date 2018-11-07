@@ -33,11 +33,27 @@ html .v-select > .dropdown-toggle {
 }
 
 .button {
-	&.add {
+	&.add, &.accept {
 		background-color: #279b23;
 
 		&:hover {
 			background-color: #1f7120;
+		}
+	}
+
+	&.cancel, &.refuse, &.withdraw {
+		background-color: #9b0800;
+
+		&:hover {
+			background-color: #711d1b;
+		}
+	}
+
+	&.review {
+		background-color: #00039b;
+
+		&:hover {
+			background-color: #1a1b71;
 		}
 	}
 }

@@ -23,8 +23,10 @@ export class Rental {
 		this.fee = 0
 		this.deposit = 0
 
+		this.account = null
 		this.tenant = ''
 		this.mediator = ''
+		this.ownerAddress = ''
 
 		this.status = ''
 		this.depositStatus = ''
@@ -35,6 +37,26 @@ export class Rental {
 		this.detailsForMediator = {}
 		this.ownerData = {}
 		this.ownerDataForMediator = {}
+	}
+
+	/**
+	 * Set an owner for this rental.
+	 * This has to be a previously unused account
+	 *
+	 * @param ownerAccount
+	 */
+	set owner (ownerAccount) {
+		if (ownerAccount.type !== 'unknown') {
+			console.warn('Used account may not be selected as owner address', ownerAccount)
+
+			return
+		}
+
+		this.ownerAddress = ownerAccount.address
+	}
+
+	get owner () {
+		return Web3Util.getAccount(this.ownerAddress)
 	}
 
 	/**
@@ -66,7 +88,6 @@ export class Rental {
 		Loading.add('account', 'Initializing elliptic cryptography account')
 		let ecAccount = await Cryptography.getOrCreateEcAccount(account)
 		Loading.success('account')
-		console.log(account, ecAccount)
 
 		// Subscribe to the answer topic
 		Loading.add('subscribe', 'Subscribing to interaction key responses')
@@ -116,6 +137,10 @@ export class Rental {
 		// Show the load message. Wait for the response, as following steps might freeze the browser for a second.
 		await Loading.show('Sending rental request')
 
+		// Add the apartmentSecret to the details to allow the owner to verify the apartment hash and the tenant to later retrieve it from local storage.
+		// The apartmentSecret is used to proof to the blockchain which apartment was involved in a rental when a tenant rates the apartment.
+		this.details.apartmentSecret = Cryptography.getRandomString()
+
 		Loading.add('account', 'Fetching or creating tenant account')
 		let ecAccount = await Cryptography.getOrCreateEcAccount(Web3Util.getAccount(this.tenant))
 		Loading.success('account')
@@ -145,9 +170,6 @@ export class Rental {
 			ecAccount.public.y
 		]
 		let value = Conversion.finneyToWei(this.fee + this.deposit)
-
-		console.log(parameters, value)
-
 		Loading.success('compile')
 
 		// Estimate gas and call the requestRental function
@@ -156,7 +178,7 @@ export class Rental {
 		return new Promise((resolve, reject) => {
 			method.estimateGas({from: this.tenant, value: value})
 				.then(gasAmount => {
-					method.send({from: this.tenant, gas: 4000000, value: value})
+					method.send({from: this.tenant, gas: gasAmount, value: value})
 						.on('receipt', () => {
 							Notifications.show('Rental request sent')
 							Loading.success('request.blockchain')
@@ -166,10 +188,13 @@ export class Rental {
 							this.removePendingRequest()
 							this.saveLocalData()
 
+							// Mark the account as used by a tenant
+							Web3Util.getAccount(this.tenant).type = 'tenant'
+
 							resolve()
 						})
 						.on('error', (error) => {
-							console.error(error)
+							console.error(error, parameters)
 							Loading.error('request.blockchain')
 							Loading.hide()
 
@@ -179,7 +204,7 @@ export class Rental {
 						})
 				})
 				.catch(error => {
-					console.error(error)
+					console.error(error, parameters)
 					Loading.error('request.blockchain')
 					Loading.hide()
 
@@ -219,7 +244,7 @@ export class Rental {
 	removePendingRequest () {
 		let pendingRentalRequests = JSON.parse(window.localStorage.getItem('pendingRentalRequests') || '[]')
 
-		let filteredRequests = pendingRentalRequests.filter(request => request.id !== this.localStorageId)
+		let filteredRequests = pendingRentalRequests.filter(request => request.localStorageId !== this.localStorageId)
 
 		window.localStorage.setItem('pendingRentalRequests', JSON.stringify(filteredRequests))
 	}
@@ -237,28 +262,11 @@ export class Rental {
 	}
 
 	/**
-	 * Create the apartment hash based on the apartment id and a generated nonce
+	 * Create the apartment hash based on the apartment id and the (random) apartmentSecret
 	 * @returns {string}
 	 */
 	createApartmentHash () {
-		return Web3Util.web3.utils.sha3(this.apartment.id + '-' + this.getApartmentNonce())
-	}
-
-	/**
-	 * Get a nonce to be used in the generation of the apartment hash.
-	 * The nonce is stored in the rental, but not persisted in any way.
-	 * @returns {number}
-	 */
-	getApartmentNonce () {
-		if (this.apartmentNonce) {
-			return this.apartmentNonce
-		}
-
-		// Generate a random number
-		// While this doesn't strictly generate a number only used used, it's sufficient for our purposes
-		this.apartmentNonce = Math.round(Math.random() * Math.pow(10, 20))
-
-		return this.apartmentNonce
+		return Web3Util.web3.utils.sha3(this.apartment.id + '-' + this.details.apartmentSecret)
 	}
 
 	/**
@@ -343,8 +351,8 @@ export class Rental {
 			rental.localStorageId = request.localStorageId
 			rental.tenant = request.tenant
 			rental.role = 'tenant'
-			rental.fee = request.fee
-			rental.deposit = request.deposit
+			rental.fee = parseInt(request.fee)
+			rental.deposit = parseInt(request.deposit)
 			rental.details = request.details
 			rental.status = 'pending'
 
@@ -364,30 +372,25 @@ export class Rental {
 	}
 
 	/**
-	 * Save data about the rental locally to be used by the tenant
+	 * Save details about the rental locally to be used by the tenant
 	 */
 	saveLocalData () {
-		let rentalData = {
-			details:        this.details,
-			apartmentNonce: this.apartmentNonce
-		}
-
 		let allLocalData = JSON.parse(window.localStorage.getItem('rentalsData') || '{}')
 
 		// Add the local data, addressed through the interaction address (as we don't have a rental id yet at this point)
-		allLocalData[this.interactionAddress] = rentalData
+		allLocalData[this.interactionAddress] = this.details
 
 		window.localStorage.setItem('rentalsData', JSON.stringify(allLocalData))
 	}
 
 	/**
-	 * Retrieve the locally stored data
+	 * Retrieve the locally stored rental details
 	 */
 	loadLocalData () {
 		let allLocalData = JSON.parse(window.localStorage.getItem('rentalsData') || '{}')
 
 		if (allLocalData[this.interactionAddress]) {
-			Object.assign(this, allLocalData[this.interactionAddress])
+			Object.assign(this.details, allLocalData[this.interactionAddress])
 		}
 	}
 
@@ -413,7 +416,10 @@ export class Rental {
 				let rental = new Rental()
 				Object.assign(rental, rentalData)
 				rental.tenant = address
+				rental.account = Web3Util.getAccount(address)
 				rental.role = 'tenant'
+				rental.fee = parseInt(rentalData.fee)
+				rental.deposit = parseInt(rentalData.deposit)
 
 				// Fetch the locally stored data
 				rental.loadLocalData()
@@ -425,6 +431,8 @@ export class Rental {
 				resolve()
 			}))
 		}
+
+		await Promise.all(promises)
 
 		return rentals
 	}
@@ -446,9 +454,18 @@ export class Rental {
 
 		// Create a new rental and assign the fetched data
 		let rental = new Rental()
-		console.log(rentalData)
 		Object.assign(rental, rentalData)
+		rental.interactionAddress = address
+		rental.account = Web3Util.getAccount(address)
 		rental.role = 'owner'
+
+		// Fetch the EC account to decrypt the details
+		let ecAccount = await Cryptography.getEcAccount(address)
+
+		// Fetch the rental details
+		rental.details = await IpfsUtil.downloadDataFromHexHash(rental.detailsIpfsHash, ecAccount)
+		rental.fee = parseInt(rentalData.fee)
+		rental.deposit = parseInt(rentalData.deposit)
 
 		// Fetch the apartment
 		rental.apartment = await Apartment.findById(rental.details.apartmentId)
@@ -494,6 +511,66 @@ export class Rental {
 			return false
 		}
 
+		console.debug('Verified rental request details', this)
+
 		return true
+	}
+
+	async refuse () {
+		// Show the load message. Wait for the response, as following steps might freeze the browser for a second.
+		await Loading.show('Refusing rental request')
+
+		// Create the string we must sign for authentication
+		let refuseString = 'refuse:' + this.id
+
+		// Get the account to sign the message and thus used for authentication against the interaction address
+		let ecAccount = await Cryptography.getEcAccount(this.interactionAddress)
+
+		Loading.add('sign', 'Signing refuse message')
+		let sign = Web3Util.web3.eth.accounts.sign(refuseString, ecAccount.private.hex)
+		let signature = sign.signature
+		console.debug('Created signature', sign)
+		Loading.success('sign')
+
+		let parameters = [
+			this.id,
+			signature
+		]
+
+		// Estimate gas and call the requestRental function
+		Loading.add('refuse.blockchain', 'Sending message to blockchain')
+		let method = Web3Util.contract.methods.refuseRental(...parameters)
+		return new Promise((resolve, reject) => {
+			method.estimateGas({from: this.ownerAddress})
+				.then(gasAmount => {
+					method.send({from: this.ownerAddress, gas: gasAmount + 21000})
+						.on('receipt', () => {
+							Notifications.show('Rental request refusal')
+							Loading.success('refuse.blockchain')
+							Loading.hide()
+
+							// Mark the account as used in an interaction
+							this.owner.type = 'interaction'
+
+							this.status = 'refused'
+
+							resolve()
+						})
+						.on('error', (error, parameters) => {
+							console.error(error)
+							Loading.error('refuse.blockchain')
+							Loading.hide()
+
+							reject(error)
+						})
+				})
+				.catch(error => {
+					console.error(error, parameters)
+					Loading.error('refuse.blockchain')
+					Loading.hide()
+
+					reject(error)
+				})
+		})
 	}
 }

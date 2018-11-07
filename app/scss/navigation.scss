@@ -3,4 +3,7 @@ nav {
 		list-style: none;
 
 	}
+	.dropdown.menu > li.opens-left > .is-dropdown-submenu {
+		z-index: 2000
+	}
 }

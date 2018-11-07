@@ -122,10 +122,13 @@ export class Apartment {
 							Loading.success('add.blockchain')
 							Loading.hide()
 
+							// Mark the account as used by an owner
+							account.type = 'owner'
+
 							resolve(apartment)
 						})
 						.on('error', (error) => {
-							console.error(error)
+							console.error(error, parameters)
 							Loading.error('add.blockchain')
 							Loading.hide()
 
@@ -134,7 +137,7 @@ export class Apartment {
 				})
 
 				.catch(error => {
-					console.error(error)
+					console.error(error, parameters)
 					Loading.error('add.blockchain')
 					Loading.hide()
 
@@ -158,6 +161,7 @@ export class Apartment {
 		let apartmentData = await Web3Util.contract.methods.getApartment(id).call()
 
 		Object.assign(apartment, apartmentData)
+		apartment.id = id
 
 		// Fetch the details
 		await apartment.fetchReviews()
@@ -190,6 +194,8 @@ export class Apartment {
 					Object.assign(apartment, apartmentData)
 					apartment.city = city
 					apartment.country = country
+					apartment.pricePerNight = parseInt(apartmentData.pricePerNight)
+					apartment.deposit = parseInt(apartmentData.deposit)
 
 					// Fetch the details
 					await apartment.fetchReviews()
@@ -324,7 +330,7 @@ export class Apartment {
 			return 0
 		}
 
-		return parseInt(this.pricePerNight) * days
+		return this.pricePerNight * days
 	}
 
 	/**
@@ -366,6 +372,8 @@ export class Apartment {
 		// Fetch the details and assign them
 		let details = await IpfsUtil.downloadDataFromHexHash(this.ipfsHash)
 		Object.assign(this, details)
+		this.pricePerNight = parseInt(details.pricePerNight)
+		this.deposit = parseInt(details.deposit)
 
 		this.position = await MapsUtil.getMapsAddressPosition(
 			this.street + ' ' + this.number + ', ' + this.city + ', ' + this.country

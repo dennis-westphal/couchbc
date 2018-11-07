@@ -376,10 +376,11 @@ contract Rent {
 	// Get a tenant's rental with the specified id
 	function getTenantRental(address tenantAddr, uint tenantRentalId) public view returns (
 		uint id,
+		address interactionAddress,
 		bytes32 interactionPublicKey_x,
 		bytes32 interactionPublicKey_y,
-		address interactionAddress,
-		bytes32 detailsIpfsHash,
+		bytes32 apartmentHash,
+		bytes32 detailsHash,
 		uint fee,
 		uint deposit,
 		string status,
@@ -397,10 +398,11 @@ contract Rent {
 		Rental storage rental = rentals[id];
 
 		// Assign the return variables
+		interactionAddress = rental.interactionAddress;
 		interactionPublicKey_x = rental.interactionPublicKey_x;
 		interactionPublicKey_y = rental.interactionPublicKey_y;
-		interactionAddress = rental.interactionAddress;
-		detailsIpfsHash = rental.detailsIpfsHash;
+		apartmentHash = rental.apartmentHash;
+		detailsHash = rental.detailsHash;
 		fee = rental.fee;
 		deposit = rental.deposit;
 		status = getRentalStatusString(rental.status);
@@ -421,9 +423,12 @@ contract Rent {
 	// Get the rental for the specified interaction address
 	function getInteractionAddressRental(address addr) public view returns (
 		uint id,
+		address tenant,
+		address interactionAddress,
 		bytes32 interactionPublicKey_x,
 		bytes32 interactionPublicKey_y,
-		address interactionAddress,
+		bytes32 apartmentHash,
+		bytes32 detailsHash,
 		bytes32 detailsIpfsHash,
 		uint fee,
 		uint deposit,
@@ -442,6 +447,8 @@ contract Rent {
 		interactionPublicKey_x = rental.interactionPublicKey_x;
 		interactionPublicKey_y = rental.interactionPublicKey_y;
 		interactionAddress = rental.interactionAddress;
+		apartmentHash = rental.apartmentHash;
+		detailsHash = rental.detailsHash;
 		detailsIpfsHash = rental.detailsIpfsHash;
 		fee = rental.fee;
 		deposit = rental.deposit;
@@ -717,6 +724,7 @@ contract Rent {
 		// Notify about the refused rental request
 		emit RentalRequestRefused(rental.tenant, rentalId);
 
+		//emit TestAddr("Interaction address", rentals[0].interactionAddress);
 		//emit Test("Concat", message);
 		//emit Test("Signature", signature);
 		//emit TestAddr("Recovered signer address", recovered);

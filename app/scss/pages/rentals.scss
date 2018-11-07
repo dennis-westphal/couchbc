@@ -1,0 +1,48 @@
+div.page.rentals {
+	padding: 2rem;
+
+	article.rental {
+		img {
+			width: 100%;
+		}
+
+		p.date {
+			margin-bottom: 0;
+			color: #333;
+		}
+
+		p.title {
+			padding-bottom: .3rem;
+			border-bottom: #bbb 1px solid;
+		}
+
+		span.status {
+			float: right;
+			display: inline-block;
+
+			padding: .3rem .5rem;
+			margin: 0 0 .5rem .5rem;
+			cursor: help;
+
+			&.pending {
+				background-color: #f8ff4a;
+			}
+			&.requested {
+				background-color: #ddff2b;
+			}
+			&.withdrawn {
+				background-color: #e2e0e4;
+			}
+			&.accepted {
+				background-color: #3cff26;
+			}
+			&.refused {
+				background-color: #ff0405;
+			}
+		}
+		div.actions {
+			text-align: right;
+		}
+
+	}
+}

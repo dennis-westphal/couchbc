@@ -114,13 +114,16 @@ let app = new Vue({
 		searchData:       {
 			country:   null,
 			city:      null,
-			fromDate:  null,
-			tillDate:  null,
+			fromDay:   null,
+			tillDay:   null,
 			latitude:  0,
 			longitude: 0
 		},
-		apartments:       [],
-		apartmentImages:  null, // Cache to prevent slider from reloading
+		searchFrom:       '',
+		searchTill:       '',
+
+		apartments:      [],
+		apartmentImages: null, // Cache to prevent slider from reloading
 
 		rentalRequestFrom: '',
 		rentalRequestTill: '',
@@ -145,6 +148,16 @@ let app = new Vue({
 		apartmentRentals: []
 	}),
 	watch:      {
+		searchFrom:        (newValue) => {
+			if (newValue) {
+				app.searchData.fromDay = Conversion.dateToUnixDay(newValue)
+			}
+		},
+		searchTill:        (newValue) => {
+			if (newValue) {
+				app.searchData.tillDay = Conversion.dateToUnixDay(newValue)
+			}
+		},
 		rentalRequestFrom: (newValue) => {
 			if (newValue) {
 				app.rentalRequest.fromDay = Conversion.dateToUnixDay(newValue)
@@ -319,39 +332,6 @@ let app = new Vue({
 			// Send the rental request to the blockchain
 			rental.sendRequest()
 		},
-
-		/*
-		refuseRental: rental => {
-
-			let testId = 25;
-
-			let key = ec.genKeyPair();
-
-			// TODO: Sometimes this is just 65 chars long instead of 66. Find out why.
-			let testPrivateKey = '0x' + key.getPrivate().toString(16);
-
-			let data = 'refuse:' + testId;
-
-			let testAccount = web3.eth.accounts.privateKeyToAccount(testPrivateKey);
-			let testSign = web3.eth.accounts.sign(data, testPrivateKey);
-
-			console.log(testAccount);
-
-			let params = [
-				testId,
-				testSign.signature,
-			];
-
-			console.log(params);
-			console.log(web3.eth.accounts.recover(data, testSign.v, testSign.r, testSign.s));
-
-			let method = rentContract.methods.refuseRental(...params);
-
-			method.estimateGas({from: app.accounts[0]}).then(gasAmount => {
-				method.send({from: app.accounts[0], gas: gasAmount});
-			});
-		},
-		*/
 
 		/**
 		 * React on a changed apartment address when adding apartments apartments
