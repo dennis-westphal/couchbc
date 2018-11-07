@@ -29,20 +29,25 @@ class PubSubClass {
 	// Messaging
 
 	/**
-	 * Publish a message to the given topic, optionally encrypting it using the publicKeyBuffer
+	 * Publish a message to the given topic, optionally encrypting it in the process.
+	 * If a single public key (buffer) is supplied, the message is encoded using that buffer.
+	 * If an array of public key (buffers) is supplied, the message will be encrypted with all public keys and
+	 * can be decrypted with any of the corresponding private keys
 	 *
 	 * @param message
 	 * @param topic
-	 * @param publicKeyBuffer
+	 * @param publicKeyBuffers Buffer containing one public key to be used for encryption, or array with all public key buffers
 	 * @returns {Promise<*>}
 	 */
-	async publishMessage (message, topic, publicKeyBuffer) {
+	async publishMessage (message, topic, publicKeyBuffers) {
 		let url = googlePublishUrl.replace('{topic}', topic)
 
-		// Check if we need to encrypt the message
-		if (publicKeyBuffer) {
+		// Check if we got an array; if so encrypt using multiple public keys
+		if (typeof publicKeyBuffers === 'object' && Array.isArray(publicKeyBuffers)) {
+			message = await Cryptography.encryptStringMulti('VALID ' + message, publicKeyBuffers)
+		} else if (publicKeyBuffers) {
 			// Add VALID to the encrypted message for easy checking
-			message = await Cryptography.encryptString('VALID ' + message, publicKeyBuffer)
+			message = await Cryptography.encryptString('VALID ' + message, publicKeyBuffers)
 		}
 
 		// Create the message
