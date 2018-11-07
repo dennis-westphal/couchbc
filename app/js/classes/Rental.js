@@ -69,7 +69,7 @@ export class Rental {
 
 		// Subscribe to the answer topic
 		Loading.add('subscribe', 'Subscribing to interaction key responses')
-		PubSub.subscribeToTopic(
+		PubSub.addTopicSubscription(
 			'issue-interaction-key',
 
 			// Decrypt response with own EC account => private key
@@ -107,29 +107,6 @@ export class Rental {
 	}
 
 	/**
-	 * Save the (pending) rental request in local storage to allow restoring it after a browser refresh
-	 */
-	savePendingRequest () {
-		let pendingRentalRequests = JSON.parse(window.localStorage.getItem('pendingRentalRequests') || '[]')
-
-		pendingRentalRequests.push({
-			localStorageId: this.localStorageId,
-			tenant:         this.tenant,
-			fee:            this.fee,
-			deposit:        this.deposit,
-			details:        this.details
-		})
-
-		// Save the tenant's data in local storage for autocompletion of further actions
-		window.localStorage.setItem('userName', this.details.contact.name)
-		window.localStorage.setItem('userPhone', this.details.contact.phone)
-		window.localStorage.setItem('userEmail', this.details.contact.email)
-
-		// Save the requests in local storage
-		window.localStorage.setItem('pendingRentalRequests', JSON.stringify(pendingRentalRequests))
-	}
-
-	/**
 	 * Send the request for the rental to the blockchain
 	 *
 	 * @returns {Promise<*>}
@@ -151,8 +128,8 @@ export class Rental {
 		Loading.success('upload')
 
 		Loading.add('compile', 'Compiling data')
-		let detailsString = JSON.stringify(this.details)
-		this.detailsHash = Web3Util.web3.utils.sha3(JSON.stringify(detailsString))
+		this.detailsHash = this.createDetailsHash()
+		this.apartmentHash = this.createApartmentHash()
 
 		let parameters = [
 			this.fee,
@@ -210,15 +187,57 @@ export class Rental {
 		})
 	}
 
+	/**
+	 * Save the (pending) rental request in local storage to allow restoring it after a browser refresh
+	 */
+	savePendingRequest () {
+		let pendingRentalRequests = JSON.parse(window.localStorage.getItem('pendingRentalRequests') || '[]')
+
+		pendingRentalRequests.push({
+			localStorageId: this.localStorageId,
+			tenant:         this.tenant,
+			fee:            this.fee,
+			deposit:        this.deposit,
+			details:        this.details
+		})
+
+		// Save the tenant's data in local storage for autocompletion of further actions
+		window.localStorage.setItem('userName', this.details.contact.name)
+		window.localStorage.setItem('userPhone', this.details.contact.phone)
+		window.localStorage.setItem('userEmail', this.details.contact.email)
+
+		// Save the requests in local storage
+		window.localStorage.setItem('pendingRentalRequests', JSON.stringify(pendingRentalRequests))
+	}
+
+	/**
+	 * Remove the pending request from local storage
+	 */
+	removePendingRequest () {
+		let pendingRentalRequests = JSON.parse(window.localStorage.getItem('pendingRentalRequests') || '[]')
+
+		let filteredRequests = pendingRentalRequests.filter(request => request.id !== this.localStorageId)
+
+		window.localStorage.setItem('pendingRentalRequests', JSON.stringify(filteredRequests))
+	}
+
 	async accept () {
 
 	}
 
 	/**
-	 * Get the apartment hash based on the apartment id and a generated nonce
+	 * Create the details hash based on the JSON encoded details string
 	 * @returns {string}
 	 */
-	get apartmentHash () {
+	createDetailsHash () {
+		return Web3Util.web3.utils.sha3(JSON.stringify(this.details))
+	}
+
+	/**
+	 * Create the apartment hash based on the apartment id and a generated nonce
+	 * @returns {string}
+	 */
+	createApartmentHash () {
 		return Web3Util.web3.utils.sha3(this.apartment.id + '-' + this.getApartmentNonce())
 	}
 
@@ -240,18 +259,23 @@ export class Rental {
 	}
 
 	/**
-	 * Fetch all rentals for the provided accounts
+	 * Fetch all rentals for the provided accounts and interaction addresses
 	 *
 	 * @param accounts
+	 * @param interactionAddresses
 	 * @returns {Promise<Array>}
 	 */
-	static async fetchAll (accounts) {
+	static async fetchAll (accounts, interactionAddresses) {
 		let rentals = []
 		let promises = []
 
 		// Restore pending rentals from local storage
-		promises.push(this.fetchPendingRequests(accounts).then(localRentals => {
-			rentals = rentals.concat(localRentals)
+		promises.push(new Promise(async (resolve) => {
+			let pendingRequests = await this.fetchPendingRequests(accounts)
+
+			rentals = rentals.concat(pendingRequests)
+
+			resolve()
 		}))
 
 		// Fetch rentals from blockchain
@@ -262,8 +286,25 @@ export class Rental {
 			}
 
 			// Fetch the rentals for the tenant
-			promises.push(this.findByTenant(account.address).then(localRentals => {
-				rentals = rentals.concat(localRentals)
+			promises.push(new Promise(async (resolve) => {
+				let tenantRentals = await this.findByTenant(account.address)
+
+				rentals = rentals.concat(tenantRentals)
+
+				resolve()
+			}))
+		}
+
+		// Fetch interaction address rentals
+		for (let interactionAddress of interactionAddresses) {
+			promises.push(new Promise(async (resolve) => {
+				let ownerRental = await this.findByInteractionAddress(interactionAddress)
+
+				if (ownerRental) {
+					rentals.push(ownerRental)
+				}
+
+				resolve()
 			}))
 		}
 
@@ -317,17 +358,6 @@ export class Rental {
 		await Promise.all(promises)
 
 		return rentals
-	}
-
-	/**
-	 * Remove the pending request from local storage
-	 */
-	removePendingRequest () {
-		let pendingRentalRequests = JSON.parse(window.localStorage.getItem('pendingRentalRequests') || '[]')
-
-		let filteredRequests = pendingRentalRequests.filter(request => request.id !== this.localStorageId)
-
-		window.localStorage.setItem('pendingRentalRequests', JSON.stringify(filteredRequests))
 	}
 
 	/**
@@ -423,6 +453,47 @@ export class Rental {
 		// Fetch the apartment
 		rental.apartment = await Apartment.findById(rental.details.apartmentId)
 
+		// Check if we need to verify the request data
+		if (rental.status === 'requested') {
+			// If the rental request could not be verified, ignore it
+			return (await rental.verifyRequestData())
+				? rental
+				: null
+		}
+
 		return rental
+	}
+
+	/**
+	 * Verify that the request data matches the provided hashes and details
+	 *
+	 * @returns {boolean}
+	 */
+	verifyRequestData () {
+		// Check request details hash
+		let detailsHash = this.createDetailsHash()
+		if (this.detailsHash !== detailsHash) {
+			console.error('Details hash mismatch: ' + this.detailsHash + ' (supplied) vs ' + detailsHash + ' (generated)')
+			return false
+		}
+
+		// Check fee and deposit match apartment data
+		let calculatedFee = this.apartment.calculateFee(this.details.fromDay, this.details.tillDay)
+		if (this.fee !== calculatedFee) {
+			console.error('Fee mismatch: ' + this.fee + ' (supplied) vs ' + calculatedFee + ' (calculated)')
+			return false
+		}
+		if (this.deposit !== this.apartment.deposit) {
+			console.error('Deposit mismatch: ' + this.deposit + ' (supplied) vs ' + this.apartment.deposit + ' (apartment)')
+			return false
+		}
+
+		let apartmentHash = this.createApartmentHash()
+		if (this.apartmentHash !== apartmentHash) {
+			console.error('Apartment hash mismatch: ' + this.apartmentHash + ' (supplied) vs ' + apartmentHash + ' (generated)')
+			return false
+		}
+
+		return true
 	}
 }

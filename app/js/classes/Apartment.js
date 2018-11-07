@@ -307,6 +307,27 @@ export class Apartment {
 	}
 
 	/**
+	 * Calculate the rental fee based on the supplied days
+	 *
+	 * @param fromDay
+	 * @param tillDay
+	 * @returns {number}
+	 */
+	calculateFee (fromDay, tillDay) {
+		if (typeof this.pricePerNight !== 'number') {
+			return 0
+		}
+
+		let days = tillDay - fromDay
+
+		if (days <= 0) {
+			return 0
+		}
+
+		return this.pricePerNight * days
+	}
+
+	/**
 	 * Get the requested deposit in eth
 	 *
 	 * @returns {number}

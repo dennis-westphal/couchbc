@@ -238,7 +238,7 @@ let app = new Vue({
 				return
 			}
 
-			app.rentalRequest.fee = (app.rentalRequest.tillDay - app.rentalRequest.fromDay) * app.rentalRequest.apartment.pricePerNight
+			app.rentalRequest.fee = app.rentalRequest.apartment.calculateFee(app.rentalRequest.fromDay, app.rentalRequest.fromDay)
 			app.rentalRequest.feeInEth = Conversion.finneyToEth(app.rentalRequest.fee)
 		},
 
@@ -251,12 +251,12 @@ let app = new Vue({
 		},
 
 		/**
-		 * Issue an interaction token based and publish it encrypted with the provided public key point
+		 * Issue an interaction key for the submitted id and publish it encrypted with the provided public key
 		 *
 		 * @param requestData
 		 * @returns {Promise<void>}
 		 */
-		issueInteractionToken: async requestData => {
+		issueInteractionKey: async requestData => {
 			console.debug('Received interaction key request', requestData)
 
 			Notifications.show('Issueing interaction key for rental request')
@@ -286,10 +286,10 @@ let app = new Vue({
 			// Publish the interaction key encrypted with the tenant's public key
 			await PubSub.publishMessage(interactionKey, 'issue-interaction-key', publicKeyBuffer)
 
-			// Add the key to the keys in localStorage
-			let interactionKeys = JSON.parse(window.localStorage.getItem('interactionKeys') || '[]')
-			interactionKeys.push(ecAccount.address)
-			window.localStorage.setItem('interactionKeys', JSON.stringify(interactionKeys))
+			// Add the address of the interaction key to the addresses in localStorage (the key has already been stored on creation)
+			let interactionAddresses = JSON.parse(window.localStorage.getItem('interactionAddresses') || '[]')
+			interactionAddresses.push(ecAccount.address)
+			window.localStorage.setItem('interactionAddresses', JSON.stringify(interactionAddresses))
 
 			console.debug('Issued interaction key ' + interactionKey)
 		},
@@ -389,13 +389,14 @@ let app = new Vue({
 			let primaryImageInputElement = document.getElementById('add-apartment-primary-image')
 			let imageInputElements = $('.page.add-apartment input.add-image')
 
-			Apartment.add(account, app.newApartmentData, primaryImageInputElement, imageInputElements).then(() => {
+			Apartment.add(account, app.newApartmentData, primaryImageInputElement, imageInputElements).then((apartment) => {
 				// Clear the form
-				let account = app.newApartmentData.account
 				Object.assign(app.$data.newApartmentData, app.$options.data.call(app).newApartmentData)
 				document.getElementById('apartment-address').value = ''
 				document.getElementById('add-apartment-primary-image').value = ''
-				app.newApartmentData.account = account
+
+				// Keep the account selected
+				app.newApartmentData.account = apartment.account
 			})
 
 			Web3Util.contract.once('ApartmentAdded',
@@ -497,7 +498,9 @@ let app = new Vue({
 		},
 
 		loadRentals: async () => {
-			app.rentals = await Rental.fetchAll(app.accounts)
+			let interactionAddresses = JSON.parse(window.localStorage.getItem('interactionAddresses') || '[]')
+
+			app.rentals = await Rental.fetchAll(app.accounts, interactionAddresses)
 		},
 
 		/**
@@ -521,7 +524,7 @@ let app = new Vue({
 		registerSubscriptions: () => {
 			// Register topic processors
 			PubSub.registerTopicProcessor('request-interaction-key', (message) => {
-				app.issueInteractionToken(JSON.parse(message))
+				app.issueInteractionKey(JSON.parse(message))
 			})
 			PubSub.registerTopicProcessor('issue-interaction-key', (message) => {
 				app.sendRentalRequestToBlockchain(JSON.parse(message))
