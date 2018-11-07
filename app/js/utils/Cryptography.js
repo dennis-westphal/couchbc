@@ -3,6 +3,7 @@ import { Web3Util } from './Web3Util'
 import { Notifications } from './Notifications'
 import { default as uniqid } from 'uniqid'
 import { salt } from '../credentials'
+import AES from 'crypto-js/aes'
 
 // Elliptic for elliptic curve cryptography
 const EC = require('elliptic').ec
@@ -248,21 +249,14 @@ export class Cryptography {
 	 *
 	 * @param str
 	 * @param publicKeyBuffer
-	 * @return {Promise<Buffer>}
+	 * @return {Promise<string>}
 	 */
 	static async encryptString (str, publicKeyBuffer) {
 		console.debug('Encrypting ' + str + ' with:', publicKeyBuffer)
 
-		// Encrypt the message
-		let result = await eccrypto.encrypt(publicKeyBuffer, Buffer(str))
+		// Encrypt the string and get the encrypted message
+		let message = await this._getEncryptedMessage(str, publicKeyBuffer)
 
-		// Retrieve the elements of the encrypted message and pack them into an serializable object
-		let message = [
-			result.iv.toString('hex'),
-			result.ephemPublicKey.toString('hex'),
-			result.ciphertext.toString('hex'),
-			result.mac.toString('hex')
-		]
 		let jsonStr = JSON.stringify(message)
 
 		console.debug('Encryption successful: ', jsonStr)
@@ -271,34 +265,128 @@ export class Cryptography {
 	}
 
 	/**
+	 * Encrypt the string using all of the supplied public key buffers.
+	 * Creates a shared key (AES) which is used for encryption of the actual data and encrypts the shared key with the public key.
+	 * Using an AES key for the actual encryption is faster than generating a new public/private key pair.
+	 *
+	 * @param str
+	 * @param publicKeyBuffers
+	 * @return {Promise<string>}
+	 */
+	static async encryptStringMulti (str, publicKeyBuffers) {
+		console.debug('Encrypting ' + str + ' with: ', publicKeyBuffers)
+
+		// Generate a shared key
+		let sharedKey = this.getRandomString()
+
+		console.debug('Using shared key ' + sharedKey + ' for AES content encryption and public keys for encryption of shared key')
+
+		// Encrypt the string with the shared key
+		let cipherText = AES.encrypt(str, sharedKey)
+
+		// Encrypt the shared key with all publicKeyBuffers
+		let messages = []
+		for (let publicKeyBuffer of publicKeyBuffers) {
+			messages.push(await this._getEncryptedMessage(sharedKey, publicKeyBuffer))
+		}
+
+		// Return a string representation of a multidimensional array containing the ciphertext and the messages (with the encrypted shared key)
+		let jsonStr = JSON.stringify([
+			cipherText,
+			messages
+		])
+
+		console.debug('Encryption successful: ', jsonStr)
+
+		return jsonStr
+	}
+
+	/**
+	 * Encrypt a string and return an encrypted message. Should only be used internally.
+	 *
+	 * @param str
+	 * @param publicKeyBuffer
+	 * @returns {Promise<string[]>}
+	 * @private
+	 */
+	static async _getEncryptedMessage (str, publicKeyBuffer) {
+		// Encrypt the message
+		let result = await eccrypto.encrypt(publicKeyBuffer, Buffer(str))
+
+		// Retrieve the elements of the encrypted message and pack them into an serializable object
+		return [
+			result.iv.toString('hex'),
+			result.ephemPublicKey.toString('hex'),
+			result.ciphertext.toString('hex'),
+			result.mac.toString('hex')
+		]
+	}
+
+	/**
 	 * Decrypt the string using the supplied private key buffer
 	 *
 	 * @param str
 	 * @param privateKeyBuffer
-	 * @return {Promise<Buffer>}
+	 * @return {Promise<string>}
 	 */
 	static async decryptString (str, privateKeyBuffer) {
-		console.debug('Trying to decrypt ' + str + ' with:', privateKeyBuffer)
+		console.debug('Trying to decrypt ' + str)
+
+		// Parse the json array
+		let json = JSON.parse(str)
+
+		// Check if we we have a two dimensional array;
+		// in this case we got a cipher text containing an AES secret and messages with the encrypted AES key
+		// Decrypt the string accordingly
+		if (json.length === 2) {
+			console.debug('Trying to decrypt AES shared key', json[0])
+
+			// Try to decrypt the AES shared key from all pubkey encrypted messages
+			for (let messageArray of json[1]) {
+				let sharedKey = await this._decryptMessageArray(messageArray, privateKeyBuffer)
+
+				// When the sharedKey is not null, we have found the key and can attempt to decrypt the cipher text with it
+				if (sharedKey) {
+					let result = AES.decrypt(json[0], sharedKey).toString()
+
+					console.debug('Decryption using shared key ' + sharedKey + ' done:', result)
+
+					return result
+				}
+			}
+		}
+
+		// If we got an array with 4 elements, we got a regular pubkey encrypted message
+		if (json.length === 4) {
+			return await this._decryptMessageArray(json, privateKeyBuffer)
+		}
+
+		// Otherwise, something is not right with the string; log an error and return null
+		console.error('Unrecognized string format:', json)
+	}
+
+	static async _decryptMessageArray (messageArray, privateKeyBuffer) {
+		console.debug('Using private key for decryption', privateKeyBuffer)
 
 		try {
-			// Extract the elements of the json string and convert them to Buffers
-			let arr = JSON.parse(str)
+			// Extract the elements of the array and convert them to Buffers
 			let message = {
-				iv:             Buffer(Conversion.hexToUint8Array(arr[0])),
-				ephemPublicKey: Buffer(Conversion.hexToUint8Array(arr[1])),
-				ciphertext:     Buffer(Conversion.hexToUint8Array(arr[2])),
-				mac:            Buffer(Conversion.hexToUint8Array(arr[3]))
+				iv:             Buffer(Conversion.hexToUint8Array(messageArray[0])),
+				ephemPublicKey: Buffer(Conversion.hexToUint8Array(messageArray[1])),
+				ciphertext:     Buffer(Conversion.hexToUint8Array(messageArray[2])),
+				mac:            Buffer(Conversion.hexToUint8Array(messageArray[3]))
 			}
 
 			// Try to decrypt the message
 			let result = await eccrypto.decrypt(privateKeyBuffer, message)
 			let resultString = result.toString()
 
-			console.debug('Decryption successful: ', resultString)
+			console.debug('Decryption successful:', resultString)
 
 			return resultString
 		} catch (e) {
-			console.debug('Decryption failed; returning null')
+			console.debug(e)
+			console.debug('Decryption failed; returning null.')
 			return null
 		}
 	}

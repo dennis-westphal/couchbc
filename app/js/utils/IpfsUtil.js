@@ -129,16 +129,22 @@ export class IpfsUtil {
 
 	/**
 	 * Upload data, optionally encrypting it in the process. Returns the prefixed SHA256 hex hash part of IPFS address.
+	 * If a single public key (buffer) is supplied, the message is encoded using that buffer.
+	 * If an array of public key (buffers) is supplied, the message will be encrypted with all public keys and
+	 * can be decrypted with any of the corresponding private keys
 	 *
 	 * @param data   Data that will be JSON-encoded and uploaded (encrypted)
-	 * @param publicKeyBuffer Buffer containing the public key to be used for encryption, if any
+	 * @param publicKeyBuffers Buffer containing one public key to be used for encryption, or array with all public key buffers
 	 * @return {Promise<string>}
 	 */
-	static async uploadData (data, publicKeyBuffer) {
+	static async uploadData (data, publicKeyBuffers) {
 		let str = JSON.stringify(data)
 
-		if (publicKeyBuffer) {
-			str = await Cryptography.encryptString(str, publicKeyBuffer)
+		// Check if we got an array; if so encrypt using multiple public keys
+		if (typeof publicKeyBuffers === 'object' && Array.isArray(publicKeyBuffers)) {
+			str = await Cryptography.encryptStringMulti(str, publicKeyBuffers)
+		} else if (publicKeyBuffers) {
+			str = await Cryptography.encryptString(str, publicKeyBuffers)
 		}
 
 		let ipfsAddress = await this.uploadString(str)
