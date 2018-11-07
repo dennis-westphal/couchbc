@@ -15,7 +15,6 @@ const {GoogleToken} = require('gtoken')
 
 class PubSubClass {
 	constructor () {
-		this.subscriptionIntervals = {}
 		this.receivedMessages = []
 		this.topicProcessors = {}
 
@@ -24,6 +23,50 @@ class PubSubClass {
 			scope: googlePubSubScopes,
 			key:   googlePubSubKey
 		})
+	}
+
+	/**
+	 * Starts the pub sub listener. Creates a period check to fetch messages from the subscriptions.
+	 * Requires that the a topic subscription exists, but performs new checks for existing subscriptions regularly.
+	 * Should be called after topic processors have been registered.
+	 */
+	async start () {
+		await this._restoreTopicSubscriptions()
+
+		// Periodically fetch the subscriptions
+		window.setInterval(() => {
+			let subscriptions = JSON.parse(window.localStorage.getItem('topicSubscriptions') || '{}')
+
+			for (let element of Object.entries(subscriptions)) {
+				this.pullFromSubscription(element[1])
+			}
+		}, pullInterval)
+	}
+
+	/**
+	 * Restore topic subscriptions from local storage.
+	 *
+	 * @returns {Promise<void>}
+	 * @private
+	 */
+	async _restoreTopicSubscriptions () {
+		// Check if we have subscriptions
+		let topicSubscriptions = window.localStorage.getItem('topicSubscriptions')
+
+		// If we don't have subscriptions, we're done
+		if (topicSubscriptions === null) {
+			return
+		}
+
+		// Parse topic subscriptions (should be object topic => subscription {id: string, topic: string, ecAccountAddresses: string[]})
+		topicSubscriptions = JSON.parse(topicSubscriptions)
+
+		let promises = []
+		for (let topic in topicSubscriptions) {
+			promises.push(this.subscribeToTopic(topic))
+		}
+
+		await Promise.all(promises)
 	}
 
 	// Messaging
@@ -76,49 +119,33 @@ class PubSubClass {
 	}
 
 	/**
-	 * Add a topic subscription that will be restored when the page is reloaded, and subscribe to the topic
-	 *
-	 * @param topic
-	 * @param ecAccountAddress
-	 * @return {Promise<void>}
-	 */
-	async addTopicSubscription (topic, ecAccountAddress) {
-		// Get the existing subscription registrations
-		let topicSubscriptions = window.localStorage.getItem('topicSubscriptions')
-
-		// Create or parse the hashmap
-		topicSubscriptions = (topicSubscriptions === null)
-			? {}
-			: JSON.parse(topicSubscriptions)
-
-		// Add the topic subscription
-		topicSubscriptions[topic] = ecAccountAddress || null
-
-		// Store the topic subscriptions
-		window.localStorage.setItem('topicSubscriptions', JSON.stringify(topicSubscriptions))
-
-		this.subscribeToTopic(topic, ecAccountAddress)
-	}
-
-	/**
 	 * Subscribe to a topic. If ecAccountAddress is given, tries to decrypt the message using the ec account stored at the specified address.
+	 * If a stored subscription is available for the topic, also uses any ecAccounts given for the stored subscription.
+	 *
 	 * @param topic
 	 * @param ecAccountAddress
 	 * @returns {Promise<void>}
 	 */
 	async subscribeToTopic (topic, ecAccountAddress) {
-		// Check if we already have a subscription id for the topic; if so, we can start listening
-		let subscription = window.localStorage.getItem('topic.' + topic + '.subscription')
-		if (subscription) {
-			this.listenToSubscription(JSON.parse(subscription))
+		let subscriptions = JSON.parse(window.localStorage.getItem('topicSubscriptions') || '{}')
+
+		// Check if we already have a subscription id for the topic
+		if (subscriptions[topic]) {
+			// If we already have a subscription, we only need to add the ecAccountAddress for decryption if it is set and does not exist yet
+			if (ecAccountAddress && subscriptions[topic].ecAccountAddresses.indexOf(ecAccountAddress) === -1) {
+				subscriptions[topic].ecAccountAddresses.push(ecAccountAddress)
+
+				window.localStorage.setItem('topicSubscriptions', JSON.stringify(subscriptions))
+			}
+
 			return
 		}
 
 		// Create a new subscription
-		subscription = {
-			id:               PubSubClass.getRandomSubscriptionId(),
-			topic:            topic,
-			ecAccountAddress: ecAccountAddress || null
+		let subscription = {
+			id:                 PubSubClass.getRandomSubscriptionId(),
+			topic:              topic,
+			ecAccountAddresses: ((ecAccountAddress) ? [ecAccountAddress] : [])
 		}
 
 		// Create the request
@@ -142,11 +169,12 @@ class PubSubClass {
 			}
 		})
 
-		// Store the subscription in localStorage
-		window.localStorage.setItem('topic.' + topic + '.subscription', JSON.stringify(subscription))
+		// Reload subscriptions as they might have changed in the meantime
+		subscriptions = JSON.parse(window.localStorage.getItem('topicSubscriptions') || '{}')
 
-		// Listen to the subscription
-		this.listenToSubscription(subscription)
+		// Store the subscription in localStorage
+		subscriptions[topic] = subscription
+		window.localStorage.setItem('topicSubscriptions', JSON.stringify(subscriptions))
 	}
 
 	/**
@@ -156,23 +184,6 @@ class PubSubClass {
 	 */
 	static getRandomSubscriptionId () {
 		return 'sub-' + Cryptography.getRandomString()
-	}
-
-	/**
-	 * Listen to a subscription. Creates a period check to fetch messages from the subscription.
-	 *
-	 * @param subscription
-	 */
-	listenToSubscription (subscription) {
-		// If we already listen to the subscription, we're done
-		if (this.subscriptionIntervals['interval-' + subscription.id]) {
-			return
-		}
-
-		// Periodically pull from the subscription
-		this.subscriptionIntervals['interval-' + subscription.id] = window.setInterval(() => {
-			this.pullFromSubscription(subscription)
-		}, pullInterval)
 	}
 
 	/**
@@ -228,9 +239,26 @@ class PubSubClass {
 					this.receivedMessages.push(message.message.messageId)
 				}
 
-				let ecAccount = await Cryptography.getEcAccount(subscription.ecAccountAddress)
+				// Get all private key buffers that can be used for the decryption
+				let privateKeyBuffers = []
+				let promises = []
 
-				data = await Cryptography.decryptString(data, ecAccount.private.buffer)
+				for (let ecAccountAddress of subscription.ecAccountAddresses) {
+					promises.push(new Promise(async resolve => {
+						let ecAccount = await Cryptography.getEcAccount(ecAccountAddress)
+
+						if (ecAccount) {
+							privateKeyBuffers.push(ecAccount.private.buffer)
+						}
+
+						resolve()
+					}))
+				}
+
+				// Wait till we got all private key buffers
+				await Promise.all(promises)
+
+				data = await Cryptography.decryptStringMulti(data, privateKeyBuffers)
 
 				// Only process if the message was decrypted properly
 				if (data != null && data.substr(0, 6) === 'VALID ') {

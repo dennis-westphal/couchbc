@@ -106,7 +106,7 @@ export class Apartment {
 
 		// Add a topic subscription to receive interaction key requests
 		Loading.add('subscribe', 'Subscribe to interaction key requests')
-		PubSub.addTopicSubscription('request-interaction-key', ownerEcAccount.address).then(() => {
+		PubSub.subscribeToTopic('request-interaction-key', ownerEcAccount.address).then(() => {
 			Loading.success('subscribe')
 		})
 
@@ -314,7 +314,7 @@ export class Apartment {
 	 * @returns {number}
 	 */
 	calculateFee (fromDay, tillDay) {
-		if (typeof this.pricePerNight !== 'number') {
+		if (typeof this.pricePerNight === 'undefined') {
 			return 0
 		}
 
@@ -324,7 +324,7 @@ export class Apartment {
 			return 0
 		}
 
-		return this.pricePerNight * days
+		return parseInt(this.pricePerNight) * days
 	}
 
 	/**

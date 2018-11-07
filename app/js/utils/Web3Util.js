@@ -29,19 +29,19 @@ class Web3UtilClass {
 	 */
 	async fetchAccounts () {
 		return new Promise((resolve, reject) => {
-			this.web3.eth.getAccounts((error, bcAddresses) => {
+			this.web3.eth.getAccounts(async (error, bcAddresses) => {
 				if (error) {
 					Notifications.show('There was an error fetching your blockchain accounts')
 					console.error(error)
-					return
+					reject()
 				}
 
 				if (bcAddresses.length === 0) {
 					Notifications.show('Couldn\'t get any blockchain accounts! Make sure your Ethereum client is configured correctly.')
-					return
+					reject()
 				}
 
-				this.accounts = this.determineAccounts(bcAddresses)
+				this.accounts = await this.determineAccounts(bcAddresses)
 				resolve(this.accounts)
 			})
 		})

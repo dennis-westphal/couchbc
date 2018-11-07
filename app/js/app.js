@@ -48,7 +48,6 @@ Vue.filter('formatDate', function (date) {
 		if (typeof date === 'number' && date < 99999 && date > 17000) {
 			date = Conversion.unixDayToDate(date)
 		}
-		console.log(date)
 
 		return moment(date).format('DD.MM.YYYY')
 	}
@@ -238,7 +237,7 @@ let app = new Vue({
 				return
 			}
 
-			app.rentalRequest.fee = app.rentalRequest.apartment.calculateFee(app.rentalRequest.fromDay, app.rentalRequest.fromDay)
+			app.rentalRequest.fee = app.rentalRequest.apartment.calculateFee(app.rentalRequest.fromDay, app.rentalRequest.tillDay)
 			app.rentalRequest.feeInEth = Conversion.finneyToEth(app.rentalRequest.fee)
 		},
 
@@ -530,20 +529,7 @@ let app = new Vue({
 				app.sendRentalRequestToBlockchain(JSON.parse(message))
 			})
 
-			// Check if we have subscriptions
-			let topicSubscriptions = window.localStorage.getItem('topicSubscriptions')
-
-			// If we don't have subscriptions, we're done
-			if (topicSubscriptions === null) {
-				return
-			}
-
-			// Parse topic subscriptions (should be hashmap topic => ecAccountAddress|null)
-			topicSubscriptions = JSON.parse(topicSubscriptions)
-
-			for (let topic in topicSubscriptions) {
-				PubSub.subscribeToTopic(topic, topicSubscriptions[topic])
-			}
+			PubSub.start()
 		},
 
 		/**

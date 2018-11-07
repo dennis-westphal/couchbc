@@ -66,10 +66,11 @@ export class Rental {
 		Loading.add('account', 'Initializing elliptic cryptography account')
 		let ecAccount = await Cryptography.getOrCreateEcAccount(account)
 		Loading.success('account')
+		console.log(account, ecAccount)
 
 		// Subscribe to the answer topic
 		Loading.add('subscribe', 'Subscribing to interaction key responses')
-		PubSub.addTopicSubscription(
+		PubSub.subscribeToTopic(
 			'issue-interaction-key',
 
 			// Decrypt response with own EC account => private key
@@ -116,7 +117,7 @@ export class Rental {
 		await Loading.show('Sending rental request')
 
 		Loading.add('account', 'Fetching or creating tenant account')
-		let ecAccount = await Cryptography.getOrCreateEcAccount(this.tenant)
+		let ecAccount = await Cryptography.getOrCreateEcAccount(Web3Util.getAccount(this.tenant))
 		Loading.success('account')
 
 		// Get a public key buffer from the interaction key for encryption of the details
@@ -144,6 +145,8 @@ export class Rental {
 			ecAccount.public.y
 		]
 		let value = Conversion.finneyToWei(this.fee + this.deposit)
+
+		console.log(parameters, value)
 
 		Loading.success('compile')
 
@@ -383,10 +386,8 @@ export class Rental {
 	loadLocalData () {
 		let allLocalData = JSON.parse(window.localStorage.getItem('rentalsData') || '{}')
 
-		console.log(allLocalData, this.interactionAddress)
 		if (allLocalData[this.interactionAddress]) {
-			this.details = allLocalData[this.interactionAddress]
-			this.apartmentNonce = allLocalData[this.interactionAddress]
+			Object.assign(this, allLocalData[this.interactionAddress])
 		}
 	}
 
@@ -410,7 +411,6 @@ export class Rental {
 
 				// Create a new rental and assign the fetched data
 				let rental = new Rental()
-				console.log(rentalData)
 				Object.assign(rental, rentalData)
 				rental.tenant = address
 				rental.role = 'tenant'

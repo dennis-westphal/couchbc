@@ -64,6 +64,12 @@ export class Cryptography {
 	 * }
 	 */
 	static async getOrCreateEcAccount (bcAccount) {
+		if (typeof bcAccount.address === 'undefined') {
+			console.error('Invalid bcAccount', bcAccount)
+
+			return null
+		}
+
 		// Try to catch the ec account associated with the address
 		let ecAccount = await this.getEcAccountForBcAccount(bcAccount.address)
 
@@ -84,7 +90,7 @@ export class Cryptography {
 		ecAccount = await this.generateEcAccount()
 
 		// Store the EC account address in local storage to associate it with the current bc account
-		window.localStorage.setItem('ecAccounts.' + bcAccount.address, ecAccount.address)
+		window.localStorage.setItem('ecAccount.' + bcAccount.address, ecAccount.address)
 
 		// Return the account
 		return ecAccount
@@ -110,7 +116,7 @@ export class Cryptography {
 		// Local storage is acting as hashmap: BC account address => EC account address
 
 		// The account address is used to find the key; the address contained within is NOT the same as the account address
-		let ecAccountAddress = window.localStorage.getItem('ecAccounts.' + bcAddress)
+		let ecAccountAddress = window.localStorage.getItem('ecAccount.' + bcAddress)
 
 		if (ecAccountAddress) {
 			return await this.getEcAccount(ecAccountAddress)
@@ -363,6 +369,25 @@ export class Cryptography {
 
 		// Otherwise, something is not right with the string; log an error and return null
 		console.error('Unrecognized string format:', json)
+	}
+
+	/**
+	 * Try to decrypt the string with all of the provided private key buffers. Returns null of encryption failed.
+	 *
+	 * @param str
+	 * @param privateKeyBuffers
+	 * @returns {Promise<string>}
+	 */
+	static async decryptStringMulti (str, privateKeyBuffers) {
+		for (let privateKeyBuffer of privateKeyBuffers) {
+			let result = await this.decryptString(str, privateKeyBuffer)
+
+			if (result) {
+				return result
+			}
+		}
+
+		return null
 	}
 
 	static async _decryptMessageArray (messageArray, privateKeyBuffer) {
