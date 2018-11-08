@@ -30,7 +30,7 @@ div.page.rentals {
 			&.requested {
 				background-color: #ddff2b;
 			}
-			&.withdrawn {
+			&.withdrawn, &.canceled {
 				background-color: #e2e0e4;
 			}
 			&.accepted {
@@ -42,6 +42,15 @@ div.page.rentals {
 		}
 		div.actions {
 			text-align: right;
+		}
+		div.tenant-review, div.deduction-reason {
+			height: 0;
+			overflow-y: hidden;
+			transition: height 0.5s cubic-bezier(0.420, 0.000, 0.580, 1.000);;
+
+			&.shown {
+				height: auto;
+			}
 		}
 
 	}

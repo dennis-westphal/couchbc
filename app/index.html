@@ -285,6 +285,12 @@
                             Pending
                         </span>
                         <span
+                                v-if="rental.status === 'canceled'"
+                                class="status canceled tooltip"
+                                title="The rental request has been canceled before it was submitted to the blockchain">
+                            Canceled
+                        </span>
+                        <span
                                 v-if="rental.status === 'requested' && rental.role === 'tenant'"
                                 class="status requested tooltip"
                                 title="The rental request was transferred to the blockchain and is awaiting approval">
@@ -323,20 +329,20 @@
                         <p>{{rental.fee}} fee / {{rental.deposit}} deposit</p>
 
                         <div class="form-control account-select" v-if="rental.status === 'requested' && rental.role === 'owner'">
-                            <v-select :options="accounts" placeholder="Select account" v-model="rental.owner">
+                            <v-select :options="accounts" placeholder="Select account" v-model="rental.ownerAddress">
                                 <template slot="option" slot-scope="option">
-                                            <span :class="{forbidden: option.type !== 'unknown'}">
-                                                <span class="blockie" :style="getBlockie(option.address)"></span>
-                                                {{option.label}}
-                                                <span v-if="option.type === 'owner'" class="mdi mdi-home-account tooltip"
-                                                      title="This account is used for managing apartments and thus cannot be used in a new rental"></span>
-                                                <span v-if="option.type === 'tenant'"
-                                                      class="mdi mdi-account-card-details tooltip"
-                                                      title="This account is used for managing rentals and thus cannot be used in a new rental"></span>
-                                                <span v-if="option.type === 'interaction'"
-                                                      class="mdi mdi-account-switch tooltip"
-                                                      title="This account has been used in managing a rental request and thus cannot be used in a new rental"></span>
-                                            </span>
+                                    <span :class="{forbidden: option.type !== 'unknown'}">
+                                        <span class="blockie" :style="getBlockie(option.address)"></span>
+                                        {{option.label}}
+                                        <span v-if="option.type === 'owner'" class="mdi mdi-home-account tooltip"
+                                              title="This account is used for managing apartments and thus cannot be used in a new rental"></span>
+                                        <span v-if="option.type === 'tenant'"
+                                              class="mdi mdi-account-card-details tooltip"
+                                              title="This account is used for managing rentals and thus cannot be used in a new rental"></span>
+                                        <span v-if="option.type === 'interaction'"
+                                              class="mdi mdi-account-switch tooltip"
+                                              title="This account has been used in managing a rental request and thus cannot be used in a new rental"></span>
+                                    </span>
                                 </template>
                             </v-select>
                             <p class="hint">
@@ -353,10 +359,31 @@
                             <a href="#" class="button refuse" @click.stop="rental.refuse()"
                                v-if="rental.status === 'requested' && rental.role === 'owner'">Refuse</a>
 
-                            <a href="#" class="button review" @click.stop="reviewRentalTenant(rental)"
-                               v-if="rental.status === 'accepted' && rental.role === 'owner' && rental.depositStatus === 'open'">Review</a>
+                            <!-- TODO: Check if rental end date is today or in the past -->
+                            <a href="#" class="button review" @click.stop="tenantReview.rental = rental"
+                               v-if="rental.status === 'accepted' && rental.role === 'owner' && rental.depositStatus === 'open' && tenantReview !== rental">
+                                Review
+                            </a>
                             <a href="#" class="button review" @click.stop="reviewApartment(rental)"
-                               v-if="rental.status === 'accepted' && rental.role === 'tenant'">Review</a>
+                               v-if="rental.status === 'accepted' && rental.role === 'tenant' && apartmentReview !== rental">Review</a>
+                        </div>
+                        <div class="tenant-review" :class="{'shown': tenantReview.rental === rental}">
+                            <div class="form-control">
+                                <v-select :options="[1,2,3,4,5]" placeholder="Score" v-model="tenantReview.score"></v-select>
+                            </div>
+                            <div class="form-control">
+                                <label for="tenantReview.text">Review text</label>
+                                <textarea id="tenantReview.text" v-model="tenantReview.text"></textarea>
+                            </div>
+                            <div class="form-control">
+                                <label for="tenantReview.deduction">Requested deposit deduction</label>
+                                <input id="tenantReview.deduction" type="number" min="0" :max="rental.deposit" v-model="tenantReview.deduction"/>
+                            </div>
+                            <div class="form-control deduction-reason" :class="{'shown': rental.deduction > 0}">
+                                <label for="tenantReview.reason">Reason for deduction</label>
+                                <textarea id="tenantReview.reason" v-model="tenantReview.reason"></textarea>
+                            </div>
+                            <a href="#" class="button save" @click.stop="reviewTenant()">Save</a>
                         </div>
                     </div>
                 </div>

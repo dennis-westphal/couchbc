@@ -45,7 +45,7 @@ contract Rent {
 
 	// ------------------------ Apartments ------------------------
 	struct Apartment {
-		address owner;
+		address ownerAddress;
 		bytes32 ownerPublicKey_x;
 		bytes32 ownerPublicKey_y;
 
@@ -58,14 +58,14 @@ contract Rent {
 	}
 
 	struct ApartmentReview {
-		address tenant;
+		address tenantAddress;
 		uint8 score;        // Score 1-5
 		bytes32 ipfsHash;   // Hash part of IPFS address
 	}
 
 	// ------------------------ Rentals ------------------------
 	enum RentalStatus {
-		Requested, Accepted, Refused, Reviewed
+		Requested, Withdrawn, Accepted, Refused, Reviewed
 	}
 	enum DepositStatus {
 		Open, // When no claim to the deposit has been made or is valid yet
@@ -105,8 +105,8 @@ contract Rent {
 		uint fee;           // Total fee for this rental in finney
 		uint128 deposit;    // Deposit for this rental in finney
 
-		address tenant;             // The tenant profile address
-		address mediator;           // The mediator determined for this rental (as soon as the rental is accepted)
+		address tenantAddress;             // The tenant profile address
+		address mediatorAddress;           // The mediator determined for this rental (as soon as the rental is accepted)
 		address ownerAddress;       // The addressed used for payments towards the apartment owner and after accept/refuse also as means of authentication
 
 		RentalStatus status;                // Status for the rental
@@ -121,6 +121,9 @@ contract Rent {
 	function getRentalStatusString(RentalStatus status) private pure returns (string) {
 		if (status == RentalStatus.Requested) {
 			return "requested";
+		}
+		if (status == RentalStatus.Withdrawn) {
+			return "withdrawn";
 		}
 		if (status == RentalStatus.Accepted) {
 			return "accepted";
@@ -341,7 +344,7 @@ contract Rent {
 
 	// -------------------- Apartment reviews ------------------
 	function getApartmentReview(uint apartmentId, uint reviewId) public view returns (
-		address tenant,
+		address tenantAddress,
 		uint8 score,
 		bytes32 ipfsHash
 	) {
@@ -355,7 +358,7 @@ contract Rent {
 		ApartmentReview storage review = apartments[apartmentId].reviews[reviewId];
 
 		// Assign the return variables
-		tenant = review.tenant;
+		tenantAddress = review.tenantAddress;
 		score = review.score;
 		ipfsHash = review.ipfsHash;
 	}
@@ -377,10 +380,10 @@ contract Rent {
 	function getTenantRental(address tenantAddr, uint tenantRentalId) public view returns (
 		uint id,
 		address interactionAddress,
+		address mediatorAddress,
 		bytes32 interactionPublicKey_x,
 		bytes32 interactionPublicKey_y,
 		bytes32 apartmentHash,
-		bytes32 detailsHash,
 		uint fee,
 		uint deposit,
 		string status,
@@ -399,10 +402,10 @@ contract Rent {
 
 		// Assign the return variables
 		interactionAddress = rental.interactionAddress;
+		mediatorAddress = rental.mediatorAddress;
 		interactionPublicKey_x = rental.interactionPublicKey_x;
 		interactionPublicKey_y = rental.interactionPublicKey_y;
 		apartmentHash = rental.apartmentHash;
-		detailsHash = rental.detailsHash;
 		fee = rental.fee;
 		deposit = rental.deposit;
 		status = getRentalStatusString(rental.status);
@@ -423,8 +426,8 @@ contract Rent {
 	// Get the rental for the specified interaction address
 	function getInteractionAddressRental(address addr) public view returns (
 		uint id,
-		address tenant,
-		address interactionAddress,
+		address tenantAddress,
+		address mediatorAddress,
 		bytes32 interactionPublicKey_x,
 		bytes32 interactionPublicKey_y,
 		bytes32 apartmentHash,
@@ -446,7 +449,8 @@ contract Rent {
 		// Assign the return variables
 		interactionPublicKey_x = rental.interactionPublicKey_x;
 		interactionPublicKey_y = rental.interactionPublicKey_y;
-		interactionAddress = rental.interactionAddress;
+		mediatorAddress = rental.mediatorAddress;
+		tenantAddress = rental.tenantAddress;
 		apartmentHash = rental.apartmentHash;
 		detailsHash = rental.detailsHash;
 		detailsIpfsHash = rental.detailsIpfsHash;
@@ -669,7 +673,13 @@ contract Rent {
 		Rental storage rental = rentals[rentalId];
 
 		// Check authorization for the sender
-		require(msg.sender == rental.tenant);
+		require(msg.sender == rental.tenantAddress);
+
+		// Check that the rental is in the right state
+		require(rental.status == RentalStatus.Requested);
+
+		// Change the rental status
+		rental.status = RentalStatus.Withdrawn;
 
 		// Refund the fee + deposit
 		msg.sender.transfer(
@@ -678,9 +688,6 @@ contract Rent {
 
 		// Emit an event to notify about the withdrawn rental request
 		emit RentalRequestWithdrawn(rental.interactionAddress, rentalId);
-
-		// Delete the rental
-		delete rentals[rentalId];
 	}
 
 	// Refuse a rental request as an apartment owner.
@@ -719,10 +726,10 @@ contract Rent {
 		rentalAddresses[msg.sender] = true;
 
 		// Transfer fee and deposit back to the tenant
-		rental.tenant.transfer(Library.finneyToWei(rental.fee + rental.deposit));
+		rental.tenantAddress.transfer(Library.finneyToWei(rental.fee + rental.deposit));
 
 		// Notify about the refused rental request
-		emit RentalRequestRefused(rental.tenant, rentalId);
+		emit RentalRequestRefused(rental.tenantAddress, rentalId);
 
 		//emit TestAddr("Interaction address", rentals[0].interactionAddress);
 		//emit Test("Concat", message);
@@ -778,13 +785,13 @@ contract Rent {
 		rentalAddresses[msg.sender] = true;
 
 		// Assign a random mediator for the case of a dispute
-		rental.mediator = getRandomMediator();
+		rental.mediatorAddress = getRandomMediator();
 
 		// Transfer the rental fee to the sender (= payment address)
 		msg.sender.transfer(Library.finneyToWei(rental.fee));
 
 		// Notify about the accepted rental request
-		emit RentalRequestApproved(rental.tenant, rentalId);
+		emit RentalRequestApproved(rental.tenantAddress, rentalId);
 	}
 
 	// Get a pseudo-random mediator
@@ -824,7 +831,7 @@ contract Rent {
 		require(rentals.length > rentalId);
 
 		Rental storage rental = rentals[rentalId];
-		Tenant storage tenant = tenants[rental.tenant];
+		Tenant storage tenant = tenants[rental.tenantAddress];
 
 		// Check the score makes sense
 		require(reviewScore < 6 && reviewScore > 0);
@@ -847,10 +854,10 @@ contract Rent {
 		if (deductionAmount == 0) {
 			rental.depositStatus = DepositStatus.Processed;
 
-			rental.tenant.transfer(rental.deposit);
+			rental.tenantAddress.transfer(rental.deposit);
 
 			// Notify about the refund
-			emit DepositRefunded(rental.tenant, rentalId);
+			emit DepositRefunded(rental.tenantAddress, rentalId);
 
 			return;
 		}
@@ -860,7 +867,7 @@ contract Rent {
 		if (mediators.length == 0) {
 			uint128 grantedDeduction = deductionAmount / 2;
 			rental.ownerAddress.transfer(grantedDeduction);
-			rental.tenant.transfer(rental.deposit - grantedDeduction);
+			rental.tenantAddress.transfer(rental.deposit - grantedDeduction);
 
 			return;
 		}
@@ -881,7 +888,7 @@ contract Rent {
 		rental.contactDataForMediatorIpfsHash = contactDataForMediatorIpfsHash;
 
 		// Notify about the requested deduction
-		emit DeductionRequested(rental.tenant, rentalId);
+		emit DeductionRequested(rental.tenantAddress, rentalId);
 	}
 
 	// ---------------------- Deductions ----------------------
@@ -895,7 +902,7 @@ contract Rent {
 		Rental storage rental = rentals[rentalId];
 
 		// Only allow accepting deductions from the tenant
-		require(msg.sender == rental.tenant);
+		require(msg.sender == rental.tenantAddress);
 
 		// Only allow accepting the deduction if the depositStatus and the deduction status match
 		require(rental.depositStatus == DepositStatus.Pending);
@@ -907,7 +914,7 @@ contract Rent {
 
 		// Transfer the deducted amount to the owner and the rest to the tenant
 		rental.ownerAddress.transfer(Library.finneyToWei(depositDeductions[rentalId].amount));
-		rental.tenant.transfer(Library.finneyToWei(rental.deposit - depositDeductions[rentalId].amount));
+		rental.tenantAddress.transfer(Library.finneyToWei(rental.deposit - depositDeductions[rentalId].amount));
 
 		// Delete the deposit deduction
 		delete depositDeductions[rentalId];
@@ -927,7 +934,7 @@ contract Rent {
 		Rental storage rental = rentals[rentalId];
 
 		// Only allow objections from the tenant
-		require(msg.sender == rental.tenant);
+		require(msg.sender == rental.tenantAddress);
 
 		// Only allow objections if the depositStatus and the deduction status match
 		require(rental.depositStatus == DepositStatus.Pending);
@@ -944,7 +951,7 @@ contract Rent {
 		depositDeductions[rentalId].lastChange = uint16(block.timestamp / 86400);
 
 		// Notify about the refused deduction request
-		emit DeductionRefused(rental.interactionAddress, rental.mediator, rentalId);
+		emit DeductionRefused(rental.interactionAddress, rental.mediatorAddress, rentalId);
 	}
 
 	// Mediate in a deduction request dispute
@@ -959,7 +966,7 @@ contract Rent {
 		Rental storage rental = rentals[rentalId];
 
 		// Check that the sender is assigned to the rental as mediator
-		rental.mediator = msg.sender;
+		rental.mediatorAddress = msg.sender;
 
 		// Check that the rental requires mediation
 		require(rental.depositStatus == DepositStatus.Pending);
@@ -976,10 +983,10 @@ contract Rent {
 		// Transfer the mediatorFee to the mediator, the deduction to the owner and the rest to the tenant
 		msg.sender.transfer(Library.finneyToWei(mediatorFee));
 		rental.ownerAddress.transfer(Library.finneyToWei(deductionAmount));
-		rental.tenant.transfer(Library.finneyToWei(rental.deposit - deductionAmount - mediatorFee));
+		rental.tenantAddress.transfer(Library.finneyToWei(rental.deposit - deductionAmount - mediatorFee));
 
 		// Notify about the mediation
-		emit DeductionMediated(rental.tenant, rental.interactionAddress, rentalId);
+		emit DeductionMediated(rental.tenantAddress, rental.interactionAddress, rentalId);
 	}
 
 	// -------------------- Tenant review --------------------
@@ -1000,7 +1007,7 @@ contract Rent {
 		Apartment storage apartment = apartments[apartmentId];
 
 		// Check that the sender is the tenant
-		rental.tenant = msg.sender;
+		rental.tenantAddress = msg.sender;
 
 		// Check that the rental has not been reviewed yet
 		require(rental.status == RentalStatus.Accepted);
@@ -1028,6 +1035,6 @@ contract Rent {
 		apartment.numReviews ++;
 
 		// Notify about the review
-		emit ApartmentReviewed(apartment.owner, apartmentId, rentalId);
+		emit ApartmentReviewed(apartment.ownerAddress, apartmentId, rentalId);
 	}
 }

@@ -24,7 +24,7 @@ export class Apartment {
 		this.primaryImage = ''
 		this.images = []
 
-		this.owner = ''
+		this.ownerAddress = ''
 		this.ownerPublicKey_x = ''
 		this.ownerPublicKey_y = ''
 		this.ipfsHash = ''

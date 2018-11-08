@@ -24,8 +24,8 @@ export class Rental {
 		this.deposit = 0
 
 		this.account = null
-		this.tenant = ''
-		this.mediator = ''
+		this.tenantAddress = ''
+		this.mediatorAddress = ''
 		this.ownerAddress = ''
 
 		this.status = ''
@@ -40,26 +40,6 @@ export class Rental {
 	}
 
 	/**
-	 * Set an owner for this rental.
-	 * This has to be a previously unused account
-	 *
-	 * @param ownerAccount
-	 */
-	set owner (ownerAccount) {
-		if (ownerAccount.type !== 'unknown') {
-			console.warn('Used account may not be selected as owner address', ownerAccount)
-
-			return
-		}
-
-		this.ownerAddress = ownerAccount.address
-	}
-
-	get owner () {
-		return Web3Util.getAccount(this.ownerAddress)
-	}
-
-	/**
 	 * Add a new rental request
 	 *
 	 * @param account
@@ -68,7 +48,7 @@ export class Rental {
 	 */
 	static async addRequest (account, data) {
 		let rental = new Rental()
-		rental.tenant = account.address
+		rental.tenantAddress = account.address
 		rental.apartment = data.apartment
 		rental.details.apartmentId = data.apartment.id
 		rental.details.fromDay = data.fromDay
@@ -134,6 +114,11 @@ export class Rental {
 	 * @returns {Promise<*>}
 	 */
 	async sendRequest () {
+		// Only send the request if it is still pending
+		if (this.status !== 'pending') {
+			return
+		}
+
 		// Show the load message. Wait for the response, as following steps might freeze the browser for a second.
 		await Loading.show('Sending rental request')
 
@@ -142,7 +127,7 @@ export class Rental {
 		this.details.apartmentSecret = Cryptography.getRandomString()
 
 		Loading.add('account', 'Fetching or creating tenant account')
-		let ecAccount = await Cryptography.getOrCreateEcAccount(Web3Util.getAccount(this.tenant))
+		let ecAccount = await Cryptography.getOrCreateEcAccount(Web3Util.getAccount(this.tenantAddress))
 		Loading.success('account')
 
 		// Get a public key buffer from the interaction key for encryption of the details
@@ -176,9 +161,9 @@ export class Rental {
 		Loading.add('request.blockchain', 'Sending rental request to blockchain')
 		let method = Web3Util.contract.methods.requestRental(...parameters)
 		return new Promise((resolve, reject) => {
-			method.estimateGas({from: this.tenant, value: value})
+			method.estimateGas({from: this.tenantAddress, value: value})
 				.then(gasAmount => {
-					method.send({from: this.tenant, gas: gasAmount, value: value})
+					method.send({from: this.tenantAddress, gas: gasAmount, value: value})
 						.on('receipt', () => {
 							Notifications.show('Rental request sent')
 							Loading.success('request.blockchain')
@@ -189,7 +174,7 @@ export class Rental {
 							this.saveLocalData()
 
 							// Mark the account as used by a tenant
-							Web3Util.getAccount(this.tenant).type = 'tenant'
+							Web3Util.getAccount(this.tenantAddress).type = 'tenant'
 
 							resolve()
 						})
@@ -223,7 +208,7 @@ export class Rental {
 
 		pendingRentalRequests.push({
 			localStorageId: this.localStorageId,
-			tenant:         this.tenant,
+			tenantAddress:  this.tenantAddress,
 			fee:            this.fee,
 			deposit:        this.deposit,
 			details:        this.details
@@ -247,10 +232,6 @@ export class Rental {
 		let filteredRequests = pendingRentalRequests.filter(request => request.localStorageId !== this.localStorageId)
 
 		window.localStorage.setItem('pendingRentalRequests', JSON.stringify(filteredRequests))
-	}
-
-	async accept () {
-
 	}
 
 	/**
@@ -343,13 +324,13 @@ export class Rental {
 		// Process all stored pending requests
 		for (let request of pendingRentalRequests) {
 			// Skip requests for which we don't have accounts
-			if (addresses.indexOf(request.tenant) === -1) {
+			if (addresses.indexOf(request.tenantAddress) === -1) {
 				continue
 			}
 
 			let rental = new Rental()
 			rental.localStorageId = request.localStorageId
-			rental.tenant = request.tenant
+			rental.tenantAddress = request.tenantAddress
 			rental.role = 'tenant'
 			rental.fee = parseInt(request.fee)
 			rental.deposit = parseInt(request.deposit)
@@ -415,7 +396,7 @@ export class Rental {
 				// Create a new rental and assign the fetched data
 				let rental = new Rental()
 				Object.assign(rental, rentalData)
-				rental.tenant = address
+				rental.tenantAddress = address
 				rental.account = Web3Util.getAccount(address)
 				rental.role = 'tenant'
 				rental.fee = parseInt(rentalData.fee)
@@ -516,6 +497,129 @@ export class Rental {
 		return true
 	}
 
+	/**
+	 * Cancel a rental request. Prevents it from being submitted to the blockchain.
+	 */
+	cancel () {
+		this.removePendingRequest()
+		this.status = 'canceled'
+	}
+
+	/**
+	 * Withdraw a rental request.
+	 *
+	 * @return {Promise<void>}
+	 */
+	async withdraw () {
+		// Show the load message. Wait for the response, as following steps might freeze the browser for a second.
+		await Loading.show('Withdrawing rental request')
+
+		let parameters = [
+			this.id
+		]
+
+		// Estimate gas and call the withdrawRentalRequest function
+		Loading.add('withdraw.blockchain', 'Sending withdrawal to blockchain')
+		let method = Web3Util.contract.methods.withdrawRentalRequest(...parameters)
+		return new Promise((resolve, reject) => {
+			method.estimateGas({from: this.tenantAddress})
+				.then(gasAmount => {
+					method.send({from: this.tenantAddress, gas: gasAmount + 21000})
+						.on('receipt', () => {
+							Notifications.show('Withdrawal sent')
+							Loading.success('withdraw.blockchain')
+							Loading.hide()
+
+							this.status = 'withdrawn'
+
+							resolve()
+						})
+						.on('error', (error) => {
+							console.error(error, parameters)
+							Loading.error('withdraw.blockchain')
+							Loading.hide()
+
+							reject(error)
+						})
+				})
+				.catch(error => {
+					console.error(error, parameters)
+					Loading.error('withdraw.blockchain')
+					Loading.hide()
+
+					reject(error)
+				})
+		})
+	}
+
+	/**
+	 * Accept a rental as the owner. Authenticates using the interaction EC account referenced in the interaction address.
+	 *
+	 * @return {Promise<void>}
+	 */
+	async accept () {
+		// Show the load message. Wait for the response, as following steps might freeze the browser for a second.
+		await Loading.show('Accepting rental request')
+
+		// Create the string we must sign for authentication
+		let acceptString = 'accept:' + this.id
+
+		// Get the account to sign the message and thus used for authentication against the interaction address
+		let ecAccount = await Cryptography.getEcAccount(this.interactionAddress)
+
+		Loading.add('sign', 'Signing accept message')
+		let sign = Web3Util.web3.eth.accounts.sign(acceptString, ecAccount.private.hex)
+		let signature = sign.signature
+		console.debug('Created signature', sign)
+		Loading.success('sign')
+
+		let parameters = [
+			this.id,
+			signature
+		]
+
+		// Estimate gas and call the acceptRental function
+		Loading.add('accept.blockchain', 'Sending message to blockchain')
+		let method = Web3Util.contract.methods.acceptRental(...parameters)
+		return new Promise((resolve, reject) => {
+			method.estimateGas({from: this.ownerAddress})
+				.then(gasAmount => {
+					method.send({from: this.ownerAddress, gas: gasAmount + 21000})
+						.on('receipt', () => {
+							Notifications.show('Rental request accepted')
+							Loading.success('accept.blockchain')
+							Loading.hide()
+
+							// Mark the account as used in an interaction
+							Web3Util.getAccount(this.ownerAddress).type = 'interaction'
+
+							this.status = 'accepted'
+
+							resolve()
+						})
+						.on('error', (error, parameters) => {
+							console.error(error)
+							Loading.error('accept.blockchain')
+							Loading.hide()
+
+							reject(error)
+						})
+				})
+				.catch(error => {
+					console.error(error, parameters)
+					Loading.error('accept.blockchain')
+					Loading.hide()
+
+					reject(error)
+				})
+		})
+	}
+
+	/**
+	 * Refuse a rental as the owner. Authenticates using the interaction EC account referenced in the interaction address.
+	 *
+	 * @return {Promise<void>}
+	 */
 	async refuse () {
 		// Show the load message. Wait for the response, as following steps might freeze the browser for a second.
 		await Loading.show('Refusing rental request')
@@ -537,20 +641,21 @@ export class Rental {
 			signature
 		]
 
-		// Estimate gas and call the requestRental function
+		// Estimate gas and call the refuseRental function
 		Loading.add('refuse.blockchain', 'Sending message to blockchain')
 		let method = Web3Util.contract.methods.refuseRental(...parameters)
+
 		return new Promise((resolve, reject) => {
 			method.estimateGas({from: this.ownerAddress})
 				.then(gasAmount => {
 					method.send({from: this.ownerAddress, gas: gasAmount + 21000})
 						.on('receipt', () => {
-							Notifications.show('Rental request refusal')
+							Notifications.show('Rental request refused')
 							Loading.success('refuse.blockchain')
 							Loading.hide()
 
 							// Mark the account as used in an interaction
-							this.owner.type = 'interaction'
+							Web3Util.getAccount(this.ownerAddress).type = 'interaction'
 
 							this.status = 'refused'
 
@@ -572,5 +677,13 @@ export class Rental {
 					reject(error)
 				})
 		})
+	}
+
+	reviewTenant (score, text, deduction, reason) {
+
+	}
+
+	reviewApartment (score, text) {
+
 	}
 }

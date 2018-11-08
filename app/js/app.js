@@ -141,6 +141,19 @@ let app = new Vue({
 			feeInEth:  0
 		},
 
+		tenantReview:    {
+			rental:    null,
+			score:     '',
+			text:      '',
+			deduction: 0,
+			reason:    ''
+		},
+		apartmentReview: {
+			rental: null,
+			score:  '',
+			text:   ''
+		},
+
 		userApartments:   [],
 		rentals:          [],
 		currentRental:    null,
@@ -389,6 +402,19 @@ let app = new Vue({
 					Notifications.show('Apartment added')
 				}
 			)
+		},
+
+		reviewTenant: async () => {
+			// Process the review
+			await app.tenantReview.rental.reviewTenant(
+				app.tenantReview.score,
+				app.tenantReview.text,
+				app.tenantReview.deduction,
+				app.tenantReview.reason
+			)
+
+			// Clear the form
+			Object.assign(app.$data.tenantReview, app.$options.data.call(app).tenantReview)
 		},
 
 		/**
