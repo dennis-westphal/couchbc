@@ -6,6 +6,7 @@ import { Apartment } from './Apartment'
 import { Web3Util } from '../utils/Web3Util'
 import { IpfsUtil } from '../utils/IpfsUtil'
 import { Notifications } from '../utils/Notifications'
+import { Tenant } from './Tenant'
 
 export class Rental {
 	constructor () {
@@ -35,8 +36,37 @@ export class Rental {
 
 		this.details = {}
 		this.detailsForMediator = {}
-		this.ownerData = {}
+		this.ownerData = {
+			name:  '',
+			phone: '',
+			email: ''
+		}
 		this.ownerDataForMediator = {}
+	}
+
+	/**
+	 * Set an owner account for this rental.
+	 * This has to be a previously unused account
+	 *
+	 * @param ownerAccount
+	 */
+	set ownerAccount (ownerAccount) {
+		if (ownerAccount.type !== 'unknown') {
+			console.warn('Used account may not be selected as owner address', ownerAccount)
+
+			return
+		}
+
+		this.ownerAddress = ownerAccount.address
+	}
+
+	/**
+	 * Get the owner account used in this rental
+	 *
+	 * @returns {*}
+	 */
+	get ownerAccount () {
+		return Web3Util.getAccount(this.ownerAddress)
 	}
 
 	/**
@@ -71,14 +101,13 @@ export class Rental {
 
 		// Subscribe to the answer topic
 		Loading.add('subscribe', 'Subscribing to interaction key responses')
-		PubSub.subscribeToTopic(
+		await PubSub.subscribeToTopic(
 			'issue-interaction-key',
 
 			// Decrypt response with own EC account => private key
 			ecAccount.address
-		).then(() => {
-			Loading.success('subscribe')
-		})
+		)
+		Loading.success('subscribe')
 
 		// Send a new interaction key request
 		Loading.add('publish', 'Sending encrypted interaction key request')
@@ -171,7 +200,7 @@ export class Rental {
 
 							this.status = 'requested'
 							this.removePendingRequest()
-							this.saveLocalData()
+							this.saveLocalTenantData()
 
 							// Mark the account as used by a tenant
 							Web3Util.getAccount(this.tenantAddress).type = 'tenant'
@@ -355,23 +384,46 @@ export class Rental {
 	/**
 	 * Save details about the rental locally to be used by the tenant
 	 */
-	saveLocalData () {
-		let allLocalData = JSON.parse(window.localStorage.getItem('rentalsData') || '{}')
+	saveLocalTenantData () {
+		let allLocalData = JSON.parse(window.localStorage.getItem('tenantRentalDetails') || '{}')
 
 		// Add the local data, addressed through the interaction address (as we don't have a rental id yet at this point)
 		allLocalData[this.interactionAddress] = this.details
 
-		window.localStorage.setItem('rentalsData', JSON.stringify(allLocalData))
+		window.localStorage.setItem('tenantRentalDetails', JSON.stringify(allLocalData))
 	}
 
 	/**
 	 * Retrieve the locally stored rental details
 	 */
-	loadLocalData () {
-		let allLocalData = JSON.parse(window.localStorage.getItem('rentalsData') || '{}')
+	loadLocalTenantData () {
+		let allLocalData = JSON.parse(window.localStorage.getItem('tenantRentalDetails') || '{}')
 
 		if (allLocalData[this.interactionAddress]) {
 			Object.assign(this.details, allLocalData[this.interactionAddress])
+		}
+	}
+
+	/**
+	 * Save details about the rental locally to be used by the owner
+	 */
+	saveLocalOwnerData () {
+		let allLocalData = JSON.parse(window.localStorage.getItem('ownerRentalData') || '{}')
+
+		// Add the local data, addressed through the interaction address (as we don't have a rental id yet at this point)
+		allLocalData[this.id] = this.ownerData
+
+		window.localStorage.setItem('ownerRentalData', JSON.stringify(allLocalData))
+	}
+
+	/**
+	 * Retrieve the locally stored rental details
+	 */
+	loadLocalOwnerData () {
+		let allLocalData = JSON.parse(window.localStorage.getItem('ownerRentalData') || '{}')
+
+		if (allLocalData[this.id]) {
+			Object.assign(this.details, allLocalData[this.id])
 		}
 	}
 
@@ -403,7 +455,7 @@ export class Rental {
 				rental.deposit = parseInt(rentalData.deposit)
 
 				// Fetch the locally stored data
-				rental.loadLocalData()
+				rental.loadLocalTenantData()
 
 				// Fetch the apartment
 				rental.apartment = await Apartment.findById(rental.details.apartmentId)
@@ -561,8 +613,18 @@ export class Rental {
 		// Show the load message. Wait for the response, as following steps might freeze the browser for a second.
 		await Loading.show('Accepting rental request')
 
+		// Fetch the tenant
+		Loading.add('tenant', 'Fetching tenant public key for encryption of contact data')
+		let tenant = await Tenant.findByAddress(this.tenantAddress)
+		Loading.success('tenant')
+
+		// Upload the owner details to IPFS, encrypted with the tenant's public key
+		Loading.add('upload', 'Uploading contact data to IPFS')
+		let ownerDataHash = await IpfsUtil.uploadData(this.ownerData, Conversion.getUint8ArrayBufferFromXY(tenant.publicKey_x, tenant.publicKey_y))
+		Loading.success('upload')
+
 		// Create the string we must sign for authentication
-		let acceptString = 'accept:' + this.id
+		let acceptString = 'accept:' + this.id + '-' + ownerDataHash.substr(2) + '-' + this.ownerAddress
 
 		// Get the account to sign the message and thus used for authentication against the interaction address
 		let ecAccount = await Cryptography.getEcAccount(this.interactionAddress)
@@ -575,6 +637,7 @@ export class Rental {
 
 		let parameters = [
 			this.id,
+			ownerDataHash,
 			signature
 		]
 
@@ -591,7 +654,7 @@ export class Rental {
 							Loading.hide()
 
 							// Mark the account as used in an interaction
-							Web3Util.getAccount(this.ownerAddress).type = 'interaction'
+							this.ownerAccount.type = 'interaction'
 
 							this.status = 'accepted'
 
@@ -655,7 +718,7 @@ export class Rental {
 							Loading.hide()
 
 							// Mark the account as used in an interaction
-							Web3Util.getAccount(this.ownerAddress).type = 'interaction'
+							this.ownerAccount.type = 'interaction'
 
 							this.status = 'refused'
 

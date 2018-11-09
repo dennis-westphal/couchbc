@@ -694,7 +694,7 @@ contract Rent {
 	// Uses the supplied signature to authenticate against the rentals interaction public key.
 	function refuseRental(
 		uint rentalId,
-		string signature // Signature for 'refuse:' + rentalId
+		string signature // Signature for 'refuse:' + rentalId (so that no other party could "copy" the transaction)
 	) public {
 		// Check that the sender address has not been used yet
 		require(!tenants[msg.sender].initialized);
@@ -742,7 +742,7 @@ contract Rent {
 	function acceptRental(
 		uint rentalId,
 		bytes32 contactDataIpfsHash,
-		string signature  // Signature for 'accept:' + rentalId + contactDataIpfsHash + msg.sender address
+		string signature  // Signature for 'accept:' + rentalId + contactDataIpfsHash + msg.sender address (so that no other party could "copy" the transaction and claim the payment)
 	) public {
 		// Check that the sender address has not been used yet
 		require(!tenants[msg.sender].initialized);
@@ -757,10 +757,12 @@ contract Rent {
 		// Check that the rental has the right state
 		require(rental.status == RentalStatus.Requested);
 
-		strings.slice[] memory parts = new strings.slice[](3);
+		strings.slice[] memory parts = new strings.slice[](5);
 		parts[0] = Library.uintToString(rentalId).toSlice();
-		parts[1] = contactDataIpfsHash.toSliceB32();
-		parts[2] = Library.addressToString(msg.sender).toSlice();
+		parts[1] = "-".toSlice();
+		parts[2] = contactDataIpfsHash.toSliceB32();
+		parts[3] = "-".toSlice();
+		parts[4] = Library.addressToString(msg.sender).toSlice();
 
 		// Recover the expected signer address
 		string memory message = "accept:".toSlice().join(parts);

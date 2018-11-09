@@ -246,7 +246,8 @@
                             <input v-model="rentalRequest.contact.email" placeholder="Email address" type="email">
                         </div>
                         <p class="hint">
-                            Your personal data will only be visible to the apartment owner and a mediator in case of a dispute
+                            Your personal data will only be visible to the apartment owner and a mediator in case of a
+                            dispute
                         </p>
                     </fieldset>
 
@@ -320,7 +321,8 @@
                                 title="The rental request has been accepted">
                             Accepted
                         </span>
-                        <p class="date">{{rental.details.fromDay|formatDate}} - {{rental.details.tillDay|formatDate}}</p>
+                        <p class="date">{{rental.details.fromDay|formatDate}}
+                            - {{rental.details.tillDay|formatDate}}</p>
 
                         <h2 v-if="rental.role === 'tenant'">Renting in {{rental.apartment.city}}</h2>
                         <h2 v-if="rental.role === 'owner'">Tenant: {{rental.details.contact.name}}</h2>
@@ -328,8 +330,9 @@
 
                         <p>{{rental.fee}} fee / {{rental.deposit}} deposit</p>
 
-                        <div class="form-control account-select" v-if="rental.status === 'requested' && rental.role === 'owner'">
-                            <v-select :options="accounts" placeholder="Select account" v-model="rental.ownerAddress">
+                        <div class="form-control account-select"
+                             v-if="rental.status === 'requested' && rental.role === 'owner'">
+                            <v-select :options="accounts" placeholder="Select account" v-model="rental.ownerAccount">
                                 <template slot="option" slot-scope="option">
                                     <span :class="{forbidden: option.type !== 'unknown'}">
                                         <span class="blockie" :style="getBlockie(option.address)"></span>
@@ -346,11 +349,26 @@
                                 </template>
                             </v-select>
                             <p class="hint">
-                                The selected account is only usable with this rental in CouchBC and will also receive any payments for the rental.
+                                The selected account is only usable with this rental in CouchBC and will also receive
+                                any payments for the rental.
                             </p>
                         </div>
+                        <div v-if="rental.status === 'requested' && rental.role === 'owner'">
+                            <div class="form-control">
+                                <input v-model="rental.ownerData.name" placeholder="Your name" type="text">
+                            </div>
+                            <div class="form-control">
+                                <input v-model="rental.ownerData.phone" placeholder="Telephone number" type="tel">
+                            </div>
+                            <div class="form-control">
+                                <input v-model="rental.ownerData.email" placeholder="Email address" type="email">
+                            </div>
+                            <p class="hint">The contact data is provided to the tenant if you accept the rental request
+                                and is only visible to the tenant and the mediator in case of a dispute</p>
+                        </div>
                         <div class="actions">
-                            <a href="#" class="button cancel" @click.stop="rental.cancel()" v-if="rental.status === 'pending'">Cancel</a>
+                            <a href="#" class="button cancel" @click.stop="rental.cancel()"
+                               v-if="rental.status === 'pending'">Cancel</a>
                             <a href="#" class="button withdraw" @click.stop="rental.withdraw()"
                                v-if="rental.status === 'requested' && rental.role === 'tenant'">Withdraw</a>
 
@@ -369,7 +387,8 @@
                         </div>
                         <div class="tenant-review" :class="{'shown': tenantReview.rental === rental}">
                             <div class="form-control">
-                                <v-select :options="[1,2,3,4,5]" placeholder="Score" v-model="tenantReview.score"></v-select>
+                                <v-select :options="[1,2,3,4,5]" placeholder="Score"
+                                          v-model="tenantReview.score"></v-select>
                             </div>
                             <div class="form-control">
                                 <label for="tenantReview.text">Review text</label>
@@ -377,7 +396,8 @@
                             </div>
                             <div class="form-control">
                                 <label for="tenantReview.deduction">Requested deposit deduction</label>
-                                <input id="tenantReview.deduction" type="number" min="0" :max="rental.deposit" v-model="tenantReview.deduction"/>
+                                <input id="tenantReview.deduction" type="number" min="0" :max="rental.deposit"
+                                       v-model="tenantReview.deduction"/>
                             </div>
                             <div class="form-control deduction-reason" :class="{'shown': rental.deduction > 0}">
                                 <label for="tenantReview.reason">Reason for deduction</label>

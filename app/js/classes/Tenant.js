@@ -17,6 +17,12 @@ export class Tenant {
 
 	}
 
+	/**
+	 * Fetch a tenant based on their address
+	 *
+	 * @param address
+	 * @returns {Promise<Tenant>}
+	 */
 	static async findByAddress (address) {
 		let tenantData = await Web3Util.contract.methods.getTenant(address)
 		let tenant = new Tenant()
