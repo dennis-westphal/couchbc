@@ -23,10 +23,10 @@ export default new Vuex.Store({
 			state.loading.shown = true
 		},
 		addLoadingElement (state, payload) {
-			state.loading.elements[payload.id] = {
+			Vue.set(state.loading.elements, payload.id, {
 				text:   payload.text,
 				status: payload.status || 'active'
-			}
+			})
 		},
 		setLoadingElementStatus (state, payload) {
 			if (state.loading.elements[payload.id]) {
