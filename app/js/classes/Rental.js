@@ -624,7 +624,9 @@ export class Rental {
 		Loading.success('upload')
 
 		// Create the string we must sign for authentication
-		let acceptString = 'accept:' + this.id + '-' + ownerDataHash.substr(2) + '-' + this.ownerAddress.substr(2)
+		let acceptString = 'accept:' + this.id + '-' +
+			ownerDataHash.substr(2) + '-' +
+			this.ownerAddress.substr(2).toLowerCase() // Use the lower case of the address as this is how it is converted on the blockchain
 
 		// Get the account to sign the message and thus used for authentication against the interaction address
 		let ecAccount = await Cryptography.getEcAccount(this.interactionAddress)
@@ -632,7 +634,6 @@ export class Rental {
 		Loading.add('sign', 'Signing accept message')
 		let sign = Web3Util.web3.eth.accounts.sign(acceptString, ecAccount.private.hex)
 		let signature = sign.signature
-		console.debug('Created signature', sign)
 		Loading.success('sign')
 
 		let parameters = [
