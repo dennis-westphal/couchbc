@@ -24,7 +24,7 @@ export class Tenant {
 	 * @returns {Promise<Tenant>}
 	 */
 	static async findByAddress (address) {
-		let tenantData = await Web3Util.contract.methods.getTenant(address)
+		let tenantData = await Web3Util.contract.methods.getTenant(address).call()
 		let tenant = new Tenant()
 		Object.assign(tenant, tenantData)
 		this.address = address
