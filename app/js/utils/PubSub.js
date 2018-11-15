@@ -177,9 +177,7 @@ class PubSubClass {
 		window.localStorage.setItem('topicSubscriptions', JSON.stringify(subscriptions))
 
 		// Wait a while when a new subscription is added as Google might need some time before it becomes active
-		await new Promise(resolve => setTimeout(resolve, 2000))
-
-		return
+		await new Promise(resolve => setTimeout(resolve, 500))
 	}
 
 	/**
