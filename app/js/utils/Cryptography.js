@@ -182,14 +182,10 @@ export class Cryptography {
 		let privateKey = keyPair.getPrivate().toBuffer()
 		let publicKey = keyPair.getPublic()
 
-		// This is the same: (eccrypto always adds 04 in front of x and y point of public key)
-		// console.log('0x' + Buffer(eccrypto.getPublic(privateKey)).toString('hex'));
-		// console.log('0x04' + (keyPair.getPublic().x.toString(16)) + (keyPair.getPublic().y.toString(16)));
-
 		let pkHex = '0x' + privateKey.toString('hex')
 		let account = Web3Util.web3.eth.accounts.privateKeyToAccount(pkHex)
-		let xHex = '0x' + publicKey.x.toString(16)
-		let yHex = '0x' + publicKey.y.toString(16)
+		let xHex = '0x' + publicKey.x.toString(16).padStart(64, 0) // String padding needed as otherwise hex numbers starting with 0 will be cut off
+		let yHex = '0x' + publicKey.y.toString(16).padStart(64, 0)
 
 		// Save the account in the wallet
 		wallet.add(account)
