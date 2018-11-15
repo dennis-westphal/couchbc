@@ -624,7 +624,7 @@ export class Rental {
 		Loading.success('upload')
 
 		// Create the string we must sign for authentication
-		let acceptString = 'accept:' + this.id + '-' + ownerDataHash.substr(2) + '-' + this.ownerAddress
+		let acceptString = 'accept:' + this.id + '-' + ownerDataHash.substr(2) + '-' + this.ownerAddress.substr(2)
 
 		// Get the account to sign the message and thus used for authentication against the interaction address
 		let ecAccount = await Cryptography.getEcAccount(this.interactionAddress)
