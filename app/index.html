@@ -44,6 +44,16 @@
                         </ul>
                     </li>
                 </ul>
+                <ul id="notifications" class="dropdown menu" data-dropdown-menu>
+                    <li>
+                        <a href="#"><span class="mdi mdi-bell-outline"></span></a>
+                        <ul>
+                            <li v-if="notifications.length === 0">
+                                <a href="#">No notifications</a>
+                            </li>
+                        </ul>
+                    </li>
+                </ul>
             </div>
         </div>
     </nav>

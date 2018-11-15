@@ -78,6 +78,8 @@ Vue.use(VueGoogleMaps, {
 let app = new Vue({
 	el:         '#app',
 	data:       () => ({
+		notifications: [],
+
 		store,
 
 		// Library settings

@@ -6,4 +6,21 @@ nav {
 	.dropdown.menu > li.opens-left > .is-dropdown-submenu {
 		z-index: 2000
 	}
+
+	#menu {
+		float: left;
+	}
+
+	#notifications {
+		float: right;
+
+		> li.is-dropdown-submenu-parent > a {
+			font-size: 1.4rem;
+			padding-right: 0;
+
+			&::after {
+				display: none;
+			}
+		}
+	}
 }
