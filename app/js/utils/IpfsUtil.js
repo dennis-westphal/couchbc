@@ -23,6 +23,8 @@ export class IpfsUtil {
 	 * @return {Promise<string>}
 	 */
 	static async uploadString (str) {
+		console.debug('Uploading string ', str)
+
 		// Get an IPFS connection
 		let ipfsConnection = this.getConnection()
 
