@@ -1,8 +1,5 @@
 pragma solidity ^0.4.25;
 
-import "./Library.sol";
-import "./strings/src/strings.sol";
-
 // Based on ECTools from https://gist.github.com/axic/5b33912c6f61ae6fd96d6c4a47afde6d#gistcomment-1775555
 // for signature to (r,s,v) conversion and https://blog.ricmoo.com/verifying-messages-in-solidity-50a94f82b2ca
 // for single parameter compatible signing and message prefixing
@@ -93,11 +90,9 @@ library Verifier {
 	function getHash(string header, string message) private pure returns (bytes32) {
 		return
 		keccak256(// Create a sha3 / keccak256 hash
-			bytes(// Convert string to bytes array required for keccac256
-				strings.concat(// Concatenate header and message
-					strings.toSlice(header),
-					strings.toSlice(message)
-				)
+			abi.encodePacked(// Concatenate header and message
+				header,
+				message
 			)
 		);
 	}

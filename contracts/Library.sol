@@ -43,14 +43,53 @@ library Library {
 		return string(chars);
 	}
 
-	// Convert address to string
-	function addressToString(address addr) public pure returns (string) {
-		bytes memory byteArray = new bytes(20);
-
-		for (uint i = 0; i < 20; i++) {
-			byteArray[i] = byte(uint8(uint(addr) / (2 ** (8 * (19 - i)))));
+	// Convert a byte to a a hex char
+	function byteToHex(byte b) internal pure returns (byte) {
+		if (b < 10) {
+			return byte(uint8(b) + 0x30);
 		}
 
-		return string(byteArray);
+		return byte(uint8(b) + 0x57);
+	}
+
+	// Convert a bytes32 fixed byte array to a hex encoded string (without prefix)
+	function b32ToString(bytes32 b32) public pure returns (string) {
+		bytes memory bytesArray = new bytes(64);
+
+		for (uint i = 0; i < 32; i++) {
+			// Get the value at the specified index
+			byte value = byte(b32[i]);
+
+			// Get the upper and lower value for hex encoding
+			byte upper = byte(uint8(value) / 16);
+			byte lower = byte(uint8(value) - 16 * uint8(upper));
+
+			// Get the hex value
+			bytesArray[i * 2] = byteToHex(upper);
+			bytesArray[i * 2 + 1] = byteToHex(lower);
+		}
+
+		return string(bytesArray);
+	}
+
+	// Convert an address to a hex encoded string (without prefix)
+	function addressToString(address addr) public pure returns (string) {
+		bytes memory bytesArray = new bytes(40);
+		uint addrInt = uint(addr);
+
+		for (uint i = 0; i < 20; i++) {
+			// Get the value at the specified index
+			byte value = byte(uint8(addrInt / (2 ** (8 * (19 - i)))));
+
+			// Get the upper and lower value for hex encoding
+			byte upper = byte(uint8(value) / 16);
+			byte lower = byte(uint8(value) - 16 * uint8(upper));
+
+			// Get the hex value
+			bytesArray[i * 2] = byteToHex(upper);
+			bytesArray[i * 2 + 1] = byteToHex(lower);
+		}
+
+		return string(bytesArray);
 	}
 }

@@ -1,12 +1,9 @@
 pragma solidity ^0.4.25;
 
 import "./Library.sol";
-import "./strings/src/strings.sol";
 import "./Verifier.sol";
 
 contract Rent {
-	using strings for *;
-
 	uint8 constant mediatorFee = 50; // In Finney (1/1000 eth)
 
 	// -------------------------------------------------------------
@@ -710,7 +707,7 @@ contract Rent {
 		require(rental.status == RentalStatus.Requested);
 
 		// Recover the expected signer address
-		string memory message = "refuse:".toSlice().concat(Library.uintToString(rentalId).toSlice());
+		string memory message = string(abi.encodePacked("refuse:", Library.uintToString(rentalId)));
 		address recovered = Verifier.verifyString(
 			message,
 			signature
@@ -730,11 +727,6 @@ contract Rent {
 
 		// Notify about the refused rental request
 		emit RentalRequestRefused(rental.tenantAddress, rentalId);
-
-		//emit TestAddr("Interaction address", rentals[0].interactionAddress);
-		//emit Test("Concat", message);
-		//emit Test("Signature", signature);
-		//emit TestAddr("Recovered signer address", recovered);
 	}
 
 	// Accept a rental request.
@@ -757,15 +749,18 @@ contract Rent {
 		// Check that the rental has the right state
 		require(rental.status == RentalStatus.Requested);
 
-		strings.slice[] memory parts = new strings.slice[](5);
-		parts[0] = Library.uintToString(rentalId).toSlice();
-		parts[1] = "-".toSlice();
-		parts[2] = contactDataIpfsHash.toSliceB32();
-		parts[3] = "-".toSlice();
-		parts[4] = Library.addressToString(msg.sender).toSlice();
-
 		// Recover the expected signer address
-		string memory message = "accept:".toSlice().join(parts);
+		string memory c = Library.b32ToString(contactDataIpfsHash);
+		string memory a = Library.addressToString(msg.sender);
+
+		string memory message = string(abi.encodePacked(
+				"accept:",
+				Library.uintToString(rentalId),
+				"-",
+				c,
+				"-",
+				a
+			));
 		address recovered = Verifier.verifyString(
 			message,
 			signature
@@ -794,6 +789,11 @@ contract Rent {
 
 		// Notify about the accepted rental request
 		emit RentalRequestApproved(rental.tenantAddress, rentalId);
+
+		//emit TestAddr("Interaction address", rental.interactionAddress);
+		//emit Test("Concat", message);
+		//emit Test("Signature", signature);
+		//emit TestAddr("Recovered signer address", recovered);
 	}
 
 	// Get a pseudo-random mediator
@@ -810,10 +810,12 @@ contract Rent {
 
 		// Get the mediator based on a pseudo-random number generated using the block timestamp and difficulty
 		return mediators[
-		uint256(keccak256(bytes(
-				Library.uintToString(block.timestamp).toSlice()
-				.concat(Library.uintToString(block.difficulty).toSlice())
-			))) % mediators.length
+		uint256(keccak256(
+				abi.encodePacked(
+					Library.uintToString(block.timestamp),
+					Library.uintToString(block.difficulty)
+				)
+			)) % mediators.length
 		];
 	}
 
@@ -1015,13 +1017,13 @@ contract Rent {
 		require(rental.status == RentalStatus.Accepted);
 
 		// Check authorization: rentals apartment hash has match the sha3 of apartmentId + "-" + nonce
-		strings.slice[] memory parts = new strings.slice[](2);
-		parts[0] = "-".toSlice();
-		parts[1] = Library.uintToString(nonce).toSlice();
-
-		require(rental.apartmentHash == keccak256(bytes(
-				Library.uintToString(nonce).toSlice().join(parts)
-			)));
+		require(rental.apartmentHash == keccak256(
+			abi.encodePacked(
+				Library.uintToString(apartmentId),
+				"-",
+				Library.uintToString(nonce)
+			)
+		));
 
 		// Change the rental status to reviewed
 		rental.status = RentalStatus.Reviewed;

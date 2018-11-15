@@ -1,18 +1,12 @@
-var Library = artifacts.require('./Library.sol');
-var strings = artifacts.require('./strings/strings.sol');
-var Verifier = artifacts.require('./Verifier.sol');
-var Rent = artifacts.require('./Rent.sol');
+var Library = artifacts.require('./Library.sol')
+var Verifier = artifacts.require('./Verifier.sol')
+var Rent = artifacts.require('./Rent.sol')
 
-module.exports = function(deployer) {
-	deployer.deploy(strings);
-	deployer.deploy(Library);
+module.exports = function (deployer) {
+	deployer.deploy(Library)
+	deployer.deploy(Verifier)
 
-	deployer.link(strings, Verifier);
-	deployer.link(Library, Verifier);
-	deployer.deploy(Verifier);
-
-	deployer.link(Library, Rent);
-	deployer.link(Verifier, Rent);
-	deployer.link(strings, Rent);
-	deployer.deploy(Rent);
-};
+	deployer.link(Library, Rent)
+	deployer.link(Verifier, Rent)
+	deployer.deploy(Rent)
+}
