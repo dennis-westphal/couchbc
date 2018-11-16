@@ -4,7 +4,9 @@ import "./Library.sol";
 import "./Verifier.sol";
 
 contract Rent {
-	uint8 constant mediatorFee = 50; // In Finney (1/1000 eth)
+	uint8 constant mediatorFee = 50;            // In Finney (1/1000 eth)
+	uint8 constant minMediatorReviews = 1;      // Minimum review required to allow mediator registration. Should be set to a higher value in production.
+	uint8 constant minMediatorReviewScore = 4;  // Minimum average review score to allow mediator registration
 
 	// -------------------------------------------------------------
 	// ------------------------ Definitions ------------------------
@@ -24,8 +26,9 @@ contract Rent {
 
 		MediatorStatus mediatorStatus;
 
-		uint totalScore;    // Total score in sum of all rating points. The average score has to be determined totalScore / numReviews
-		uint[] rentals;     // Ids of the rentals (array indices)
+		uint totalScore;        // Total score in sum of all rating points. The average score has to be determined totalScore / numReviews
+		uint[] rentals;         // Ids of the rentals (array indices)
+		uint[] mediatedRentals; // Ids of the rentals the tenant is mediating
 
 		// Using an dynamically sized array instead of a mapping would be more elegant, but is not supported by solidity compiler yet
 		// (can not be initialized due to "Copying of type struct Rent.TenantReview memory[] memory to storage not yet supported")
@@ -104,7 +107,7 @@ contract Rent {
 
 		address tenantAddress;             // The tenant profile address
 		address mediatorAddress;           // The mediator determined for this rental (as soon as the rental is accepted)
-		address ownerAddress;       // The addressed used for payments towards the apartment owner and after accept/refuse also as means of authentication
+		address ownerAddress;               // The addressed used for payments towards the apartment owner and after accept/refuse also as means of authentication
 
 		RentalStatus status;                // Status for the rental
 		DepositStatus depositStatus;        // Status of the deposit
@@ -381,6 +384,7 @@ contract Rent {
 		bytes32 interactionPublicKey_x,
 		bytes32 interactionPublicKey_y,
 		bytes32 apartmentHash,
+		bytes32 contactDataIpfsHash,
 		uint fee,
 		uint deposit,
 		string status,
@@ -394,19 +398,58 @@ contract Rent {
 
 		id = tenants[tenantAddr].rentals[tenantRentalId];
 
-		// Fetch the rental from the storage using the id
-		Rental storage rental = rentals[id];
+		// Assign the return variables. We're not fetching the rental into a local variable as the stack would otherwise be too deep.
+		interactionAddress = rentals[id].interactionAddress;
+		mediatorAddress = rentals[id].mediatorAddress;
+		interactionPublicKey_x = rentals[id].interactionPublicKey_x;
+		interactionPublicKey_y = rentals[id].interactionPublicKey_y;
+		apartmentHash = rentals[id].apartmentHash;
+		contactDataIpfsHash = rentals[id].contactDataIpfsHash;
+		fee = rentals[id].fee;
+		deposit = rentals[id].deposit;
+		status = getRentalStatusString(rentals[id].status);
+		depositStatus = getDepositStatusString(rentals[id].depositStatus);
+	}
 
-		// Assign the return variables
-		interactionAddress = rental.interactionAddress;
-		mediatorAddress = rental.mediatorAddress;
-		interactionPublicKey_x = rental.interactionPublicKey_x;
-		interactionPublicKey_y = rental.interactionPublicKey_y;
-		apartmentHash = rental.apartmentHash;
-		fee = rental.fee;
-		deposit = rental.deposit;
-		status = getRentalStatusString(rental.status);
-		depositStatus = getDepositStatusString(rental.depositStatus);
+	// Get the number of rentals mediated by the tenant
+	function getNumMediatorRentals(address mediatorAddr) public view returns (uint) {
+		// If the tenant doesn't exist, he also doesn't have mediated rentals
+		if (!tenants[mediatorAddr].initialized) {
+			return 0;
+		}
+
+		return tenants[mediatorAddr].mediatedRentals.length;
+	}
+
+	// Get a rental mediated by the tenant with the specified id
+	function getMediatorRental(address mediatorAddr, uint mediatorRentalId) public view returns (
+		uint id,
+		address tenantAddress,
+		bytes32 interactionPublicKey_x,
+		bytes32 interactionPublicKey_y,
+		bytes32 detailsHash,
+		bytes32 detailsForMediatorIpfsHash,
+		bytes32 contactDataForMediatorIpfsHash,
+		uint deposit,
+		string depositStatus
+	) {
+		// Check that the mediator exists
+		require(tenants[mediatorAddr].initialized);
+
+		// Check that the mediated rental exists
+		require(tenants[mediatorAddr].mediatedRentals.length > mediatorRentalId);
+
+		id = tenants[mediatorAddr].mediatedRentals[mediatorRentalId];
+
+		// Assign the return variables. We're not fetching the rental into a local variable as the stack would otherwise be too deep.
+		tenantAddress = rentals[id].tenantAddress;
+		interactionPublicKey_x = rentals[id].interactionPublicKey_x;
+		interactionPublicKey_y = rentals[id].interactionPublicKey_y;
+		detailsHash = rentals[id].detailsHash;
+		detailsForMediatorIpfsHash = rentals[id].detailsForMediatorIpfsHash;
+		contactDataForMediatorIpfsHash = rentals[id].contactDataForMediatorIpfsHash;
+		deposit = rentals[id].deposit;
+		depositStatus = getDepositStatusString(rentals[id].depositStatus);
 	}
 
 	// Check whether a rental exists for the interaction address
@@ -529,7 +572,7 @@ contract Rent {
 
 	// Register as a mediator with the tenant's account associated with the sender.
 	// Registration will fail if tenant is already mediator or doesn't have a sufficient score
-	// (at least 5 reviews and a total review score of at least 4.0 is required)
+	// (at least X reviews and a total review score of at least Y is required)
 	function registerMediator() public {
 		// Check if the sender has a tenant account
 		require(tenants[msg.sender].initialized);
@@ -540,7 +583,7 @@ contract Rent {
 		require(tenant.mediatorStatus == MediatorStatus.Unregistered);
 
 		// Check that the tenant has at least 5 reviews with a score of at least 4.0
-		require(tenant.numReviews > 4 && tenant.totalScore / tenant.numReviews >= 4);
+		require(tenant.numReviews >= minMediatorReviews && tenant.totalScore / tenant.numReviews >= minMediatorReviewScore);
 
 		// Set the tenant as mediator and add him to the list of mediators
 		tenant.mediatorStatus == MediatorStatus.Registered;
@@ -566,6 +609,7 @@ contract Rent {
 
 		// Initialize empty arrays. This is necessary for struct members and for some reaon cannot be done in the constructor call
 		uint[] memory tenantRentals;
+		uint[] memory mediatorRentals;
 
 		// Add a new tenant
 		tenants[addr] = Tenant(
@@ -575,6 +619,7 @@ contract Rent {
 			MediatorStatus.Unregistered,
 			0, // Initial score
 			tenantRentals, // Rental ids
+			mediatorRentals,
 			0               // Number of reviews
 		);
 
