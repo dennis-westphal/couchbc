@@ -70,6 +70,24 @@ export class Rental {
 	}
 
 	/**
+	 * Get the public key buffer for the rental's interaction key
+	 *
+	 * @returns {Uint8Array}
+	 */
+	get interactionKeyBuffer () {
+		return Conversion.getUint8ArrayBufferFromXY(this.interactionPublicKey_x, this.interactionPublicKey_y)
+	}
+
+	/**
+	 * Get the public key buffer for the rental's apartment owner
+	 *
+	 * @returns {Uint8Array}
+	 */
+	get ownerKeyBuffer () {
+		return Conversion.getUint8ArrayBufferFromXY(this.apartment.ownerPublicKey_x, this.apartment.ownerPublicKey_y)
+	}
+
+	/**
 	 * Add a new rental request
 	 *
 	 * @param account
@@ -122,8 +140,8 @@ export class Rental {
 			// Topic to send the message to
 			'request-interaction-key',
 
-			// Encrypt with owner's interaction key
-			Conversion.getUint8ArrayBufferFromXY(rental.apartment.ownerPublicKey_x, rental.apartment.ownerPublicKey_y)
+			// Encrypt with owner's public key
+			rental.ownerKeyBuffer
 		)
 		Loading.success('publish')
 
@@ -159,12 +177,9 @@ export class Rental {
 		let ecAccount = await Cryptography.getOrCreateEcAccount(Web3Util.getAccount(this.tenantAddress))
 		Loading.success('account')
 
-		// Get a public key buffer from the interaction key for encryption of the details
-		let
-			publicKeyBuffer = Conversion.getUint8ArrayBufferFromXY(this.interactionPublicKey_x, this.interactionPublicKey_y)
-
+		// Upload the data to IPFS
 		Loading.add('upload', 'Uploading details to IPFS')
-		this.detailsIpfsHash = await IpfsUtil.uploadData(this.details, publicKeyBuffer)
+		this.detailsIpfsHash = await IpfsUtil.uploadData(this.details, this.interactionKeyBuffer)
 		Loading.success('upload')
 
 		Loading.add('compile', 'Compiling data')
@@ -460,6 +475,12 @@ export class Rental {
 				// Fetch the apartment
 				rental.apartment = await Apartment.findById(rental.details.apartmentId)
 
+				// If we have an accepted rental, fetch the owner contact data
+				if (rental.status === 'accepted') {
+					let ecAccount = await Cryptography.getEcAccountForBcAccount(address)
+					rental.ownerData = await IpfsUtil.downloadDataFromHexHash(rental.contactDataIpfsHash, ecAccount)
+				}
+
 				rentals.push(rental)
 				resolve()
 			}))
@@ -620,7 +641,7 @@ export class Rental {
 
 		// Upload the owner details to IPFS, encrypted with the tenant's public key
 		Loading.add('upload', 'Uploading contact data to IPFS')
-		let ownerDataHash = await IpfsUtil.uploadData(this.ownerData, Conversion.getUint8ArrayBufferFromXY(tenant.publicKey_x, tenant.publicKey_y))
+		let ownerDataHash = await IpfsUtil.uploadData(this.ownerData, tenant.publicKeyBuffer)
 		Loading.success('upload')
 
 		// Create the string we must sign for authentication
@@ -743,8 +764,118 @@ export class Rental {
 		})
 	}
 
-	reviewTenant (score, text, deduction, reason) {
+	/**
+	 * Review the tenant for the rental and optionally request a deduction from the deposit
+	 *
+	 * @param score
+	 * @param text
+	 * @param deduction
+	 * @param reason
+	 * @returns {Promise<void>}
+	 */
+	async reviewTenant (score, text, deduction, reason) {
+		// Wait till the loading screen is shown
+		await Loading.show('Adding tenant review' + ((deduction > 0) ? ' and deduction request' : ''))
 
+		// Fetch the tenant first as we need him for all following steps
+		Loading.add('tenant', 'Fetching tenant details for encryption')
+		let tenant = await Tenant.findByAddress(this.tenantAddress)
+		Loading.success('tenant')
+
+		let promises = []
+
+		Loading.add('review.upload', 'Encrypting and uploading review text to IPFS')
+		let reviewTextHash = Web3Util.web3.utils.sha3(text)
+		let reviewIpfsHash = ''
+		promises.push(new Promise(async resolve => {
+			// Upload the review to IPFS, encrypted it with the tenant's public key
+			reviewIpfsHash = await IpfsUtil.uploadData(text, tenant.publicKeyBuffer)
+
+			Loading.success('review.upload')
+			resolve()
+		}))
+
+		let deductionReasonIpfsHash = ''
+		let contactDataForMediatorIpfsHash = ''
+		// If we have requested a deduction, also upload the deduction reason and the contact data for the mediator
+		if (deduction > 0) {
+			Loading.add('reason.upload', 'Encrypting and uploading deduction reason to IPFS')
+
+			// Fetch the mediator to get his public key. The mediator is always also a tenant, which is why we fetch him through the Tenant class.
+			Loading.add('mediator', 'Fetching mediator details for encryption')
+			let mediator = await Tenant.findByAddress(this.mediatorAddress)
+			Loading.success('mediator')
+
+			// Upload the deduction reason
+			promises.push(new Promise(async resolve => {
+				// Upload the review to IPFS, encrypted it with the tenant's and the mediator's public key
+				deductionReasonIpfsHash = await IpfsUtil.uploadData(text, [tenant.publicKeyBuffer, mediator.publicKeyBuffer])
+
+				Loading.success('reason.upload')
+				resolve()
+			}))
+
+			Loading.add('contact.upload', 'Encrypting and uploading contact data for mediator to IPFS')
+
+			// Upload the contact data for the mediator
+			promises.push(new Promise(async resolve => {
+				// Upload the review to IPFS, encrypted it with the tenant's and the mediator's public key
+				contactDataForMediatorIpfsHash = await IpfsUtil.uploadData(this.ownerData, mediator.publicKeyBuffer)
+
+				Loading.success('contact.upload')
+				resolve()
+			}))
+		}
+
+		// Wait till all uploads have finished
+		await Promise.all(promises)
+
+		let parameters = [
+			this.id,
+			score,
+			reviewTextHash,
+			reviewIpfsHash,
+			deduction,
+			deductionReasonIpfsHash,
+			contactDataForMediatorIpfsHash
+		]
+
+		// Estimate gas and endRental function
+		Loading.add('endRental.blockchain', 'Sending message to blockchain')
+		let method = Web3Util.contract.methods.endRental(...parameters)
+
+		return new Promise((resolve, reject) => {
+			method.estimateGas({from: this.ownerAddress})
+				.then(gasAmount => {
+					method.send({from: this.ownerAddress, gas: gasAmount + 21000})
+						.on('receipt', () => {
+							Notifications.show('Tenant review added')
+							Loading.success('endRental.blockchain')
+							Loading.hide()
+
+							// Mark the account as used in an interaction
+							this.ownerAccount.type = 'interaction'
+
+							this.status = 'refused'
+
+							resolve()
+						})
+						.on('error', (error, parameters) => {
+							console.error(error)
+							Loading.error('endRental.blockchain')
+							Loading.hide()
+
+							reject(error)
+						})
+				})
+				.catch(error => {
+					console.error(error, parameters)
+					Loading.error('endRental.blockchain')
+					Loading.hide()
+
+					reject(error)
+				})
+		})
 	}
 
 	reviewApartment (score, text) {

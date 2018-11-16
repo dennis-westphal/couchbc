@@ -1,5 +1,6 @@
 import { Web3Util } from '../utils/Web3Util'
 import { TenantReview } from './TenantReview'
+import { Conversion } from '../utils/Conversion'
 
 export class Tenant {
 	constructor () {
@@ -42,5 +43,14 @@ export class Tenant {
 
 		await Promise.all(promises)
 		return tenant
+	}
+
+	/**
+	 * Get the public key buffer for the tenant
+	 *
+	 * @returns {Uint8Array}
+	 */
+	get publicKeyBuffer () {
+		return Conversion.getUint8ArrayBufferFromXY(this.publicKey_x, this.publicKey_y)
 	}
 }

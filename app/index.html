@@ -334,9 +334,19 @@
                         <p class="date">{{rental.details.fromDay|formatDate}}
                             - {{rental.details.tillDay|formatDate}}</p>
 
-                        <h2 v-if="rental.role === 'tenant'">Renting in {{rental.apartment.city}}</h2>
-                        <h2 v-if="rental.role === 'owner'">Tenant: {{rental.details.contact.name}}</h2>
+                        <h2>Renting in {{rental.apartment.city}}</h2>
                         <p class="title">{{rental.apartment.title}}</p>
+
+                        <p v-if="rental.role === 'owner'">
+                            Tenant: {{rental.details.contact.name}}<br/>
+                            Phone: {{rental.details.contact.phone}}<br/>
+                            Email: {{rental.details.contact.email}}
+                        </p>
+                        <p v-if="(rental.status === 'accepted' || rental.status === 'reviewed') && rental.role === 'tenant'">
+                            Owner: {{rental.ownerData.name}}<br/>
+                            Phone: {{rental.ownerData.phone}}<br/>
+                            Email: {{rental.ownerData.email}}
+                        </p>
 
                         <p>{{rental.fee}} fee / {{rental.deposit}} deposit</p>
 
