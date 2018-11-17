@@ -1,8 +1,7 @@
 import { default as IpfsApi } from 'ipfs-api'
-import { ipfsHost, ipfsGatewayUrl } from '../constants'
+import { ipfsHost, ipfsGatewayUrl, ipnsResolveTimeout } from '../constants'
 import { default as bs58 } from 'bs58'
 import { Cryptography } from './Cryptography'
-import { Web3Util } from './Web3Util'
 
 export class IpfsUtil {
 	/**
@@ -201,7 +200,9 @@ export class IpfsUtil {
 		let ipfsConnection = this.getConnection()
 
 		return new Promise(resolve => {
-			ipfsConnection.name.resolve(ipnsAddress, (err, name) => {
+			ipfsConnection.name.resolve(ipnsAddress, {
+				timeout: ipnsResolveTimeout
+			}, (err, name) => {
 				if (err) {
 					console.error(err)
 					throw('Could not resolve IPNS address')

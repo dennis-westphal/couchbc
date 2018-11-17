@@ -4,6 +4,7 @@ export const useInjectedWeb3 = false // We can't use Metamask's web3 currently a
 
 export const ipfsHost = {'host': 'couchbc.com', 'port': 443, 'protocol': 'https'}
 export const ipfsGatewayUrl = '/ipfs/'
+export const ipnsResolveTimeout = '1s' // Timeout when resolving IPNS addresses. Setting this too high might cause the app to freeze for a long time.
 
 // Constants used for google api requests (maps, places, geocoding)
 export const googleApiProject = 'couchbc-1540415979753'
