@@ -53,6 +53,16 @@ export class Conversion {
 		return new Uint8Array(hex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)))
 	}
 
+	/**
+	 * Convert a hex string to an Uint8 array
+	 *
+	 * @param hex
+	 * @return {Uint8Array}
+	 */
+	static hexToUint8Array (hex) {
+		return new Uint8Array(hex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)))
+	}
+
 	// Date
 	/**
 	 * Convert a date to a unix day integer

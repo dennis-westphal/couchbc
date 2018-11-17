@@ -1,7 +1,8 @@
 import { default as IpfsApi } from 'ipfs-api'
-import { ipfsHost, ipfsGatewayUrl, ipnsResolveTimeout } from '../constants'
+import { ipfsHost, ipfsGatewayUrl, ipnsResolveTimeout, ipfsNsPath } from '../constants'
 import { default as bs58 } from 'bs58'
 import { Cryptography } from './Cryptography'
+import { default as $ } from 'jquery'
 
 export class IpfsUtil {
 	/**
@@ -161,7 +162,7 @@ export class IpfsUtil {
 	 * @param keyName
 	 * @returns {Promise<string>}
 	 */
-	static async publishOnIpns (hexHash, keyName) {
+	static async publishOnIpns (keyName, hexHash) {
 		let ipfsAddress = this.hexHashToIpfsAddr(hexHash)
 
 		// Create the key
@@ -267,6 +268,79 @@ export class IpfsUtil {
 
 				console.debug('Created key with name ' + name, key)
 				resolve(key.id)
+			})
+		})
+	}
+
+	/**
+	 * Download data referenced at the specified mutable IPFS NS hash
+	 *
+	 * @param id
+	 * @returns {Promise<Object>}
+	 */
+	static async resolveFromIpfsNs (id) {
+		let hexHash = await $.get(ipfsNsPath + id)
+		console.debug('Got ipfs hex hash ' + hexHash + ' from IPFS NS')
+
+		return hexHash
+	}
+
+	/**
+	 * Add an address to IPFS NS at the specified ID and protect it with the specified public key.
+	 * Modifications to the address at the specified ID will require a signed message following this.
+	 *
+	 * @param id
+	 * @param hexHash
+	 * @param ecAccount
+	 * @returns {Promise<string>}
+	 */
+	static async addToIpfsNs (id, hexHash, ecAccount) {
+		console.debug('Adding address ' + hexHash + ' to ' + id + ' using public key', ecAccount.public)
+
+		return new Promise(resolve => {
+			$.ajax({
+				url:         ipfsNsPath + id,
+				method:      'post',
+				data:        JSON.stringify({
+					address:    hexHash,
+					publicKeyX: ecAccount.public.x.substr(2),
+					publicKeyY: ecAccount.public.y.substr(2)
+				}),
+				contentType: 'application/json',
+				success:     hash => {
+					console.debug('Added IPFS NS ID ' + id + ' with hex hash ' + hexHash)
+					resolve(hash)
+				}
+			})
+		})
+	}
+
+	/**
+	 * Update the address at the specified id. Adds a signature for authentication using the specified ecAccount.
+	 *
+	 * @param id
+	 * @param hexHash
+	 * @param ecAccount
+	 * @returns {Promise<string>}
+	 */
+	static async updateOnIpfsNs (id, hexHash, ecAccount) {
+		let signature = Cryptography.dsaSign(id + '-' + hexHash, ecAccount)
+
+		console.debug('Updating address ' + hexHash + ' for ' + id + ' using signature ' + signature + ' from public key ', ecAccount.public)
+
+		return new Promise(resolve => {
+			$.ajax({
+				url:         ipfsNsPath + id,
+				method:      'put',
+				data:        JSON.stringify({
+					address:   hexHash,
+					signature: signature
+				}),
+				contentType: 'application/json',
+				success:     hash => {
+					console.debug('Updated IPFS NS ID ' + id + ' with hex hash ' + hexHash)
+					resolve(hash)
+				}
 			})
 		})
 	}

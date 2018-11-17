@@ -8,6 +8,7 @@ import AES from 'crypto-js/aes'
 // Elliptic for elliptic curve cryptography
 const EC = require('elliptic').ec
 const ec = new EC('secp256k1')
+const SHA256 = require('crypto-js/sha256')
 
 // Eccrypto for ECIES
 const eccrypto = require('eccrypto')
@@ -422,6 +423,28 @@ export class Cryptography {
 			console.debug('Decryption failed; returning null.')
 			return null
 		}
+	}
+
+	/**
+	 * Get a DSA signature for the provided string. Returns a JSON encoded string with r & s as unprefixed hex
+	 *
+	 * @param str
+	 * @param ecAccount
+	 * @returns {string}
+	 */
+	static dsaSign (str, ecAccount) {
+		// Get the key pair
+		let keyPair = ec.keyFromPrivate(ecAccount.private.hex.substr(2))
+
+		// Get the message hash
+		let messageHash = SHA256(str).words
+
+		let signature = keyPair.sign(messageHash)
+
+		return JSON.stringify({
+			r: signature.r.toString(16),
+			s: signature.s.toString(16)
+		})
 	}
 
 	/**

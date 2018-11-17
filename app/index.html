@@ -449,6 +449,10 @@
             <span v-if="typeof(element.status) === 'undefined' || element.status === 'active'" class="status active">IN PROGRESS</span>
             <span v-if="element.status === 'success'" class="status success">SUCCESS</span>
             <span v-if="element.status === 'error'" class="status error">ERROR</span>
+            <span v-if="element.status !== 'success' && element.status !== 'active' && element.status !== 'error'"
+                  class="status active">
+                {{element.status}}
+            </span>
         </p>
     </div>
 </div>

@@ -6,6 +6,7 @@ import { Web3Util } from '../utils/Web3Util'
 import { PubSub } from '../utils/PubSub'
 import { MapsUtil } from '../utils/MapsUtil'
 import { Conversion } from '../utils/Conversion'
+import { useIpfsNs } from '../constants'
 
 export class Apartment {
 	constructor () {
@@ -98,7 +99,7 @@ export class Apartment {
 		})
 
 		// Generate an IPNS key and upload apartment availabilities
-		Loading.add('ipns', 'Uploading apartment availability to IPNS')
+		Loading.add('ipns', 'Uploading apartment availability')
 		let ipnsPromise = new Promise(async resolve => {
 			await apartment.uploadAvailability()
 
@@ -205,13 +206,30 @@ export class Apartment {
 
 		let cityHash = Apartment.getCountryCityHash(country, city)
 
-		let numApartments = await Web3Util.contract.methods.getNumCityApartments(cityHash).call()
+		Loading.show('Fetching apartments for ' + city + ', ' + country)
+
+		let numApartments = parseInt(await Web3Util.contract.methods.getNumCityApartments(cityHash).call())
+		let fetchedApartments = 0
+		let fetchedReviews = 0
+		let fetchedDetails = 0
+		let fetchedAvailability = 0
 
 		// Fetch all apartments for the city
 		for (let i = 0; i < numApartments; i++) {
 			// Get the apartment for the city hash
 			promises.push(new Promise((resolve, reject) => {
+				Loading.add('blockchain', 'Get apartments from blockchain', '0 / ' + numApartments)
+				Loading.add('reviews', 'Fetch reviews', '0 / ' + numApartments)
+				Loading.add('details', 'Fetch apartment details', '0 / ' + numApartments)
+				Loading.add('availability', 'Download availability', '0 / ' + numApartments)
 				Web3Util.contract.methods.getCityApartment(cityHash, i).call().then(async apartmentData => {
+					fetchedApartments++
+					Loading.set('blockchain', fetchedApartments + ' / ' + numApartments)
+
+					if (fetchedApartments === numApartments) {
+						Loading.success('blockchain')
+					}
+
 					let apartment = new Apartment()
 					Object.assign(apartment, apartmentData)
 					apartment.city = city
@@ -219,11 +237,39 @@ export class Apartment {
 					apartment.pricePerNight = parseInt(apartmentData.pricePerNight)
 					apartment.deposit = parseInt(apartmentData.deposit)
 
-					// Fetch the details
-					await apartment.fetchReviews()
-					await apartment.fetchDetails()
+					// Fetch the reviews
+					let apartmentPromises = []
+					apartmentPromises.push(apartment.fetchReviews().then(() => {
+						fetchedReviews++
+						Loading.set('reviews', fetchedReviews + ' / ' + numApartments)
 
-					// Add the apartment to the list an resolve the promise
+						if (fetchedReviews === numApartments) {
+							Loading.success('reviews')
+						}
+					}))
+
+					// Fetch the details
+					await apartment.fetchDetails()
+					fetchedDetails++
+					Loading.set('details', fetchedDetails + ' / ' + numApartments)
+					if (fetchedDetails === numApartments) {
+						Loading.success('details')
+					}
+
+					// Download the availability
+					apartmentPromises.push(apartment.downloadAvailability().then(() => {
+						fetchedAvailability++
+						Loading.set('availability', fetchedDetails + ' / ' + numApartments)
+
+						if (fetchedAvailability === numApartments) {
+							Loading.success('availability')
+						}
+					}))
+
+					// Wait till everything has been fetched
+					await Promise.all(apartmentPromises)
+
+					// Add the apartment to the list and resolve the promise
 					apartments.push(apartment)
 					resolve()
 				})
@@ -232,11 +278,13 @@ export class Apartment {
 
 		await Promise.all(promises)
 
+		Loading.hide()
+
 		return apartments
 	}
 
 	/**
-	 * Upload the availability for the apartment to IPNS. Signs the rented times before they are uploaded.
+	 * Upload the availability for the apartment to IPNS / IPFS NS. Signs the rented times before they are uploaded.
 	 *
 	 * @returns {Promise<void>}
 	 */
@@ -255,18 +303,34 @@ export class Apartment {
 		// Upload the rented times to IPFS
 		let ipfsHash = await IpfsUtil.uploadData(data)
 
-		// Publish the rented times on IPNS and get the ipns hash
-		this.availabilityHash = await IpfsUtil.publishOnIpns(ipfsHash, this.uniqid)
+		// If we use standard IPNS, publish the hash on IPNS and set the availability hash
+		if (!useIpfsNs) {
+			this.availabilityHash = await IpfsUtil.publishOnIpns(this.uniqid, ipfsHash)
+
+			return
+		}
+
+		// Otherwise, check if we already have an ID. In this case, we want to update the availability (since the apartment already exists)
+		// For IPFS NS we don't need to set the availability hash as the apartment hash as it just uses the unique id
+		if (this.id) {
+			await IpfsUtil.updateOnIpfsNs(this.uniqid, ipfsHash, ecAccount)
+
+			return
+		}
+
+		await IpfsUtil.addToIpfsNs(this.uniqid, ipfsHash, ecAccount)
 	}
 
 	/**
-	 * Download the availability of the apartment from IPNS. Checks the downloaded availability is signed by the owner.
+	 * Download the availability of the apartment from IPNS / IPFS NS. Checks the downloaded availability is signed by the owner.
 	 *
 	 * @returns {Promise<void>}
 	 */
 	async downloadAvailability () {
-		// Resolve the IPNS hash
-		let ipfsHash = await IpfsUtil.resolveFromIpns(this.availabilityHash)
+		// Resolve the IPNS / IPFS NS hash
+		let ipfsHash = (useIpfsNs)
+			? await IpfsUtil.resolveFromIpfsNs(this.uniqid)
+			: await IpfsUtil.resolveFromIpns(this.availabilityHash)
 
 		// Download the data
 		let data = await IpfsUtil.downloadDataFromHexHash(ipfsHash)
@@ -449,7 +513,7 @@ export class Apartment {
 	}
 
 	/**
-	 * Fetch the details for this apartment from IPFS. Also attempts to download the availability.
+	 * Fetch the details for this apartment from IPFS.
 	 *
 	 * @returns {Promise<void>}
 	 */
@@ -463,14 +527,13 @@ export class Apartment {
 		this.position = await MapsUtil.getMapsAddressPosition(
 			this.street + ' ' + this.number + ', ' + this.city + ', ' + this.country
 		)
-
-		await this.downloadAvailability()
 	}
 
 	/**
 	 * Get the details to be sent to IPFS
 	 *
 	 * @returns {{
+	 *  uniqid: string,
 	 *  title: string,
 	 *  description: string,
 	 *  street: string,
@@ -487,6 +550,7 @@ export class Apartment {
 	 */
 	getIpfsDetails () {
 		return {
+			uniqid:           this.uniqid,
 			title:            this.title,
 			description:      this.description,
 			street:           this.street,

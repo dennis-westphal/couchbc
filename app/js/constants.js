@@ -6,6 +6,11 @@ export const ipfsHost = {'host': 'couchbc.com', 'port': 443, 'protocol': 'https'
 export const ipfsGatewayUrl = '/ipfs/'
 export const ipnsResolveTimeout = '1s' // Timeout when resolving IPNS addresses. Setting this too high might cause the app to freeze for a long time.
 
+// If this is specified, a custom ipfs name service is used instead of ipfs
+// The node.js server has to be run from ipfsNs.js
+export const useIpfsNs = true
+export const ipfsNsPath = 'https://couchbc.com/ipfsns/'
+
 // Constants used for google api requests (maps, places, geocoding)
 export const googleApiProject = 'couchbc-1540415979753'
 export const pullInterval = 2000 // Pull every X milliseconds
@@ -27,5 +32,5 @@ export const defaultToastOptions = {
 }
 
 // Options for loading screens
-export const hideLoadingDelay = 1000
+export const hideLoadingDelay = 500
 export const loadingTransitionDuration = 300

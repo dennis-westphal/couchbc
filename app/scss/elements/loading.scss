@@ -66,10 +66,8 @@ body {
 
 		span.status {
 			flex: 1 0 auto;
+			color: #fffb00;
 
-			&.active {
-				color: #fffb00
-			}
 			&.error {
 				color: #ff0a00
 			}
