@@ -14,6 +14,16 @@ const eccrypto = require('eccrypto')
 
 export class Cryptography {
 	/**
+	 * Request a password from the user. For test purposes, always returns "secret".
+	 * In production, should instead display a modal and ask for the password.
+	 * @param name
+	 * @returns {Promise<string>}
+	 */
+	static async getUserPassword (name) {
+		return 'secret'
+	}
+
+	/**
 	 * Get the wallet. Asks user for password if wallet hasn't been decrypted or created yet
 	 *
 	 * @return {web3.eth.accounts.wallet}
@@ -25,8 +35,7 @@ export class Cryptography {
 
 		// Check if we have a wallet; if so, ask user for password
 		if (window.localStorage.getItem('web3js_wallet')) {
-			// TODO: Implement asking for password
-			let password = 'secret'
+			let password = await this.getUserPassword('Wallet password')
 
 			let wallet = Web3Util.web3.eth.accounts.wallet.load(password)
 
@@ -413,6 +422,36 @@ export class Cryptography {
 			console.debug('Decryption failed; returning null.')
 			return null
 		}
+	}
+
+	/**
+	 * Fetch a value from local storage and decrypt it using the supplied AES secret
+	 *
+	 * @param key
+	 * @param secret
+	 * @returns {string|null}
+	 */
+	static getLocalEncrypted (key, secret) {
+		let value = window.localStorage.getItem(key)
+
+		if (value == null || value.length === 0) {
+			return null
+		}
+
+		return AES.decrypt(value, secret)
+	}
+
+	/**
+	 * Set a value in local storage and encrypt it using the supplied AES secret
+	 *
+	 * @param key
+	 * @param value
+	 * @param secret
+	 */
+	static setLocalEncrypted (key, value, secret) {
+		let encrypted = AES.encrypt(value, secret)
+
+		window.localStorage.setItem(key, encrypted)
 	}
 
 	/**

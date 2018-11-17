@@ -2,6 +2,7 @@ import { default as IpfsApi } from 'ipfs-api'
 import { ipfsHost, ipfsGatewayUrl } from '../constants'
 import { default as bs58 } from 'bs58'
 import { Cryptography } from './Cryptography'
+import { Web3Util } from './Web3Util'
 
 export class IpfsUtil {
 	/**
@@ -152,6 +153,121 @@ export class IpfsUtil {
 		let ipfsAddress = await this.uploadString(str)
 
 		return this.ipfsAddrToHash(ipfsAddress)
+	}
+
+	/**
+	 * Publish the specified data on IPNS. Returns the permanent hash for the key.
+	 *
+	 * @param hexHash
+	 * @param keyName
+	 * @returns {Promise<string>}
+	 */
+	static async publishOnIpns (hexHash, keyName) {
+		let ipfsAddress = this.hexHashToIpfsAddr(hexHash)
+
+		// Create the key
+		let id = await this.getOrCreateKey(keyName)
+
+		// Get an IPFS connection
+		let ipfsConnection = this.getConnection()
+
+		// Publish on IPNS
+		await new Promise(resolve => {
+			ipfsConnection.name.publish(ipfsAddress, {
+				key: keyName
+			}, (err, data) => {
+				if (err) {
+					console.error(err)
+					throw('Could not publish data on IPNS')
+				}
+
+				resolve()
+			})
+		})
+
+		return this.ipfsAddrToHash(id)
+	}
+
+	/**
+	 * Resolve an IPNS hex hash to a IPFS hex hash
+	 *
+	 * @param hexHash
+	 * @returns {Promise<string>}
+	 */
+	static async resolveFromIpns (hexHash) {
+		let ipnsAddress = '/ipns/' + this.hexHashToIpfsAddr(hexHash)
+
+		// Get an IPFS connection
+		let ipfsConnection = this.getConnection()
+
+		return new Promise(resolve => {
+			ipfsConnection.name.resolve(ipnsAddress, (err, name) => {
+				if (err) {
+					console.error(err)
+					throw('Could not resolve IPNS address')
+				}
+
+				let ipfsHash = IpfsUtil.ipfsAddrToHash(name.substr(6))
+
+				resolve(ipfsHash)
+			})
+		})
+	}
+
+	/**
+	 * Get the key with the specified name from the IPFS server, or create it.
+	 * Keys are managed by IPFS servers, thus anybody with access to the server's API is able to modify content published at the return id.
+	 * Returns the id of the key (IPFS address)
+	 *
+	 * @param name
+	 * @returns {Promise<string>}
+	 */
+	static async getOrCreateKey (name) {
+		// Get an IPFS connection
+		let ipfsConnection = this.getConnection()
+
+		// Try to fetch the key if it already exists
+		let key = await new Promise(resolve => {
+			ipfsConnection.key.list((err, keys) => {
+				if (err) {
+					console.error(err)
+					throw('Could not fetch IPNS keys')
+				}
+
+				// Check all existing key if an id matches
+				for (let key of keys) {
+					if (key.name === name) {
+						resolve(key.id)
+						return
+					}
+				}
+
+				resolve()
+			})
+		})
+
+		// If we found a key (id), return it
+		if (key) {
+			console.debug('Found key with name ' + name, key)
+
+			return key
+		}
+
+		// Otherwise, create a new key and return its id
+		return await new Promise(resolve => {
+			ipfsConnection.key.gen(name, {
+				type: 'rsa', // EC keys no supported by IPNS
+				size: 2048
+			}, (err, key) => {
+				if (err) {
+					console.error(err)
+					throw('Could not create IPNS key')
+				}
+
+				console.debug('Created key with name ' + name, key)
+				resolve(key.id)
+			})
+		})
 	}
 
 	/**

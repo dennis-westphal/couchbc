@@ -11,6 +11,7 @@ export class Apartment {
 	constructor () {
 		this.id = null
 
+		this.uniqid = ''
 		this.title = ''
 		this.description = ''
 		this.street = ''
@@ -23,6 +24,8 @@ export class Apartment {
 		this.deposit = 0
 		this.primaryImage = ''
 		this.images = []
+		this.availabilityHash = ''
+		this.rentedTimes = []
 
 		this.ownerAddress = ''
 		this.ownerPublicKey_x = ''
@@ -43,6 +46,10 @@ export class Apartment {
 	static async add (account, data, primaryImageInputElement, imageInputElements) {
 		let apartment = new Apartment()
 		Object.assign(apartment, data)
+		apartment.ownerAddress = account.address
+
+		// Assign a unique id, used as IPNS key name
+		apartment.uniqid = Cryptography.getRandomString()
 
 		// Show the load message. Wait for the response, as following steps might freeze the browser for a second.
 		await Loading.show('Adding apartment')
@@ -85,9 +92,24 @@ export class Apartment {
 			}
 		})
 
-		// Only proceed when all images have been uploaded
+		// Update loading message when all images have been uploaded
+		Promise.all(promises).then(() => {
+			Loading.success('images')
+		})
+
+		// Generate an IPNS key and upload apartment availabilities
+		Loading.add('ipns', 'Uploading apartment availability to IPNS')
+		let ipnsPromise = new Promise(async resolve => {
+			await apartment.uploadAvailability()
+
+			Loading.success('ipns')
+
+			resolve()
+		})
+
+		// Only proceed when all images have been uploaded and apartment availability has been uploaded => IPNS key has been generated
 		await Promise.all(promises)
-		Loading.success('images')
+		await ipnsPromise
 
 		// Upload the details
 		Loading.add('details', 'Uploading apartment details to IPFS')
@@ -115,9 +137,9 @@ export class Apartment {
 		// Estimate gas and call the addApartment function
 		let method = Web3Util.contract.methods.addApartment(...parameters)
 		return new Promise((resolve, reject) => {
-			method.estimateGas({from: account.address})
+			method.estimateGas({from: apartment.ownerAddress})
 				.then(gasAmount => {
-					method.send({from: account.address, gas: gasAmount})
+					method.send({from: apartment.ownerAddress, gas: gasAmount})
 						.on('receipt', () => {
 							Loading.success('add.blockchain')
 							Loading.hide()
@@ -211,6 +233,60 @@ export class Apartment {
 		await Promise.all(promises)
 
 		return apartments
+	}
+
+	/**
+	 * Upload the availability for the apartment to IPNS. Signs the rented times before they are uploaded.
+	 *
+	 * @returns {Promise<void>}
+	 */
+	async uploadAvailability () {
+		// Get the owner EC account
+		let ecAccount = await Cryptography.getEcAccountForBcAccount(this.ownerAddress)
+
+		// Sign the rented times using the owner key
+		let message = JSON.stringify(this.rentedTimes)
+		let sign = Web3Util.web3.eth.accounts.sign(message, ecAccount.private.hex)
+		let data = {
+			rentedTimes: this.rentedTimes,
+			signature:   sign.signature
+		}
+
+		// Upload the rented times to IPFS
+		let ipfsHash = await IpfsUtil.uploadData(data)
+
+		// Publish the rented times on IPNS and get the ipns hash
+		this.availabilityHash = await IpfsUtil.publishOnIpns(ipfsHash, this.uniqid)
+	}
+
+	/**
+	 * Download the availability of the apartment from IPNS. Checks the downloaded availability is signed by the owner.
+	 *
+	 * @returns {Promise<void>}
+	 */
+	async downloadAvailability () {
+		// Resolve the IPNS hash
+		let ipfsHash = await IpfsUtil.resolveFromIpns(this.availabilityHash)
+
+		// Download the data
+		let data = await IpfsUtil.downloadDataFromHexHash(ipfsHash)
+
+		// Only continue if the data contains the necessary properties
+		if (typeof data.rentedTimes === 'undefined' || typeof data.signature === 'undefined') {
+			console.error('Required properties missing to download availability', data)
+			return
+		}
+
+		// Check the signature of the downloaded data
+		let message = JSON.stringify(data.rentedTimes)
+		let address = Conversion.getEcAddressFromXY(this.ownerPublicKey_x, this.ownerPublicKey_y)
+		let recoveredAddress = Web3Util.web3.eth.accounts.recover(message, data.signature).toLowerCase()
+		if (address !== recoveredAddress) {
+			console.error('Signature mismatch for data retrieved from IPNS: expected address ' + address + ' but recovered ' + recoveredAddress + ' for message', message)
+			return
+		}
+
+		this.rentedTimes = data.rentedTimes
 	}
 
 	/**
@@ -313,6 +389,15 @@ export class Apartment {
 	}
 
 	/**
+	 * Get the public key buffer for the apartment owner
+	 *
+	 * @returns {Uint8Array}
+	 */
+	get ownerKeyBuffer () {
+		return Conversion.getUint8ArrayBufferFromXY(this.ownerPublicKey_x, this.ownerPublicKey_y)
+	}
+
+	/**
 	 * Calculate the rental fee based on the supplied days
 	 *
 	 * @param fromDay
@@ -364,7 +449,7 @@ export class Apartment {
 	}
 
 	/**
-	 * Fetch the details for this apartment from IPFS
+	 * Fetch the details for this apartment from IPFS. Also attempts to download the availability.
 	 *
 	 * @returns {Promise<void>}
 	 */
@@ -378,6 +463,8 @@ export class Apartment {
 		this.position = await MapsUtil.getMapsAddressPosition(
 			this.street + ' ' + this.number + ', ' + this.city + ', ' + this.country
 		)
+
+		await this.downloadAvailability()
 	}
 
 	/**
@@ -395,21 +482,23 @@ export class Apartment {
 	 *  deposit: number,
 	 *  primaryImage: string,
 	 *  images: Array
+	 *  availabilityHash: string
 	 * }}
 	 */
 	getIpfsDetails () {
 		return {
-			title:         this.title,
-			description:   this.description,
-			street:        this.street,
-			number:        this.number,
-			zip:           this.zip,
-			city:          this.city,
-			country:       this.country,
-			pricePerNight: this.pricePerNight,
-			deposit:       this.deposit,
-			primaryImage:  this.primaryImage,
-			images:        this.images
+			title:            this.title,
+			description:      this.description,
+			street:           this.street,
+			number:           this.number,
+			zip:              this.zip,
+			city:             this.city,
+			country:          this.country,
+			pricePerNight:    this.pricePerNight,
+			deposit:          this.deposit,
+			primaryImage:     this.primaryImage,
+			images:           this.images,
+			availabilityHash: this.availabilityHash
 		}
 	}
 

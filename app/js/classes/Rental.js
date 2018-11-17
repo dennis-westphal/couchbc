@@ -79,15 +79,6 @@ export class Rental {
 	}
 
 	/**
-	 * Get the public key buffer for the rental's apartment owner
-	 *
-	 * @returns {Uint8Array}
-	 */
-	get ownerKeyBuffer () {
-		return Conversion.getUint8ArrayBufferFromXY(this.apartment.ownerPublicKey_x, this.apartment.ownerPublicKey_y)
-	}
-
-	/**
 	 * Add a new rental request
 	 *
 	 * @param account
@@ -141,7 +132,7 @@ export class Rental {
 			'request-interaction-key',
 
 			// Encrypt with owner's public key
-			rental.ownerKeyBuffer
+			rental.apartment.ownerKeyBuffer
 		)
 		Loading.success('publish')
 

@@ -1,3 +1,5 @@
+import { Web3Util } from './Web3Util'
+
 export class Conversion {
 	/**
 	 * Get an uint8array buffer to use with eccrypto from a public point
@@ -14,7 +16,7 @@ export class Conversion {
 	}
 
 	/**
-	 * Get an uint8array buffer to use with eccrypto from a x and y 0x prefixed hex coordinates
+	 * Get an uint8array buffer to use with eccrypto from x and y 0x prefixed hex coordinates
 	 * @param x
 	 * @param y
 	 * @return {Uint8Array}
@@ -26,6 +28,19 @@ export class Conversion {
 		arr.set(this.hexToUint8Array(y.substr(2)), 33)
 
 		return Buffer(arr)
+	}
+
+	/**
+	 * Get an ethereum style address from x and y 0x prefixed hex coordinates.
+	 * The returned address is a lower case string, so ensure you convert ethereum generated addresses
+	 * to lower case as well before comparison.
+	 *
+	 * @param x
+	 * @param y
+	 * @returns {string}
+	 */
+	static getEcAddressFromXY (x, y) {
+		return '0x' + Web3Util.web3.utils.sha3('0x' + x.substr(2) + y.substr(2)).substr(26)
 	}
 
 	/**
