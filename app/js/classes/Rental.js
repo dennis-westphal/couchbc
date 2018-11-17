@@ -662,16 +662,24 @@ export class Rental {
 			method.estimateGas({from: this.ownerAddress})
 				.then(gasAmount => {
 					method.send({from: this.ownerAddress, gas: gasAmount + 21000})
-						.on('receipt', () => {
-							Notifications.show('Rental request accepted')
-							Loading.success('accept.blockchain')
-							Loading.hide()
-
+						.on('receipt', async () => {
 							// Mark the account as used in an interaction
 							this.ownerAccount.type = 'interaction'
 
 							this.status = 'accepted'
 
+							Loading.success('accept.blockchain')
+
+							Loading.add('availability', 'Uploading changed apartment availability')
+							this.apartment.rentedTimes.push({
+								fromDay: this.details.fromDay,
+								tillDay: this.details.tillDay
+							})
+							await this.apartment.uploadAvailability()
+							Loading.success('availability')
+							Loading.hide()
+
+							Notifications.show('Rental request accepted')
 							resolve()
 						})
 						.on('error', (error, parameters) => {

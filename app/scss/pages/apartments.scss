@@ -32,6 +32,10 @@ div.page.apartments {
 				left: -2.0775rem;
 			}
 		}
+		&.disabled {
+			opacity: .2;
+			cursor: not-allowed;
+		}
 
 		div.text {
 			position: absolute;

@@ -247,6 +247,10 @@ let app = new Vue({
 			app.rentalRequest.apartment = apartment
 			app.apartmentImages = apartment.getImageUrls()
 
+			app.rentalRequestFrom = app.searchFrom
+			app.rentalRequestTill = app.searchTill
+			app.updateRentalRequestFee()
+
 			app.page = 'apartment'
 		},
 

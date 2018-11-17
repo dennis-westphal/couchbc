@@ -268,6 +268,7 @@ contract Rent {
 
 	// Get the apartment at the specified id
 	function getApartment(uint apartmentId) public view returns (
+		address ownerAddress,
 		bytes32 ownerPublicKey_x,
 		bytes32 ownerPublicKey_y,
 		bytes32 ipfsHash,
@@ -280,6 +281,7 @@ contract Rent {
 		Apartment storage apartment = apartments[apartmentId];
 
 		// Assign the return variables
+		ownerAddress = apartment.ownerAddress;
 		ownerPublicKey_x = apartment.ownerPublicKey_x;
 		ownerPublicKey_y = apartment.ownerPublicKey_y;
 		ipfsHash = apartment.ipfsHash;

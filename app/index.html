@@ -19,8 +19,19 @@
                         :types="['(cities)']"
                         @place_changed="changeSearchAddress">
                 </gmap-autocomplete>
+
+
+                <div class="form-control" id="search-from">
+                    <datepicker v-model="searchFrom" :disabled-dates="disabledDates"
+                                :monday-first="true" placeholder="From"></datepicker>
+                </div>
+                <div class="form-control" id="search-till">
+                    <datepicker v-model="searchTill" :disabled-dates="disabledDates"
+                                :monday-first="true" placeholder="Till"></datepicker>
+                </div>
             </div>
             <div class="top-bar-right align-middle">
+
                 <ul id="menu" class="dropdown menu" data-dropdown-menu>
                     <li>
                         <a href="#">Account</a>
@@ -154,8 +165,15 @@
                 <p>Found {{apartments.length}} apartment<span v-if="apartments.length !== 1">s</span>
                     in {{searchData.city}}, {{searchData.country}}</p>
 
-                <div class="apartment" :id="'apartment-' + apartment.id" v-for="apartment in apartments"
-                     @click="showApartment(apartment)" :style="getApartmentStyle(apartment)">
+                <div
+                        class="apartment"
+                        :id="'apartment-' + apartment.id"
+                        v-for="apartment in apartments"
+                        @click="showApartment(apartment)"
+                        :style="getApartmentStyle(apartment)"
+                        :class="{disabled: searchData.fromDay && searchData.tillDay && !apartment.isAvailable(searchData.fromDay, searchData.tillDay), tooltip: searchData.fromDay && searchData.tillDay && !apartment.isAvailable(searchData.fromDay, searchData.tillDay)}"
+                        :title="(searchData.fromDay && searchData.tillDay && !apartment.isAvailable(searchData.fromDay, searchData.tillDay)) ? 'This apartment has already been rented in the selected timeframe' : ''"
+                >
                     <div class="img">
                         <img v-if="apartment.primaryImage" :src="getImageUrl(apartment.primaryImage)">
                     </div>
@@ -169,12 +187,13 @@
                         </p>
                         <p>
 							<span v-if="searchFrom && searchTill">
-								{{apartment.calculcatePrice(searchFromDay, searchTillDay)}} / {{apartment.deposit}}
+								{{apartment.calculateFee(searchData.fromDay, searchData.tillDay)}} fee
+                                / {{apartment.deposit}} deposit
 							</span>
                             <span v-if="!(searchFrom && searchTill)">
 								{{apartment.pricePerNight}} per night
+                                / {{apartment.deposit}} deposit
 							</span>
-                            / {{apartment.deposit}} deposit
                         </p>
                     </div>
                 </div>

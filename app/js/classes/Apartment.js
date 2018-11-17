@@ -483,6 +483,35 @@ export class Apartment {
 	}
 
 	/**
+	 * Check if the apartment is available at the requested time
+	 *
+	 * @param fromDay
+	 * @param tillDay
+	 * @returns {boolean}
+	 */
+	isAvailable (fromDay, tillDay) {
+		// Forbid same-day rentals and rentals that are mixed up (start day after end day)
+		if (fromDay >= tillDay) {
+			return false
+		}
+
+		// Check all rentals for the apartment
+		for (let rental of this.rentedTimes) {
+			if (
+				// Check if the requested rental starts in the time frame of the currently checked rental
+				fromDay >= rental.fromDay && fromDay < rental.tillDay ||
+
+				// Check if the requested rental ends in the time frame of the currently checked rental
+				tillDay > rental.fromDay && fromDay <= rental.fromDay
+			) {
+				return false
+			}
+		}
+
+		return true
+	}
+
+	/**
 	 * Get the requested deposit in eth
 	 *
 	 * @returns {number}
