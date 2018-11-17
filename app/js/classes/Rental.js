@@ -95,6 +95,7 @@ export class Rental {
 		rental.details.contact = data.contact
 		rental.fee = parseInt(data.fee)
 		rental.deposit = parseInt(data.apartment.deposit)
+		rental.role = 'tenant'
 		rental.status = 'pending'
 
 		// Assign a random local id so we can associate for now so we can identify the request later on
