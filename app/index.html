@@ -146,7 +146,7 @@
                             <span v-if="account.type === 'owner'" class="mdi mdi-home-account tooltip"
                                   title="This account is used for managing apartments"></span>
                             <span v-if="account.type === 'tenant'" class="mdi mdi-account-card-details tooltip"
-                                  title="This account is used for managing rentals and thus cannot be used to add an apartment"></span>
+                                  title="This account is used for a tenant profile and thus cannot be used to add an apartment"></span>
                             <span v-if="account.type === 'interaction'" class="mdi mdi-account-switch tooltip"
                                   title="This account has been used in managing a rental request and thus cannot be used for adding an apartment"></span>
                             {{account.label}}
@@ -171,11 +171,13 @@
                         v-for="apartment in apartments"
                         @click="showApartment(apartment)"
                         :style="getApartmentStyle(apartment)"
-                        :class="{disabled: searchData.fromDay && searchData.tillDay && !apartment.isAvailable(searchData.fromDay, searchData.tillDay), tooltip: searchData.fromDay && searchData.tillDay && !apartment.isAvailable(searchData.fromDay, searchData.tillDay)}"
-                        :title="(searchData.fromDay && searchData.tillDay && !apartment.isAvailable(searchData.fromDay, searchData.tillDay)) ? 'This apartment has already been rented in the selected timeframe' : ''"
+                        :class="{disabled: searchData.fromDay && searchData.tillDay && !apartment.isAvailable(searchData.fromDay, searchData.tillDay)}"
                 >
+                    <img class="rented"
+                         v-if="searchData.fromDay && searchData.tillDay && !apartment.isAvailable(searchData.fromDay, searchData.tillDay)"
+                         :src="getImageUrl('Qmagk8hDofW4MtB2gUtjbFbNVqgbN8udeEtTQVQY7AGSkq')">
                     <div class="img">
-                        <img v-if="apartment.primaryImage" :src="getImageUrl(apartment.primaryImage)">
+                        <img class="primary-image" v-if="apartment.primaryImage" :src="getImageUrl(apartment.primaryImage)">
                     </div>
                     <div class="text">
                         <p class="title">
@@ -257,7 +259,7 @@
                                               title="This account is used for managing apartments and thus cannot be used to rent an apartment"></span>
 										<span v-if="option.type === 'tenant'"
                                               class="mdi mdi-account-card-details tooltip"
-                                              title="This account is used for managing rentals"></span>
+                                              title="This account is used for a tenant profile"></span>
 										<span v-if="option.type === 'interaction'"
                                               class="mdi mdi-account-switch tooltip"
                                               title="This account has been used in managing a rental request and thus cannot be used for renting an apartment"></span>
