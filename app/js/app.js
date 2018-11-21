@@ -410,6 +410,11 @@ let app = new Vue({
 			)
 		},
 
+		/**
+		 * Add a review for a tenant as an owner
+		 *
+		 * @returns {Promise<void>}
+		 */
 		reviewTenant: async () => {
 			// Process the review
 			await app.tenantReview.rental.reviewTenant(
@@ -508,6 +513,11 @@ let app = new Vue({
 			app.registerSubscriptions()
 		},
 
+		/**
+		 * Load the rentals
+		 *
+		 * @returns {Promise<void>}
+		 */
 		loadRentals: async () => {
 			let interactionAddresses = JSON.parse(window.localStorage.getItem('interactionAddresses') || '[]')
 

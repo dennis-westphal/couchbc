@@ -8,6 +8,14 @@ contract Rent {
 	uint8 constant minMediatorReviews = 1;      // Minimum review required to allow mediator registration. Should be set to a higher value in production.
 	uint8 constant minMediatorReviewScore = 4;  // Minimum average review score to allow mediator registration
 
+	address defaultMediator;
+
+	constructor() public {
+		// Assign the contract creator as the default mediator (in case no other mediators have registered)
+		defaultMediator = msg.sender;
+	}
+
+
 	// -------------------------------------------------------------
 	// ------------------------ Definitions ------------------------
 	// -------------------------------------------------------------
@@ -845,9 +853,9 @@ contract Rent {
 
 	// Get a pseudo-random mediator
 	function getRandomMediator() private view returns (address) {
-		// If we don't have mediators, return an empty address
+		// If we don't have mediators, return the default mediator
 		if (mediators.length == 0) {
-			return 0x0;
+			return defaultMediator;
 		}
 
 		// If we only have one mediator, return him
@@ -913,17 +921,7 @@ contract Rent {
 			return;
 		}
 
-		// If we don't have any mediators, grant half of the deduction and transfer the rest back to the tenant.
-		// This should rarely ever be the case, so we also don't emit events.
-		if (mediators.length == 0) {
-			uint128 grantedDeduction = deductionAmount / 2;
-			rental.ownerAddress.transfer(grantedDeduction);
-			rental.tenantAddress.transfer(rental.deposit - grantedDeduction);
-
-			return;
-		}
-
-		// Otherwise, create a deposit deduction and it add to the rental
+		// Create a deposit deduction and it add to the rental
 		DepositDeduction memory depositDeduction = DepositDeduction(
 			uint16(block.timestamp / 86400),
 			deductionAmount,

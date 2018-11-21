@@ -177,7 +177,8 @@
                          v-if="searchData.fromDay && searchData.tillDay && !apartment.isAvailable(searchData.fromDay, searchData.tillDay)"
                          :src="getImageUrl('Qmagk8hDofW4MtB2gUtjbFbNVqgbN8udeEtTQVQY7AGSkq')">
                     <div class="img">
-                        <img class="primary-image" v-if="apartment.primaryImage" :src="getImageUrl(apartment.primaryImage)">
+                        <img class="primary-image" v-if="apartment.primaryImage"
+                             :src="getImageUrl(apartment.primaryImage)">
                     </div>
                     <div class="text">
                         <p class="title">
@@ -440,7 +441,7 @@
                                 <input id="tenantReview.deduction" type="number" min="0" :max="rental.deposit"
                                        v-model="tenantReview.deduction"/>
                             </div>
-                            <div class="form-control deduction-reason" :class="{'shown': rental.deduction > 0}">
+                            <div class="form-control deduction-reason" :class="{'shown': tenantReview.deduction > 0}">
                                 <label for="tenantReview.reason">Reason for deduction</label>
                                 <textarea id="tenantReview.reason" v-model="tenantReview.reason"></textarea>
                             </div>

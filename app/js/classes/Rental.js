@@ -799,14 +799,13 @@ export class Rental {
 		let contactDataForMediatorIpfsHash = ''
 		// If we have requested a deduction, also upload the deduction reason and the contact data for the mediator
 		if (deduction > 0) {
-			Loading.add('reason.upload', 'Encrypting and uploading deduction reason to IPFS')
-
 			// Fetch the mediator to get his public key. The mediator is always also a tenant, which is why we fetch him through the Tenant class.
 			Loading.add('mediator', 'Fetching mediator details for encryption')
 			let mediator = await Tenant.findByAddress(this.mediatorAddress)
 			Loading.success('mediator')
 
 			// Upload the deduction reason
+			Loading.add('reason.upload', 'Encrypting and uploading deduction reason to IPFS')
 			promises.push(new Promise(async resolve => {
 				// Upload the review to IPFS, encrypted it with the tenant's and the mediator's public key
 				deductionReasonIpfsHash = await IpfsUtil.uploadData(text, [tenant.publicKeyBuffer, mediator.publicKeyBuffer])
