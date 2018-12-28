@@ -558,20 +558,7 @@ let app = new Vue({
 		 * Register event listeners
 		 */
 		registerEvents: () => {
-			Web3Util.contract.events.Test({}, (error, event) => {
-				if (error) {
-					console.error(error)
-					return
-				}
-				console.log(event.returnValues)
-			})
-			Web3Util.contract.events.TestAddr({}, (error, event) => {
-				if (error) {
-					console.error(error)
-					return
-				}
-				console.log(event.returnValues)
-			})
+
 		},
 
 		/**
