@@ -290,7 +290,7 @@ let app = new Vue({
 		issueInteractionKey: async requestData => {
 			console.debug('Received interaction key request', requestData)
 
-			Notifications.show('Issueing interaction key for rental request')
+			Notifications.show('Issuing interaction key for rental request')
 
 			// Create the tenant's public key buffer
 			let publicKeyBuffer = Conversion.getUint8ArrayBufferFromXY(requestData.x, requestData.y)

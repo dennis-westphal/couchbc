@@ -533,9 +533,6 @@ contract Rent {
 
 	event ApartmentReviewed(address indexed owner, uint apartmentId, uint rentalId);
 
-	event Test(string title, string text);
-	event TestAddr(string title, address addr);
-
 	// ---------------------------------------------------------
 	// ------------------------ Methods ------------------------
 	// ---------------------------------------------------------
@@ -844,11 +841,6 @@ contract Rent {
 
 		// Notify about the accepted rental request
 		emit RentalRequestApproved(rental.tenantAddress, rentalId);
-
-		//emit TestAddr("Interaction address", rental.interactionAddress);
-		//emit Test("Concat", message);
-		//emit Test("Signature", signature);
-		//emit TestAddr("Recovered signer address", recovered);
 	}
 
 	// Get a pseudo-random mediator
