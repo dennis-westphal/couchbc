@@ -1,806 +1,610 @@
-// Define the server address (for now)
-const websocketAddress = 'wss://couchbc.com';
-const ipfsAddr = 'fmberlin.ddns.net';
-const ipfsPort = 5051;
-const ipfsGatewayUrl = 'http://' + ipfsAddr + ':8080/';
-
 // Import the page's SCSS. Webpack will know what to do with it.
-import '../scss/app.scss';
+import '../scss/app.scss'
 
 // Import libraries we need.
-import {default as $} from 'jquery';
-import {default as Vue} from 'vue';
-import {default as Web3} from 'web3';
-import {default as Buffer} from 'buffer';
-import {default as IpfsApi} from 'ipfs-api';
-import Toasted from 'vue-toasted';
+import { default as $ } from 'jquery'
+import Vue from 'vue'
 
-// Import our contract artifacts and turn them into usable abstractions.
-import rent_artifacts from '../../build/contracts/Rent.json';
+// Vue elements
+import Toasted from 'vue-toasted'
+import VueFilter from 'vue-filter'
+import Nl2br from 'vue-nl2br'
+import vSelect from 'vue-select'
+import * as VueGoogleMaps from 'vue2-google-maps'
+import { VueFlux, FluxPagination, Transitions } from 'vue-flux'
+import Datepicker from 'vuejs-datepicker'
+import store from './store.js'
 
-import Datepicker from 'vuejs-datepicker';
-import moment from 'moment';
+// Moment for formatting date
+import moment from 'moment'
 
-require('./blockies.min.js');
-require('foundation-sites');
+import { Web3Util } from './utils/Web3Util'
+import { PubSub } from './utils/PubSub'
+import { Apartment } from './classes/Apartment'
+import { MapsUtil } from './utils/MapsUtil'
+import { googleApiKey } from './credentials'
+import { IpfsUtil } from './utils/IpfsUtil'
+import { Notifications } from './utils/Notifications'
+import { Conversion } from './utils/Conversion'
 
-// Save the rent contract
-let rentContract;
+// Classes
+import { Rental } from './classes/Rental'
+import { Cryptography } from './utils/Cryptography'
 
-const defaultToastOptions = {
-	duration: 3000,
-};
+// Blockies for account icons
+require('./blockies.min.js')
 
-function showMessage(message, options) {
-	Vue.toasted.show(message, $.extend({}, defaultToastOptions, options));
-}
+// Foundation for site style and layout
+require('foundation-sites')
 
-Vue.use(Toasted);
+// jQuery UI tooltips
+require('webpack-jquery-ui/css.js')
+require('webpack-jquery-ui/tooltip.js')
 
-Vue.filter('formatDate', function(date) {
+// Add date filters
+Vue.filter('formatDate', function (date) {
 	if (date) {
-		return moment(date).format('DD.MM.YYYY');
+		// Check if we have a unix day
+		if (typeof date === 'number' && date < 99999 && date > 17000) {
+			date = Conversion.unixDayToDate(date)
+		}
+
+		return moment(date).format('DD.MM.YYYY')
 	}
-});
-Vue.filter('formatDateTime', function(date) {
+})
+Vue.filter('formatDateTime', function (date) {
 	if (date) {
-		return moment(date).format('DD.MM.YYYY hh:mm');
+		// Check if we have a unix day
+		if (typeof date === 'number' && date < 99999 && date > 17000) {
+			date = Conversion.unixDayToDate(date)
+		}
+
+		return moment(date).format('DD.MM.YYYY hh:mm')
 	}
-});
+})
+
+// Add vue components and filters
+Vue.use(Toasted)
+Vue.use(VueFilter)
+Vue.use(VueGoogleMaps, {
+	load:              {
+		key:       googleApiKey,
+		libraries: 'places',
+		language:  'en'
+	},
+	installComponents: true
+})
 
 let app = new Vue({
 	el:         '#app',
 	data:       () => ({
-		accounts:         [],
-		account:          null,
-		page:             'start',
-		registered:       false,
-		balance:          0,
-		ethBalance:       0,
-		transferEth:      0,
-		transferCredits:  0,
-		payoutEth:        0,
-		payoutCredits:    0,
-		newUserData:      {
-			name:    '',
-			street:  '',
-			zip:     '',
-			city:    '',
-			country: '',
+		notifications: [],
+
+		store,
+
+		// Library settings
+		fluxOptions:     {
+			autoplay: true
 		},
+		fluxTransitions: {
+			transitionFade: Transitions.transitionFade
+		},
+		disabledDates:   {
+			to: new Date()
+		},
+
+		accounts: [],
+
+		page: 'start',
+
 		newApartmentData: {
+			account:       null,
 			title:         '',
+			description:   '',
 			street:        '',
+			number:        '',
 			zip:           '',
-			city:          '',
 			country:       '',
+			city:          '',
+			latitude:      0,
+			longitude:     0,
 			pricePerNight: 0,
 			deposit:       0,
+			primaryImage:  '',
+			images:        []
 		},
-		apartments:       [],
+		searchData:       {
+			country:   null,
+			city:      null,
+			fromDay:   null,
+			tillDay:   null,
+			latitude:  0,
+			longitude: 0
+		},
+		searchFrom:       '',
+		searchTill:       '',
+
+		apartments:      [],
+		apartmentImages: null, // Cache to prevent slider from reloading
+
+		rentalRequestFrom: '',
+		rentalRequestTill: '',
+		rentalRequest:     {
+			account:   null,
+			fromDay:   0,
+			tillDay:   0,
+			apartment: null,
+			contact:   {
+				name:  window.localStorage.getItem('userName') || '',
+				phone: window.localStorage.getItem('userPhone') || '',
+				email: window.localStorage.getItem('userEmail') || ''
+			},
+			fee:       0,
+			feeInEth:  0
+		},
+
+		tenantReview:    {
+			rental:    null,
+			score:     '',
+			text:      '',
+			deduction: 0,
+			reason:    ''
+		},
+		apartmentReview: {
+			rental: null,
+			score:  '',
+			text:   ''
+		},
+
 		userApartments:   [],
 		rentals:          [],
-		currentApartment: null,
 		currentRental:    null,
 		deductAmount:     0,
-		apartmentRentals: [],
-		apartmentsFrom:   '',
-		apartmentsTill:   '',
-		disabledDates:    {
-			to: new Date(),
-		},
+		apartmentRentals: []
 	}),
 	watch:      {
-		accounts:       () => {
-			app.redrawMenu();
+		searchFrom:        (newValue) => {
+			if (newValue) {
+				app.searchData.fromDay = Conversion.dateToUnixDay(newValue)
+			}
 		},
-		registered:     () => {
-			app.redrawMenu();
+		searchTill:        (newValue) => {
+			if (newValue) {
+				app.searchData.tillDay = Conversion.dateToUnixDay(newValue)
+			}
 		},
-		rentals:        () => {
-			app.redrawMenu();
-		},
-		apartmentsFrom: () => {
-			app.changeApartmentFilter();
-		},
-		apartmentsTill: () => {
-			app.changeApartmentFilter();
-		},
-		transferEth:    (eth) => {
-			rentContract.methods.weiToCredits(app.ethToWei(eth)).call((error, credits) => {
-				if (error) {
-					console.error(error);
-					return;
-				}
+		rentalRequestFrom: (newValue) => {
+			if (newValue) {
+				app.rentalRequest.fromDay = Conversion.dateToUnixDay(newValue)
+			}
 
-				app.transferCredits = credits;
-			});
+			app.updateRentalRequestFee()
 		},
-		payoutCredits:  (credits) => {
-			rentContract.methods.creditsToWei(credits).call((error, wei) => {
-				if (error) {
-					console.error(error);
-					return;
-				}
+		rentalRequestTill: (newValue) => {
+			if (newValue) {
+				app.rentalRequest.tillDay = Conversion.dateToUnixDay(newValue)
+			}
 
-				app.payoutEth = app.weiToEth(wei);
-			});
-		},
-		account:        (account) => {
-			web3.eth.defaultAccount = app.account;
-			rentContract.options.from = app.account;
-
-			// Check if the eth account has an account
-			app.checkAccount();
-
-			// Load the apartments
-			app.loadApartments();
-		},
+			app.updateRentalRequestFee()
+		}
 	},
 	methods:    {
-		redrawMenu:            () => {
-			let menu = $('#menu');
+		/**
+		 * Function called when user searches for apartments at an address
+		 *
+		 * @param placesResult
+		 */
+		changeSearchAddress: (placesResult) => {
+			let addressData = MapsUtil.extractAddressData(placesResult)
 
-			menu.foundation('_destroy');
-			app.$nextTick(() => {
-				new Foundation.DropdownMenu(menu);
-			});
+			if (addressData.country && addressData.city) {
+				app.searchApartment(
+					addressData.country,
+					addressData.city,
+					addressData.latitude,
+					addressData.longitude
+				)
+			}
 		},
-		register:              clickEvent => {
-			clickEvent.preventDefault();
 
-			// Using the ES2015 spread operator does not work on vue data objects
-			let params = [
-				app.newUserData.name,
-				app.newUserData.street,
-				app.newUserData.zip,
-				app.newUserData.city,
-				app.newUserData.country];
+		searchApartment: async (country, city, latitude, longitude) => {
+			app.searchData.country = country
+			app.searchData.city = city
+			app.searchData.latitude = latitude
+			app.searchData.longitude = longitude
 
-			// Estimate gas and call the register function
-			let method = rentContract.methods.register(...params);
-			method.estimateGas().then(gasAmount => {
-				method.send({gas: gasAmount});
-			});
+			app.apartments = await Apartment.getCityApartments(country, city)
 
-			rentContract.once('Registered', {filter: {userAddress: app.account}},
-					(error, event) => {
-						if (error) {
-							showMessage('Could not process registration');
-							console.error(error);
-							return;
-						}
-
-						showMessage('Registered successfully');
-
-						app.registered = true;
-
-						// Change the page if we're currently on the registration page
-						if (app.page === 'register') {
-							app.page = 'apartments';
-						}
-
-						app.refreshBalance();
-					});
+			app.page = 'apartments'
 		},
-		uploadImage:           (inputElement) => {
-			// Return a promise that is resolved if the image upload succeeded
-			return new Promise((resolve, reject) => {
-				let reader = new FileReader();
-				reader.onloadend = () => {
-					// Get an IPFS connection
-					let ipfsConnection = new IpfsApi(ipfsAddr, ipfsPort);
 
-					// Fill a file buffer
-					let filledBuffer = Buffer.Buffer(reader.result);
-
-					// Add the file to IPFS
-					ipfsConnection.files.add(filledBuffer, (err, result) => {
-						if (err) {
-							console.error(err);
-							showMessage('Could not upload file to apartment image');
-
-							reject();
-							return;
-						}
-
-						console.log('Image uploaded to ' + result[0].hash);
-
-						resolve(result[0].hash);
-					});
-				};
-
-				reader.readAsArrayBuffer(inputElement.files[0]);
-			});
+		/**
+		 * Highlight an apartment
+		 *
+		 * @param apartment
+		 */
+		highlightApartment: apartment => {
+			$('#apartments').toggleClass('highlighting', true)
+			$('#apartment-' + apartment.id).toggleClass('highlighted', true)
 		},
-		addApartment:          clickEvent => {
-			clickEvent.preventDefault();
 
-			let inputElement = document.getElementById('add-apartment-image');
+		/**
+		 * End highlighting an apartment
+		 *
+		 * @param apartment
+		 */
+		unhighlightApartment: apartment => {
+			$('#apartments').toggleClass('highlighting', false)
+			$('#apartment-' + apartment.id).toggleClass('highlighted', false)
+		},
 
-			// Check if we need to upload an image to IPFS
-			if (inputElement.files[0]) {
-				app.uploadImage(inputElement).then(app.addApartmentToBc);
+		/**
+		 * Show the apartment details
+		 *
+		 * @param apartment
+		 */
+		showApartment: apartment => {
+			app.rentalRequest.apartment = apartment
+			app.apartmentImages = apartment.getImageUrls()
 
-				return;
+			app.rentalRequestFrom = app.searchFrom
+			app.rentalRequestTill = app.searchTill
+			app.updateRentalRequestFee()
+
+			app.page = 'apartment'
+		},
+
+		/**
+		 * Update the fee for a rental request. Called when the rental request date changes
+		 */
+		updateRentalRequestFee: () => {
+			// Check if we have enough details to determine the rental fee
+			if (app.rentalRequest.apartment === null ||
+				app.rentalRequest.fromDay === 0 || app.rentalRequest.tillDay === 0 ||
+				app.rentalRequest.tillDay <= app.rentalRequest.fromDay
+			) {
+				app.rentalRequest.fee = 0
+				app.rentalRequest.feeInEth = 0
+
+				return
 			}
 
-			// Otherwise, we can directly add the apartment
-			app.addApartmentToBc();
+			app.rentalRequest.fee = app.rentalRequest.apartment.calculateFee(app.rentalRequest.fromDay, app.rentalRequest.tillDay)
+			app.rentalRequest.feeInEth = Conversion.finneyToEth(app.rentalRequest.fee)
 		},
-		addApartmentToBc:      (image) => {
-			// Using the ES2015 spread operator does not work on vue data objects
-			let parameters = [
-				app.newApartmentData.title,
-				app.newApartmentData.street,
-				app.newApartmentData.zip,
-				app.newApartmentData.city,
-				app.newApartmentData.country,
-				image || '',
-				app.newApartmentData.pricePerNight,
-				app.newApartmentData.deposit];
 
-			// Estimate gas and call the addApartment function
-			let method = rentContract.methods.addApartment(...parameters);
-			method.estimateGas().then(gasAmount => {
-				method.send({gas: gasAmount});
-			});
-
-			rentContract.once('ApartmentAdded',
-					{filter: {userAddress: app.account}}, (error, event) => {
-						if (error) {
-							showMessage('Could not add apartment');
-							console.error(error);
-							return;
-						}
-
-						showMessage('Apartment added');
-
-						// Change the page if we're currently on the add apartment page
-						if (app.page === 'add-apartment') {
-							app.page = 'apartments';
-						}
-
-						// Clear the form
-						Object.assign(app.$data.newApartmentData, app.$options.data.call(app).newApartmentData);
-					});
+		/**
+		 * Request a new rental. Will request an interaction key from the owner first and add the rental to the pending rentals.
+		 */
+		requestRental: async () => {
+			let rental = await Rental.addRequest(app.rentalRequest.account, app.rentalRequest)
+			app.rentals.push(rental)
 		},
-		addApartmentImage:     (apartment) => {
-			let inputElement = document.getElementById('add-apartment-image');
 
-			// Check if we need to upload an image to IPFS
-			app.uploadImage(inputElement).then(hash => {
-				if (error) {
-					console.error(error);
-					showMessage('Could not upload image');
-					return;
+		/**
+		 * Issue an interaction key for the submitted id and publish it encrypted with the provided public key
+		 *
+		 * @param requestData
+		 * @returns {Promise<void>}
+		 */
+		issueInteractionKey: async requestData => {
+			console.debug('Received interaction key request', requestData)
+
+			Notifications.show('Issuing interaction key for rental request')
+
+			// Create the tenant's public key buffer
+			let publicKeyBuffer = Conversion.getUint8ArrayBufferFromXY(requestData.x, requestData.y)
+
+			// Try to encrypt something with the public key buffer to ensure it's valid before we create an EC account
+			try {
+				await Cryptography.encryptString('test', publicKeyBuffer)
+			} catch (e) {
+				console.error('Invalid tenant public key', requestData, e)
+				return
+			}
+
+			// Generate a new EC account => the interaction key
+			let ecAccount = await Cryptography.generateEcAccount()
+
+			// Extract the public key and encode it for transmission
+			let interactionKey = JSON.stringify({
+				id:      requestData.id,
+				x:       ecAccount.public.x,
+				y:       ecAccount.public.y,
+				address: ecAccount.address
+			})
+
+			// Publish the interaction key encrypted with the tenant's public key
+			await PubSub.publishMessage(interactionKey, 'issue-interaction-key', publicKeyBuffer)
+
+			// Add the address of the interaction key to the addresses in localStorage (the key has already been stored on creation)
+			let interactionAddresses = JSON.parse(window.localStorage.getItem('interactionAddresses') || '[]')
+			interactionAddresses.push(ecAccount.address)
+			window.localStorage.setItem('interactionAddresses', JSON.stringify(interactionAddresses))
+
+			console.debug('Issued interaction key ' + interactionKey)
+		},
+
+		/**
+		 * Send the rental request to the blockchain as soon as an interaction key for it was received
+		 *
+		 * @param responseData
+		 * @returns {Promise<void>}
+		 */
+		sendRentalRequestToBlockchain: async responseData => {
+			console.debug('Received interaction key', responseData)
+
+			// Find the rental request with the matching local storage id
+			let filteredRentals = app.rentals.filter(rental => rental.localStorageId === responseData.id)
+
+			if (filteredRentals.length !== 1) {
+				console.warn('Could not find any rental with the specified id')
+				return
+			}
+
+			// Add the interaction key to the rental
+			let rental = filteredRentals[0]
+			rental.interactionPublicKey_x = responseData.x
+			rental.interactionPublicKey_y = responseData.y
+			rental.interactionAddress = responseData.address
+
+			// Send the rental request to the blockchain
+			rental.sendRequest()
+		},
+
+		/**
+		 * React on a changed apartment address when adding apartments apartments
+		 *
+		 * @param placesResult
+		 */
+		changeApartmentAddress: (placesResult) => {
+			let addressData = MapsUtil.extractAddressData(placesResult)
+
+			Object.assign(app.newApartmentData, addressData)
+		},
+
+		/**
+		 * React on changed accounts when adding apartments
+		 *
+		 * @param account
+		 */
+		selectNewApartmentAccount: account => {
+			// Ignore selected accounts if they have been used by a tenant or interaction
+			if (account.type === 'tenant' || account.type === 'interaction') {
+				return
+			}
+			app.newApartmentData.account = account
+		},
+
+		/**
+		 * Add an apartment
+		 *
+		 * @param clickEvent
+		 * @returns {Promise<void>}
+		 */
+		addApartment: async clickEvent => {
+			let account = app.newApartmentData.account
+			let primaryImageInputElement = document.getElementById('add-apartment-primary-image')
+			let imageInputElements = $('.page.add-apartment input.add-image')
+
+			Apartment.add(account, app.newApartmentData, primaryImageInputElement, imageInputElements).then((apartment) => {
+				// Clear the form
+				Object.assign(app.$data.newApartmentData, app.$options.data.call(app).newApartmentData)
+				document.getElementById('apartment-address').value = ''
+				document.getElementById('add-apartment-primary-image').value = ''
+
+				// Keep the account selected
+				app.newApartmentData.account = apartment.account
+			})
+
+			Web3Util.contract.once('ApartmentAdded',
+				{filter: {owner: account.address}}, (error, event) => {
+					if (error) {
+						Notifications.show('Could not add apartment')
+						console.error(error)
+						return
+					}
+
+					Notifications.show('Apartment added')
 				}
-
-				let method = rentContract.methods.addApartmentImage(apartment.id, hash);
-
-				method.estimateGas().then(gasAmount => {
-					method.send({gas: gasAmount});
-				});
-			});
+			)
 		},
-		getTotalPrice:         (apartment) => {
-			let days = app.getUnixDay(app.apartmentsTill) - app.getUnixDay(app.apartmentsFrom);
 
-			if (days > 0) {
-				return app.pricePerNight * days;
+		/**
+		 * Add a review for a tenant as an owner
+		 *
+		 * @returns {Promise<void>}
+		 */
+		reviewTenant: async () => {
+			// Process the review
+			await app.tenantReview.rental.reviewTenant(
+				app.tenantReview.score,
+				app.tenantReview.text,
+				app.tenantReview.deduction,
+				app.tenantReview.reason
+			)
+
+			// Clear the form
+			Object.assign(app.$data.tenantReview, app.$options.data.call(app).tenantReview)
+		},
+
+		/**
+		 * Get style attributes for a blockie generated from an account address
+		 *
+		 * @param address
+		 * @return {*}
+		 */
+		getBlockie: address => {
+			if (address) {
+				return {
+					'background-image': 'url(\'' + window.blockies.create({
+						seed: address
+					}).toDataURL() + '\')'
+				}
 			}
 
-			return null;
+			return {}
 		},
-		getImageUrl:           (image) => {
-			return ipfsGatewayUrl + image;
-		},
-		getRandomColor:        () => {
-			let oneBlack = Math.random() * 10;
 
-			let r = oneBlack <= 0.3333 ? 0 : Math.floor(Math.random() * 255);
-			let g = (oneBlack <= 0.6666 && oneBlack > 0.3333) ? 0 : Math.floor(Math.random() * 255);
-			let b = oneBlack > 0.6666 ? 0 : Math.floor(Math.random() * 255);
+		/**
+		 * Get a reandom color to use as background color for an apartment
+		 *
+		 * @return {string}
+		 */
+		getRandomColor: () => {
+			let oneBlack = Math.random() * 10
 
-			return 'rgba(' + r + ', ' + g + ', ' + b + ', 0.15';
+			let r = oneBlack <= 0.3333 ? 0 : Math.floor(Math.random() * 255)
+			let g = (oneBlack <= 0.6666 && oneBlack > 0.3333) ? 0 : Math.floor(Math.random() * 255)
+			let b = oneBlack > 0.6666 ? 0 : Math.floor(Math.random() * 255)
+
+			return 'rgba(' + r + ', ' + g + ', ' + b + ', 0.15'
 		},
-		getApartmentStyle:     (apartment) => {
+
+		/**
+		 * Get the style to use for an apartment. If no primary image is specified for the apartment, returns a random color.
+		 *
+		 * @param apartment
+		 * @return {string}
+		 */
+		getApartmentStyle: (apartment) => {
 			// Don't apply a specific style if we have an image
 			if (apartment.primaryImage) {
-				return '';
+				return ''
 			}
 
-			return 'background-color: ' + app.getRandomColor();
-		},
-		changeApartmentFilter: (apartmentsFrom, apartmentsTill) => {
-			// Only apply filter if we have dates
-			if (typeof(app.apartmentsFrom) !== 'object' ||
-					typeof(app.apartmentsTill) !== 'object') {
-				app.loadApartments();
-				return;
-			}
-
-			app.loadApartments(
-					app.getUnixDay(app.apartmentsFrom),
-					app.getUnixDay(app.apartmentsTill),
-			);
-		},
-		loadApartments:        (fromDay, tillDay) => {
-			rentContract.methods.getApartmentsNum().call((error, result) => {
-				if (error) {
-					console.error(error);
-					return;
-				}
-
-				app.apartments = [];
-				let numApartments = parseInt(result);
-
-				for (let i = 0; i < numApartments; i++) {
-					rentContract.methods.getApartment(i).call((error, apartment) => {
-						if (error) {
-							console.error(error);
-							return;
-						}
-
-						// Check if we need to apply a filter
-						if (typeof(fromDay) === 'undefined') {
-							app.loadApartmentData(apartment);
-							return;
-						}
-
-						rentContract.methods.isAvailable(apartment.id, fromDay, tillDay).
-								call((error, available) => {
-									if (available) {
-										app.loadApartmentData(apartment);
-									}
-								});
-					});
-				}
-			});
-		},
-		loadApartmentData:     (apartment) => {
-			// Load the address data for the apartment
-			rentContract.methods.getPhysicalAddress(apartment.physicalAddress).call((error, physicalAddress) => {
-				// Ensure we add an apartment to the list twice by checking if it already exists in the apartments
-				for (let exitingApartment of app.apartments) {
-					if (exitingApartment.id === apartment.id) {
-						return;
-					}
-				}
-
-				// Add the apartment with the address to the apartment list
-				apartment.address = physicalAddress;
-				app.apartments.push(apartment);
-
-				// Load apartment images
-				apartment.images = [];
-				for (let i = 0; i < apartment.numImages; i++) {
-					rentContract.methods.getApartmentImage(apartment.id, i).call(image => {
-						apartment.images.push(image);
-					});
-				}
-			});
-		},
-		loadUserApartments:    () => {
-			// TODO: images
-
-			rentContract.methods.getUserApartmentsNum().call((error, result) => {
-				if (error) {
-					console.error(error);
-					return;
-				}
-
-				app.userApartments = [];
-
-				let numApartments = parseInt(result);
-				for (let i = 0; i < numApartments; i++) {
-					rentContract.methods.getUserApartment(i).call((error, apartment) => {
-						if (error) {
-							console.error(error);
-							return;
-						}
-
-						rentContract.methods.getApartmentRentalsNum(apartment.id).call((error, numRentals) => {
-							apartment.rentals = numRentals;
-							app.userApartments.push(apartment);
-						});
-					});
-				}
-			});
-		},
-		disableApartment:      apartment => {
-			// Estimate gas and call the disableApartment function
-			let method = rentContract.methods.disableApartment(apartment.id);
-			method.estimateGas().then(gasAmount => {
-				method.send({gas: gasAmount});
-			});
-		},
-		showApartmentRentals:  apartment => {
-			app.currentApartment = apartment;
-			app.apartmentRentals = [];
-
-			rentContract.methods.getApartmentRentalsNum(apartment.id).call((error, result) => {
-				if (error) {
-					console.error(error);
-					return;
-				}
-
-				let numRentals = parseInt(result);
-				let promises = [];
-
-				for (let i = 0; i < numRentals; i++) {
-					promises.push(rentContract.methods.getApartmentRental(apartment.id, i).call((error, rental) => {
-						rental.from = new Date(rental.fromDay * 1000 * 60 * 60 * 24);
-						rental.till = new Date(rental.tillDay * 1000 * 60 * 60 * 24);
-						app.apartmentRentals.push(rental);
-					}));
-				}
-
-				Promise.all(promises).then(() => {
-					app.page = 'apartment-rentals';
-				});
-			});
+			return 'background-color: ' + app.getRandomColor()
 		},
 
-		getBlockie: account => {
-			if (account) {
-				return {
-					'background-image': 'url(\'' + blockies.create({
-						seed: account,
-					}).toDataURL() + '\')',
-				};
-			}
-			else {
-				return {};
+		/**
+		 * Get the width for displaying a stars image, using the provided maxWidth for the full width
+		 *
+		 * @param score
+		 * @param maxWidth
+		 * @return {number}
+		 */
+		getStarsWidth: (score, maxWidth) => {
+			return Math.round(score / 5 * maxWidth)
+		},
+
+		/**
+		 * Initiate the application
+		 */
+		start: async () => {
+			$(document).foundation()
+
+			// Enable tooltips
+			$(document).tooltip({
+				selector:  '.tooltip[title]',
+				container: 'body'
+			})
+
+			app.store.commit('setGoogleMapsGeocoder', new window.google.maps.Geocoder())
+
+			app.accounts = await Web3Util.fetchAccounts()
+			app.assignDefaultAccounts()
+
+			app.registerEvents()
+
+			// Load the rentals before we register to the subscriptions so we already have rental requests from
+			// local storage loaded before we try to send them using a received interaction key
+			await app.loadRentals()
+
+			app.registerSubscriptions()
+		},
+
+		/**
+		 * Load the rentals
+		 *
+		 * @returns {Promise<void>}
+		 */
+		loadRentals: async () => {
+			let interactionAddresses = JSON.parse(window.localStorage.getItem('interactionAddresses') || '[]')
+
+			app.rentals = await Rental.fetchAll(app.accounts, interactionAddresses)
+		},
+
+		/**
+		 * Assign default accounts based on the first available account with the same type
+		 */
+		assignDefaultAccounts: () => {
+			for (let account of app.accounts) {
+				if (account.type === 'owner' && app.newApartmentData.account === null) {
+					app.newApartmentData.account = account
+					continue
+				}
+				if (account.type === 'tenant' && app.rentalRequest.account === null) {
+					app.rentalRequest.account = account
+				}
 			}
 		},
 
-		checkAccount:      () => {
-			rentContract.methods.isRegistered().call((error, result) => {
-				if (error) {
-					console.error(error);
-					return;
-				}
+		/**
+		 * Register subscription listeners
+		 */
+		registerSubscriptions: () => {
+			// Register topic processors
+			PubSub.registerTopicProcessor('request-interaction-key', (message) => {
+				app.issueInteractionKey(JSON.parse(message))
+			})
+			PubSub.registerTopicProcessor('issue-interaction-key', (message) => {
+				app.sendRentalRequestToBlockchain(JSON.parse(message))
+			})
 
-				app.registered = result;
-
-				if (app.registered) {
-					showMessage('Successfully logged in');
-
-					// Refresh the user balance
-					app.refreshBalance();
-
-					// Load the user rentals
-					app.updateUserRentals();
-
-					// Load the user apartments
-					app.loadUserApartments();
-				}
-			});
+			PubSub.start()
 		},
-		refreshBalance:    () => {
-			rentContract.methods.getBalance().call((error, balance) => {
-				if (error) {
-					console.error(error);
-					return;
-				}
 
-				app.balance = parseInt(balance);
-			});
+		/**
+		 * Register event listeners
+		 */
+		registerEvents: () => {
 
-			app.refreshEthBalance();
 		},
-		switchAccount:     index => {
-			app.account = app.accounts[index];
-			let params = new URLSearchParams(location.search);
-			params.set('a', index);
-			window.history.replaceState({}, '', `${location.pathname}?${params}`);
-		},
-		refreshEthBalance: () => {
-			web3.eth.getBalance(app.account).then((weiBalance) => {
-				app.ethBalance = app.weiToEth(weiBalance);
-			});
-		},
-		doTransfer:        () => {
-			let wei = app.ethToWei(app.transferEth);
 
-			let method = rentContract.methods.transfer();
-			method.estimateGas({value: wei}).then(gasAmount => {
-				method.send({gas: gasAmount, value: wei});
+		/**
+		 * Load a preview when the image source is changed
+		 *
+		 * @param event
+		 */
+		changeImageSrc: event => {
+			let input = event.target
+			let previewImg = $(input).next('img.preview')
 
-				showMessage('Transfer started...');
-			});
-		},
-		doPayout:          () => {
-			let method = rentContract.methods.payout(app.payoutCredits);
-			method.estimateGas().then(gasAmount => {
-				method.send({gas: gasAmount + 21000});
+			// If we don't have a file, hide the preview
+			if (typeof input.files !== 'object' || typeof input.files[0] === 'undefined') {
+				previewImg.hide()
 
-				showMessage('Payout started...');
-			});
-		},
-		updateUserRentals: () => {
-			rentContract.methods.getUserRentalsNum().call((error, numRentals) => {
-				if (error) {
-					console.error(error);
-					return;
-				}
-
-				if (numRentals === 0) {
-					return;
-				}
-
-				app.rentals = [];
-
-				for (let i = 0; i < numRentals; i++) {
-					rentContract.methods.getUserRental(i).call((error, rental) => {
-						rentContract.methods.getApartment(rental.apartmentId).call((error, apartment) => {
-							rental.apartment = apartment;
-							rental.from = new Date(rental.fromDay * 1000 * 60 * 60 * 24);
-							rental.till = new Date(rental.tillDay * 1000 * 60 * 60 * 24);
-
-							app.rentals.push(rental);
-						});
-					});
-				}
-			});
-		},
-		refundDeposit:     rental => {
-			app.currentRental = rental;
-			app.page = 'refund-deposit';
-		},
-		doRefundDeposit:   () => {
-			let method = rentContract.methods.refundDeposit(app.currentRental.rentalId, parseInt(app.deductAmount));
-			method.estimateGas().then(gasAmount => {
-				method.send({gas: gasAmount});
-
-				showMessage('Deposit refund started...');
-			});
-		},
-		claimDeposit:      rental => {
-			let method = rentContract.methods.claimDeposit(rental.rentalId);
-			method.estimateGas().then(gasAmount => {
-				method.send({gas: gasAmount});
-
-				showMessage('Deposit claim started...');
-			});
-		},
-		rent:              apartment => {
-			let fromDay = app.getUnixDay(app.apartmentsFrom);
-			let tillDay = app.getUnixDay(app.apartmentsTill);
-			let cost = apartment.pricePerNight * (tillDay - fromDay) + parseInt(apartment.deposit);
-
-			let method = rentContract.methods.rent(apartment.id, fromDay, tillDay);
-
-			// If we got enough balance, we can just send it
-			if (cost <= app.balance) {
-				method.estimateGas().then(gasAmount => {
-					method.send({gas: gasAmount});
-				});
-				return;
+				return
 			}
 
-			// Determine the required value to aquire the balance and send it along
-			rentContract.methods.creditsToWei(cost - app.balance).call((error, costInWei) => {
-				if (error) {
-					console.error('Could not determine wei cost', error);
-					showMessage('Could not book apartment');
-					return;
-				}
+			let reader = new window.FileReader()
 
-				method.estimateGas({value: costInWei}).then(gasAmount => {
-					console.log('Sending ' + (costInWei + 21000) + ' wei along with transaction to pay for rent...');
-					method.send({gas: gasAmount + 21000, value: costInWei});
-				});
-			});
+			reader.onload = function (e) {
+				previewImg.attr('src', e.target.result).show()
+			}
+
+			reader.readAsDataURL(input.files[0])
 		},
 
-		start:          () => {
-			// Get the contract from the artifacts
-			rentContract = new web3.eth.Contract(rent_artifacts.abi, rent_artifacts.networks[4447].address);
-
-			web3.eth.getAccounts((error, accounts) => {
-				if (error) {
-					showMessage('There was an error fetching your accounts');
-					console.error(error);
-					return;
-				}
-
-				if (accounts.length === 0) {
-					showMessage(
-							'Couldn\'t get any accounts! Make sure your Ethereum client is configured correctly.');
-					return;
-				}
-
-				app.accounts = accounts;
-
-				// Use the first account unless specified otherwise in the params
-				const params = new URLSearchParams(location.search);
-				app.account = accounts[params.get('a') || 0];
-
-				app.registerEvents();
-
-				$(document).foundation();
-			});
-		},
-		registerEvents: function() {
-			rentContract.events.ApartmentAdded({userAddress: app.account}, (error, event) => {
-				if (error) {
-					console.error(error);
-					showMessage('Apartment could not be added');
-					return;
-				}
-
-				showMessage('Apartment successfully added');
-
-				app.loadApartments();
-				app.loadUserApartments();
-			});
-
-			rentContract.events.ApartmentEnabled({userAddress: app.account}, (error, event) => {
-				if (error) {
-					console.error(error);
-					showMessage('Apartment could not be enabled');
-					return;
-				}
-				showMessage('Apartment successfully enabled');
-
-				app.loadApartments();
-				app.loadUserApartments();
-			});
-			rentContract.events.ApartmentDisabled({userAddress: app.account}, (error, event) => {
-				if (error) {
-					console.error(error);
-					showMessage('Apartment could not be disabled');
-					return;
-				}
-				showMessage('Apartment successfully disabled');
-
-				app.loadApartments();
-				app.loadUserApartments();
-			});
-
-			rentContract.events.ImageAdded({userAddress: app.account}, (error, event) => {
-				if (error) {
-					console.error(error);
-					showMessage('Image could not be added');
-					return;
-				}
-
-				showMessage('Image successfully added');
-
-				// Add the image to the apartment
-				for (let currentApartment of app.apartments) {
-					if (currentApartment.id === event.returnValues.apartmentId) {
-						app.apartments.images.push(event.returnValues.apartmentId);
-						return;
-					}
-				}
-
-			});
-
-			rentContract.events.Rented({userAddress: app.account}, (error, event) => {
-				if (error) {
-					console.error(error);
-					showMessage('Apartment could not be rented');
-					return;
-				}
-
-				showMessage('Apartment successfully rented');
-
-				app.apartmentsFrom = '';
-				app.apartmentsTill = '';
-
-				if (app.page === 'apartments') {
-					app.page = 'rentals';
-				}
-
-				app.updateUserRentals();
-				app.refreshBalance();
-			});
-
-			rentContract.events.DepositRefunded({ownerAddress: app.account}, (error, event) => {
-				if (error) {
-					console.error(error);
-					showMessage('Deposit could not be refunded');
-					return;
-				}
-
-				showMessage('Deposit successfully refunded');
-
-				app.deductAmount = 0;
-
-				if (app.page === 'refund-deposit') {
-					app.page = 'user-apartments';
-				}
-
-				app.refreshBalance();
-			});
-			rentContract.events.DepositRefunded({tenantAddress: app.account}, (error, event) => {
-				if (error) {
-					console.error(error);
-					return;
-				}
-
-				showMessage('Deposit claimable for rental ' + event.returnValues.rentalId + ' (' +
-						event.returnValues.deductedAmount + ' credits have been deducted)');
-
-				app.deductAmount = 0;
-
-				if (app.page === 'refund-deposit') {
-					app.page = 'user-apartments';
-				}
-
-				app.updateUserRentals();
-			});
-			rentContract.events.DepositClaimed({userAddress: app.account}, (error, event) => {
-				if (error) {
-					console.error(error);
-					showMessage('Deposit could not be claimed');
-					return;
-				}
-
-				showMessage('Deposit successfully claimed');
-				app.refreshBalance();
-				app.updateUserRentals();
-			});
-
-			rentContract.events.Transferred({userAddress: app.account}, (error, event) => {
-				if (error) {
-					console.error(error);
-					showMessage('Failed to buy credits');
-					return;
-				}
-				showMessage('Credits successfully bought');
-
-				app.transferEth = 0;
-
-				app.balance = event.returnValues.newBalance;
-				app.refreshEthBalance();
-			});
-
-			rentContract.events.Paidout({userAddress: app.account}, (error, event) => {
-				if (error) {
-					console.error(error);
-					showMessage('Failed to pay out credits');
-					return;
-				}
-				showMessage('Successfully paid out credits');
-
-				app.payoutCredits = 0;
-
-				app.balance = event.returnValues.newBalance;
-				app.refreshEthBalance();
-			});
-		},
-		getUnixDay:     date => {
-			return Math.floor(date.getTime() / (1000 * 60 * 60 * 24));
-		},
-		weiToEth:       wei => {
-			return Math.floor(wei / Math.pow(10, 15)) / Math.pow(10, 3);
-		},
-		ethToWei:       eth => {
-			return eth * Math.pow(10, 18);
-		},
+		/**
+		 * Get the image url for the specified hash
+		 *
+		 * @param address
+		 * @returns {string}
+		 */
+		getImageUrl: (address) => {
+			return IpfsUtil.getImageUrl(address)
+		}
 	},
 	components: {
-		'datepicker': Datepicker,
-	},
-});
+		'datepicker':      Datepicker,
+		'vue-flux':        VueFlux,
+		'flux-pagination': FluxPagination,
+		'nl2br':           Nl2br,
+		'v-select':        vSelect
+	}
+})
 
 window.addEventListener('load', () => {
-	// We can't use Metamask's web3 currently as subscriptions through websockets are still in dev
-	if (typeof web3 !== 'undefined' && false) {
-		// Use Mist/MetaMask's provider
-		window.web3 = new Web3(web3.currentProvider);
-	} else {
-		console.warn(
-				'No web3 detected. Falling back to ' + websocketAddress +
-				'. You should remove this fallback when you deploy live, as it\'s inherently insecure. Consider switching to Metamask for development. More info here: http://truffleframework.com/tutorials/truffle-and-metamask');
-		// fallback - use your fallback strategy (local node / hosted node + in-dapp id mgmt / fail)
-		window.web3 = new Web3(
-				new Web3.providers.WebsocketProvider(websocketAddress));
-	}
-
-	app.start();
-});
+	app.start()
+})

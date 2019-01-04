@@ -1,0 +1,86 @@
+div.page.apartments {
+	div.apartment {
+		position: relative;
+		width: 18rem;
+		height: 13rem;
+		margin: 0 1rem 1rem 0;
+		float: left;
+		border: #ccc 1px solid;
+		border-radius: .4rem;
+		cursor: pointer;
+		transition: opacity .3s;
+		overflow: hidden;
+
+		div.img {
+			position: absolute;
+			left: 0;
+			top: 0;
+			width: 100%;
+			height: 100%;
+
+			img {
+				width: 100%;
+			}
+
+			transition: width .3s, height .3s, left .3s, top .3s;
+		}
+		&:hover {
+			div.img {
+				width: 22.15rem;
+				height: 16rem;
+				top: -1.5rem;
+				left: -2.0775rem;
+			}
+		}
+		&.disabled {
+			cursor: not-allowed;
+
+			img.primary-image {
+				opacity: .3;
+			}
+		}
+
+		img.rented {
+			position: absolute;
+			top: 0;
+			left: 0;
+			z-index: 2;
+		}
+
+		div.text {
+			position: absolute;
+			bottom: 0;
+			left: 0;
+			width: 100%;
+			background: rgba(255, 255, 255, 0.7);
+			padding: .4rem;
+			z-index: 3;
+
+			p {
+				margin: 0;
+				&.title {
+					font-weight: bold;
+					margin-bottom: .4rem;
+
+					span.score {
+						float: right;
+						display: inline-block;
+						height: 23px;
+						background-position: right;
+					}
+				}
+			}
+		}
+	}
+	#apartments {
+		&.highlighting {
+			div.apartment {
+				opacity: .2;
+
+				&.highlighted {
+					opacity: 1;
+				}
+			}
+		}
+	}
+}

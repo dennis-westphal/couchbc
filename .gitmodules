@@ -1,0 +1,3 @@
+[submodule "contracts/strings"]
+	path = contracts/strings
+	url = https://github.com/Arachnid/solidity-stringutils.git

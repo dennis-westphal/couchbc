@@ -1,15 +1,34 @@
 {
   "parser": "babel-eslint",
-    "extends": [
-      "standard"
+  "extends": [
+    "standard"
+  ],
+  "plugins": [
+    "babel"
+  ],
+  "rules": {
+    "key-spacing": 0,
+    "jsx-quotes": [
+      "warn",
+      "prefer-single"
     ],
-    "plugins": [
-      "babel"
+    "max-len": [
+      "warn",
+      150,
+      2
     ],
-    "rules": {
-      "key-spacing"          : 0,
-      "jsx-quotes"           : [2, "prefer-single"],
-      "max-len"              : [2, 120, 2],
-      "object-curly-spacing" : [2, "always"]
-    }
+    "indent": [
+      "warn",
+      "tab"
+    ],
+    "no-tabs": 0,
+    "no-mixed-spaces-and-tabs": 0,
+    "no-trailing-spaces": "warn",
+    "no-multiple-empty-lines": "warn",
+    "semi": "warn",
+    "padded-blocks": "warn",
+    "space-before-function-paren": "warn",
+    "keyword-spacing": "warn",
+    "spaced-comment": "warn"
+  }
 }

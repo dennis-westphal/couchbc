@@ -38,7 +38,7 @@ module.exports = {
 				}),
 			},
 			{
-				test:    /\.(js)|(jsx)$/,
+				test:    /(\.js)|(\.jsx)$/,
 				exclude: /(node_modules|bower_components)/,
 				use:     [
 					{
@@ -47,7 +47,7 @@ module.exports = {
 				],
 			},
 			{
-				test: /\.json/,
+				test: /\.json$/,
 				use:  [
 					{
 						loader: 'json5-loader',
@@ -55,7 +55,7 @@ module.exports = {
 				],
 			},
 			{
-				test: /\.vue/,
+				test: /\.vue$/,
 				use:  [
 					{
 						loader: 'vue-loader',
@@ -63,7 +63,7 @@ module.exports = {
 				],
 			},
 			{
-				test:    /\.(png)|(jpg)|(jpeg)|(gif)|(svg)|(ico)$/,
+				test:    /(\.png)|(\.jpg)|(\.jpeg)|(\.gif)|(\.svg)|(\.ico)$/,
 				include: path.resolve(__dirname, 'node_modules'),
 				use:     [
 					{
@@ -75,7 +75,7 @@ module.exports = {
 				],
 			},
 			{
-				test:    /\.(otf)|(eot)|(ttf)|(woff)|(svg)$/,
+				test:    /(\.otf)|(\.eot)|(\.ttf)|(\.woff)|(\.svg)$/,
 				exclude: path.resolve(__dirname, 'app/img'),
 				use:     [
 					{

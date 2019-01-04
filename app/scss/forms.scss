@@ -1,0 +1,59 @@
+html {
+	input, select, [type='text'], [type='password'], [type='date'], [type='datetime'], [type='datetime-local'], [type='month'], [type='week'], [type='email'], [type='number'], [type='search'], [type='tel'], [type='time'], [type='url'], [type='color'], textarea {
+		margin-bottom: 0;
+	}
+}
+
+.form-control {
+	margin-bottom: 1rem;
+}
+
+fieldset {
+	margin-bottom: 1rem;
+
+	.form-control {
+		margin-bottom: .5rem;
+	}
+}
+
+.vdp-datepicker input[readonly] {
+	cursor: pointer;
+	background-color: #fefefe;
+}
+
+html .v-select > .dropdown-toggle {
+	border-radius: 0;
+	background-color: #fefefe;
+
+	padding: 0;
+
+	input, input:focus {
+		margin: 0;
+	}
+}
+
+.button {
+	&.add, &.accept, &.save {
+		background-color: #279b23;
+
+		&:hover {
+			background-color: #1f7120;
+		}
+	}
+
+	&.cancel, &.refuse, &.withdraw {
+		background-color: #9b0800;
+
+		&:hover {
+			background-color: #711d1b;
+		}
+	}
+
+	&.review {
+		background-color: #00039b;
+
+		&:hover {
+			background-color: #1a1b71;
+		}
+	}
+}

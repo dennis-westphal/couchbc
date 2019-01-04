@@ -1,313 +1,482 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-	<title>CouchBC</title>
-	<link href="/bundles/app.css" rel="stylesheet" type="text/css">
-	<meta charset="UTF-8">
+    <title>CouchBC</title>
+    <link href="/bundles/app.css" rel="stylesheet" type="text/css">
+    <meta charset="UTF-8">
 </head>
 <body>
 <div id="app">
-	<nav>
-		<div class="top-bar">
-			<div class="top-bar-left">
-				<a href="#" class="left" v-on:click.stop="page = 'start'">CouchBC</a>
-			</div>
-			<div class="top-bar-right">
-				<ul id="menu" class="dropdown menu" data-dropdown-menu>
-					<li v-if="registered">
-						<a href="#">Apartments</a>
-						<ul>
-							<li><a href="#" v-on:click.stop="page = 'apartments'">Show apartments</a></li>
-							<li><a href="#" v-on:click.stop="page = 'add-apartment'" v-if="registered">Add
-									apartments</a>
-							</li>
-							<li v-if="userApartments.length > 0">
-								<a href="#" v-on:click.stop="page = 'user-apartments'" v-if="registered">
-									Show my apartments</a>
-							</li>
-						</ul>
-					</li>
-					<li v-if="registered && rentals.length > 0">
-						<a href="#" v-on:click.stop="page = 'rentals'" v-if="registered">Show my rentals</a>
-					</li>
-					<li v-if="!registered">
-						<a href="#" v-on:click.stop="page = 'register'">Register</a>
-					</li>
-					<li>
-						<a href="#">Account</a>
-						<ul id="account-select">
-							<li v-bind:class="{account: true, active: account == currentAccount}" v-for="(currentAccount, index) in accounts" v-on:click="switchAccount(index)">
-								<span v-bind:style="getBlockie(currentAccount)"></span>
-								{{currentAccount.substr(0, 10)}}...
-							</li>
-						</ul>
-					</li>
-				</ul>
-			</div>
-			<span class="balance" v-if="registered">
-				{{ balance }} credits
-				<a href="#" v-on:click.stop="page = 'transfer'" class="transfer mdi mdi-arrow-expand-left" v-if="ethBalance > 0"></a>
-				<a href="#" v-on:click.stop="page = 'payout'" class="payout mdi mdi-arrow-expand-right" v-if="balance > 0"></a>
-				~{{ ethBalance }} eth
-			</span>
-		</div>
-	</nav>
+    <nav>
+        <div class="top-bar">
+            <div class="top-bar-left">
+                <a href="#" @click.stop="page = 'start'" class="logo">CouchBC</a>
 
-	<div class="page start" v-if="page == 'start'">
-		<div class="header">
-			<img src="https://ipfs.io/ipfs/Qma2jcNZYJ9FTUY5xA2iS6arL39usU5mg8fiLy3DseLiJz">
-			<div class="text">
-				<h1>Time for a retreat</h1>
-				<h2>Rent an apartment on CouchBC using blockchain technology</h2>
-			</div>
-		</div>
-	</div>
-	<div class="page" v-if="page == 'apartments'">
-		<div class="container">
-			<div class="col s12 m6">
-				Search for apartments available at:
-				<div class="col s12 m6">
-					<span>From</span>
-					<datepicker v-model="apartmentsFrom" :disabled-dates="disabledDates" :monday-first="true"></datepicker>
-				</div>
-				<div class="col s12 m6">
-					<span>Till</span>
-					<datepicker v-model="apartmentsTill" :disabled-dates="disabledDates" :monday-first="true"></datepicker>
-				</div>
-			</div>
-		</div>
+                <gmap-autocomplete
+                        id="search-address"
+                        :value="''"
+                        :placeholder="'Where do you want to go?'"
+                        :types="['(cities)']"
+                        @place_changed="changeSearchAddress">
+                </gmap-autocomplete>
 
-		<div class="col">
-			<div class="apartment" v-for="apartment in apartments" v-on:click="showDetails(apartment)" v-bind:style="getApartmentStyle(apartment)">
-				<img v-if="apartment.primaryImage" v-bind:src="getImageUrl(apartment.primaryImage)">
-				<div class="text">
-					<p class="title">{{ apartment.title }}</p>
-					<p>
-						<span v-if="apartmentsFrom && apartmentsTill">{{ getTotalPrice(apartment) }}
-							 per night</span>
-						<span v-if="!(apartmentsFrom && apartmentsTill)">{{ apartment.pricePerNight }}
-							 per night</span>
-						/ {{ apartment.deposit }} deposit</p>
-				</div>
-				<!--<a class="waves-effect waves-light btn" v-if="apartmentsFrom && apartmentsTill && registered" v-on:click.stop="rent(apartment)">book</a>-->
-			</div>
-		</div>
 
-		<!--
-		<table>
-			<thead>
-			<tr>
-				<th></th>
-				<th>Title</th>
-				<th>Country</th>
-				<th>City</th>
-				<th>Price per night</th>
-				<th>Deposit</th>
-				<th></th>
-			</tr>
+                <div class="form-control" id="search-from">
+                    <datepicker v-model="searchFrom" :disabled-dates="disabledDates"
+                                :monday-first="true" placeholder="From"></datepicker>
+                </div>
+                <div class="form-control" id="search-till">
+                    <datepicker v-model="searchTill" :disabled-dates="disabledDates"
+                                :monday-first="true" placeholder="Till"></datepicker>
+                </div>
+            </div>
+            <div class="top-bar-right align-middle">
 
-			<tr v-for="apartment in apartments">
-				<td><img v-bind:src="ipfsShowUrl + apartment.image"></td>
-				<td>{{ apartment.title }}</td>
-				<td>{{ apartment.address.country }}</td>
-				<td>{{ apartment.address.city }}</td>
-				<td>{{ apartment.pricePerNight }}</td>
-				<td>{{ apartment.deposit }}</td>
-				<td>
+                <ul id="menu" class="dropdown menu" data-dropdown-menu>
+                    <li>
+                        <a href="#">Account</a>
+                        <ul>
+                            <li>
+                                <a href="#" @click.stop="page = 'add-apartment'">
+                                    Add apartment
+                                </a>
+                            </li>
+                            <li v-if="false">
+                                <a href="#" @click.stop="page = 'user-apartments'">
+                                    My apartments
+                                </a>
+                            </li>
 
-				</td>
-			</tr>
-			</thead>
-		</table>
-		-->
-	</div>
-	<div class="container" v-if="page == 'add-apartment'">
-		<form>
-			<div class="input-field">
-				<label for="add-apartment-title">Title</label>
-				<input id="add-apartment-title" type="text" name="title" v-model="newApartmentData.title">
-			</div>
-			<div class="input-field">
-				<label for="add-apartment-street">Street</label>
-				<input id="add-apartment-street" type="text" name="street" v-model="newApartmentData.street">
-			</div>
-			<div class="input-field">
-				<label for="add-apartment-zip">Zip code</label>
-				<input id="add-apartment-zip" type="text" name="zip" v-model="newApartmentData.zip">
-			</div>
-			<div class="input-field">
-				<label for="add-apartment-city">City</label>
-				<input id="add-apartment-city" type="text" name="city" v-model="newApartmentData.city">
-			</div>
-			<div class="input-field">
-				<label for="add-apartment-country">Country</label>
-				<input id="add-apartment-country" type="text" name="country" v-model="newApartmentData.country">
-			</div>
-			<div class="input-field">
-				<label for="add-apartment-pricePerNight">Price per night</label>
-				<input id="add-apartment-pricePerNight" type="number" name="pricePerNight" v-model="newApartmentData.pricePerNight">
-			</div>
-			<div class="input-field">
-				<label for="add-apartment-deposit">Deposit</label>
-				<input id="add-apartment-deposit" type="number" name="deposit" v-model="newApartmentData.deposit">
-			</div>
-			<div class="input-field">
-				<label for="add-apartment-image">Image</label>
-				<input id="add-apartment-image" type="file" name="image">
-			</div>
-			<a class="waves-effect waves-light btn" v-on:click.stop="addApartment">Add apartment</a>
-		</form>
-	</div>
-	<div class="container" v-if="page == 'add-apartment-image'">
-		<div class="input-field">
-			<label for="add-apartment-image">Image</label>
-			<input id="add-apartment-image" type="file" name="image">
-		</div>
-	</div>
-	<div class="container" v-if="page == 'user-apartments'">
-		<table>
-			<thead>
-			<tr>
-				<th>Title</th>
-				<th>Country</th>
-				<th>City</th>
-				<th>Price per night</th>
-				<th>Deposit</th>
-				<th>Rentals</th>
-				<th></th>
-			</tr>
+                            <li v-if="rentals.length > 0">
+                                <a href="#" @click.stop="page = 'rentals'">
+                                    Rentals
+                                </a>
+                            </li>
+                        </ul>
+                    </li>
+                </ul>
+                <ul id="notifications" class="dropdown menu" data-dropdown-menu>
+                    <li>
+                        <a href="#"><span class="mdi mdi-bell-outline"></span></a>
+                        <ul>
+                            <li v-if="notifications.length === 0">
+                                <a href="#">No notifications</a>
+                            </li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
 
-			<tr v-for="apartment in userApartments">
-				<td>{{ apartment.title }}</td>
-				<td>{{ apartment.country }}</td>
-				<td>{{ apartment.city }}</td>
-				<td>{{ apartment.pricePerNight }}</td>
-				<td>{{ apartment.deposit }}</td>
-				<td>
-					<a href="#" v-on:click.stop="showApartmentRentals(apartment)">{{ apartment.rentals }}</a>
-				</td>
-				<td>
-					<a class="waves-effect waves-light btn" v-if="apartment.disabled" v-on:click.stop="enableApartment(apartment)">Enable</a>
-					<a class="waves-effect waves-light btn" v-if="!apartment.disabled" v-on:click.stop="disableApartment(apartment)">Disable</a>
-				</td>
-			</tr>
-			</thead>
-		</table>
-	</div>
-	<div class="container" v-if="page == 'rentals'">
-		<table>
-			<thead>
-			<tr>
-				<th>Title</th>
-				<th>Country</th>
-				<th>City</th>
-				<th>From</th>
-				<th>Till</th>
-				<th>Deposit</th>
-				<th></th>
-			</tr>
+    <div class="page start" v-if="page === 'start'">
+        <header>
+            <img :src="getImageUrl('Qma2jcNZYJ9FTUY5xA2iS6arL39usU5mg8fiLy3DseLiJz')">
+            <div class="text">
+                <h1>Time for a retreat</h1>
+                <h2>Rent an apartment on CouchBC using blockchain technology</h2>
+            </div>
+        </header>
+    </div>
 
-			<tr v-for="rental in rentals">
-				<td>{{ rental.apartment.title }}</td>
-				<td>{{ rental.apartment.country }}</td>
-				<td>{{ rental.apartment.city }}</td>
-				<td>{{ rental.from | formatDate }}</td>
-				<td>{{ rental.till | formatDate }}</td>
-				<td>{{ rental.deposit }}</td>
-				<td>
-					<a class="waves-effect waves-light btn" v-if="rental.depositClaimable" v-on:click.stop="claimDeposit(rental)">claim
-						deposit</a>
-				</td>
-			</tr>
-			</thead>
-		</table>
-	</div>
+    <div class="page add-apartment" v-if="page === 'add-apartment'">
+        <form>
+            <div class="grid-container">
+                <h1>Add new apartment</h1>
+                <div class="grid-x grid-padding-x">
+                    <div class="cell large-9 grid-x grid-padding-x">
+                        <div class="form-control cell">
+                            <label for="add-apartment-title">Title</label>
+                            <input id="add-apartment-title" type="text" name="title" v-model="newApartmentData.title">
+                        </div>
+                        <div class="form-control cell">
+                            <label for="add-apartment-description">Description</label>
+                            <textarea id="add-apartment-description" name="description"
+                                      v-model="newApartmentData.description"></textarea>
+                        </div>
+                        <div class="form-control cell">
+                            <label for="apartment-address">Address</label>
+                            <gmap-autocomplete
+                                    id="apartment-address"
+                                    :value="''"
+                                    @place_changed="changeApartmentAddress">
+                            </gmap-autocomplete>
+                        </div>
+                        <div class="form-control cell large-6">
+                            <label for="add-apartment-pricePerNight">Price per night in finney</label>
+                            <input id="add-apartment-pricePerNight" type="number" name="pricePerNight"
+                                   v-model="newApartmentData.pricePerNight">
+                        </div>
+                        <div class="form-control cell large-6">
+                            <label for="add-apartment-deposit">Deposit in finney</label>
+                            <input id="add-apartment-deposit" type="number" name="deposit"
+                                   v-model="newApartmentData.deposit">
+                        </div>
 
-	<div class="container" v-if="page == 'apartment-rentals'">
-		<h3>Rentals for {{currentApartment.title}}</h3>
-		<table>
-			<thead>
-			<tr>
-				<th>From</th>
-				<th>Till</th>
-				<th>Deposit</th>
-				<th></th>
-			</tr>
+                        <div class="form-control cell image medium-6 large-4">
+                            <label for="add-apartment-primary-image">Primary image</label>
+                            <input id="add-apartment-primary-image" type="file" name="primaryImage"
+                                   @change="changeImageSrc">
+                            <img class="preview" src="">
+                        </div>
+                        <div
+                                class="form-control cell image medium-6 large-4"
+                                v-for="(image, index) in newApartmentData.images">
+                            <label :for="'add-apartment-image-' + index">Image {{index + 2}}</label>
+                            <input :id="'add-apartment-image-' + index" class="add-image" type="file"
+                                   :name="'image-' + index" :data-index="index" @change="changeImageSrc">
+                            <img class="preview" src="">
+                        </div>
 
-			<tr v-for="rental in apartmentRentals">
-				<td>{{ rental.from | formatDate }}</td>
-				<td>{{ rental.till | formatDate }}</td>
-				<td>{{ rental.deposit }}</td>
-				<td>
-					<a class="waves-effect waves-light btn" v-if="!rental.depositClaimable" v-on:click.stop="refundDeposit(rental)">refund
-						deposit</a>
-				</td>
-			</tr>
-			</thead>
-		</table>
-	</div>
+                        <div class="cell medium-6 large-4">
+                            <div class="add-image" @click="newApartmentData.images.push('')">
+                                <span class="mdi mdi-plus-box"></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="account-list cell large-3">
+                        <h3>Account selection</h3>
 
-	<div class="container" v-if="page == 'refund-deposit'">
-		<h3>Buy credits</h3>
-		<p>Use ether to buy credits</p>
-		<form>
-			<div class="input-field">
-				<label for="deduct">Deduct from deposit (max. {{ currentRental.deposit }})</label>
-				<input id="deduct" type="number" min="0" v-bind:max="currentRental.deposit" step="1" name="deduct" v-model="deductAmount">
-			</div>
-			<p>=> Refund {{ currentRental.deposit - deductAmount}} credits</p>
-			<a class="waves-effect waves-light btn" v-on:click.stop="doRefundDeposit()">Refund deposit</a>
-		</form>
-	</div>
-	<div class="container" v-if="page == 'register'">
-		<form>
-			<div class="input-field">
-				<label for="register-name">Name</label>
-				<input id="register-name" type="text" name="name" v-model="newUserData.name">
-			</div>
-			<div class="input-field">
-				<label for="register-street">Street</label>
-				<input id="register-street" type="text" name="street" v-model="newUserData.street">
-			</div>
-			<div class="input-field">
-				<label for="register-zip">Zip code</label>
-				<input id="register-zip" type="text" name="zip" v-model="newUserData.zip">
-			</div>
-			<div class="input-field">
-				<label for="register-city">City</label>
-				<input id="register-city" type="text" name="city" v-model="newUserData.city">
-			</div>
-			<div class="input-field">
-				<label for="register-country">Country</label>
-				<input id="register-country" type="text" name="country" v-model="newUserData.country">
-			</div>
-			<a class="waves-effect waves-light btn" v-on:click.stop="register">Register</a>
-		</form>
-	</div>
-	<div class="container" v-if="page == 'transfer'">
-		<h3>Buy credits</h3>
-		<p>Use ether to buy credits</p>
-		<form>
-			<div class="input-field">
-				<label for="transfer-eth">Eth</label>
-				<input id="transfer-eth" type="number" min="0.001" step="0.001" name="eth" v-model="transferEth">
-			</div>
-			<p>=> {{transferCredits}} credits</p>
-			<a class="waves-effect waves-light btn" v-on:click.stop="doTransfer">Transfer</a>
-		</form>
-	</div>
-	<div class="container" v-if="page == 'payout'">
-		<h3>Payout</h3>
-		<p>Convert credits and transfer to account address</p>
-		<form>
-			<div class="input-field">
-				<label for="payout-credits">Credits</label>
-				<input id="payout-credits" type="number" min="1" v-bind:max="balance" name="credits" v-model="payoutCredits">
-			</div>
-			<p>=> {{payoutEth}} eth</p>
-			<a class="waves-effect waves-light btn" v-on:click.stop="doPayout">Payout</a>
-		</form>
-	</div>
+                        <div
+                                v-for="(account, index) in accounts"
+                                :class="{account: true, active: account === newApartmentData.account, forbidden: account.type === 'tenant' || account.type === 'interaction', rental: account.type == 'rental'}"
+                                :for="'account-' + index" class="account"
+                                @click="selectNewApartmentAccount(account)">
+                            <span class="blockie" :style="getBlockie(account.address)"></span>
+                            <span v-if="account.type === 'owner'" class="mdi mdi-home-account tooltip"
+                                  title="This account is used for managing apartments"></span>
+                            <span v-if="account.type === 'tenant'" class="mdi mdi-account-card-details tooltip"
+                                  title="This account is used for a tenant profile and thus cannot be used to add an apartment"></span>
+                            <span v-if="account.type === 'interaction'" class="mdi mdi-account-switch tooltip"
+                                  title="This account has been used in managing a rental request and thus cannot be used for adding an apartment"></span>
+                            {{account.label}}
+                        </div>
+                    </div>
+                </div>
+
+                <a class="button" @click.stop="addApartment">Add apartment</a>
+            </div>
+        </form>
+    </div>
+
+    <div class="page apartments" v-if="page === 'apartments'">
+        <div class="grid-x grid-padding-x">
+            <div id="apartments" class="cell medium-7">
+                <p>Found {{apartments.length}} apartment<span v-if="apartments.length !== 1">s</span>
+                    in {{searchData.city}}, {{searchData.country}}</p>
+
+                <div
+                        class="apartment"
+                        :id="'apartment-' + apartment.id"
+                        v-for="apartment in apartments"
+                        @click="showApartment(apartment)"
+                        :style="getApartmentStyle(apartment)"
+                        :class="{disabled: searchData.fromDay && searchData.tillDay && !apartment.isAvailable(searchData.fromDay, searchData.tillDay)}"
+                >
+                    <img class="rented"
+                         v-if="searchData.fromDay && searchData.tillDay && !apartment.isAvailable(searchData.fromDay, searchData.tillDay)"
+                         :src="getImageUrl('Qmagk8hDofW4MtB2gUtjbFbNVqgbN8udeEtTQVQY7AGSkq')">
+                    <div class="img">
+                        <img class="primary-image" v-if="apartment.primaryImage"
+                             :src="getImageUrl(apartment.primaryImage)">
+                    </div>
+                    <div class="text">
+                        <p class="title">
+                            {{apartment.title|truncate(20)}}
+                            <span v-if="apartment.reviews.length > 0"
+                                  class="score"
+                                  :style="{backgroundImage: 'url(' + getImageUrl('QmepT6MmHFZTuhtaA7esu7GtD476UQUdXk3K2bWRi2Hmid') + ')', width: getStarsWidth(apartment.averageScore, 122) + 'px'}">
+							</span>
+                        </p>
+                        <p>
+							<span v-if="searchFrom && searchTill">
+								{{apartment.calculateFee(searchData.fromDay, searchData.tillDay)}} fee
+                                / {{apartment.deposit}} deposit
+							</span>
+                            <span v-if="!(searchFrom && searchTill)">
+								{{apartment.pricePerNight}} per night
+                                / {{apartment.deposit}} deposit
+							</span>
+                        </p>
+                    </div>
+                </div>
+            </div>
+            <div class="cell medium-5">
+                <gmap-map
+                        :center="{lat: searchData.latitude, lng: searchData.longitude}"
+                        :zoom="11"
+                        map-type-id="terrain"
+                        style="width: 100%; height: 100%; min-height: 300px; max-height:800px">
+                    <gmap-marker
+                            v-for="apartment in apartments"
+                            :key="apartment.id"
+                            :position="apartment.position"
+                            :clickable="true"
+                            @mouseover="highlightApartment(apartment)"
+                            @mouseout="unhighlightApartment(apartment)"
+                            @click="showApartment(apartment)"
+                    ></gmap-marker>
+                </gmap-map>
+            </div>
+        </div>
+    </div>
+
+    <div class="page apartment" v-if="page === 'apartment'">
+        <div class="grid-container">
+            <header>
+                <vue-flux
+                        :options="fluxOptions"
+                        :images="apartmentImages"
+                        :transitions="fluxTransitions"
+                        ref="slider">
+                </vue-flux>
+                <div class="text">
+                    <fieldset>
+                        <div class="form-control">
+                            <datepicker v-model="rentalRequestFrom" :disabled-dates="disabledDates"
+                                        :monday-first="true" placeholder="From"></datepicker>
+                        </div>
+                        <div class="form-control">
+                            <datepicker v-model="rentalRequestTill" :disabled-dates="disabledDates"
+                                        :monday-first="true" placeholder="Till"></datepicker>
+                        </div>
+                        <p class="fee">
+							<span v-if="rentalRequest.fee > 0">
+								Rental fee: {{rentalRequest.fee}} finney ({{rentalRequest.feeInEth}} eth)<br/>
+							</span>
+                            Deposit: {{rentalRequest.apartment.deposit}} finney
+                            ({{rentalRequest.apartment.depositInEth}} eth)
+                        </p>
+                    </fieldset>
+
+                    <fieldset>
+                        <div class="form-control account-select">
+                            <v-select :options="accounts" placeholder="Select account" v-model="rentalRequest.account">
+                                <template slot="option" slot-scope="option">
+									<span :class="{forbidden: option.type === 'owner' || option.type === 'interaction'}">
+										<span class="blockie" :style="getBlockie(option.address)"></span>
+                                        {{option.label}}
+                                        <span v-if="option.type === 'owner'" class="mdi mdi-home-account tooltip"
+                                              title="This account is used for managing apartments and thus cannot be used to rent an apartment"></span>
+										<span v-if="option.type === 'tenant'"
+                                              class="mdi mdi-account-card-details tooltip"
+                                              title="This account is used for a tenant profile"></span>
+										<span v-if="option.type === 'interaction'"
+                                              class="mdi mdi-account-switch tooltip"
+                                              title="This account has been used in managing a rental request and thus cannot be used for renting an apartment"></span>
+									</span>
+                                </template>
+                            </v-select>
+                        </div>
+                        <div class="form-control">
+                            <input v-model="rentalRequest.contact.name" placeholder="Your name" type="text">
+                        </div>
+                        <div class="form-control">
+                            <input v-model="rentalRequest.contact.phone" placeholder="Telephone number" type="tel">
+                        </div>
+                        <div class="form-control">
+                            <input v-model="rentalRequest.contact.email" placeholder="Email address" type="email">
+                        </div>
+                        <p class="hint">
+                            Your personal data will only be visible to the apartment owner and a mediator in case of a
+                            dispute
+                        </p>
+                    </fieldset>
+
+                    <a href="#" class="button" @click.stop="requestRental">Request rental</a>
+                </div>
+            </header>
+
+            <main>
+                <h1>{{rentalRequest.apartment.title}}</h1>
+                <nl2br tag="p" :text="rentalRequest.apartment.description"></nl2br>
+
+                <section class="reviews" v-if="rentalRequest.apartment.reviews.length > 0">
+                    <h3>Reviews</h3>
+                    <article v-for="review in rentalRequest.apartment.reviews">
+						<span class="score"
+                              :style="{backgroundImage: 'url(' + getImageUrl('QmepT6MmHFZTuhtaA7esu7GtD476UQUdXk3K2bWRi2Hmid') + ')', width: getStarsWidth(review.score, 122) + 'px'}"></span>
+                        <nl2br tag="p" :text="review.text"></nl2br>
+                    </article>
+                </section>
+            </main>
+        </div>
+    </div>
+
+    <div class="page rentals" v-if="page === 'rentals'">
+        <div class="grid-x grid-padding-x">
+            <article class="cell medium-6 rental" v-for="rental in rentals">
+                <div class="grid-x grid-margin-x">
+                    <div class="cell small-6 medium-5">
+                        <img v-if="rental.apartment.primaryImage" :src="getImageUrl(rental.apartment.primaryImage)">
+                    </div>
+                    <div class="cell auto">
+                        <span
+                                v-if="rental.status === 'pending'"
+                                class="status pending tooltip"
+                                title="An interaction key has been requested, but the rental has not been transferred to the blockchain yet">
+                            Pending
+                        </span>
+                        <span
+                                v-if="rental.status === 'canceled'"
+                                class="status canceled tooltip"
+                                title="The rental request has been canceled before it was submitted to the blockchain">
+                            Canceled
+                        </span>
+                        <span
+                                v-if="rental.status === 'requested' && rental.role === 'tenant'"
+                                class="status requested tooltip"
+                                title="The rental request was transferred to the blockchain and is awaiting approval">
+                            Requested
+                        </span>
+                        <span
+                                v-if="rental.status === 'requested' && rental.role === 'owner'"
+                                class="status requested tooltip"
+                                title="The rental request was received by the tenant">
+                            Requested
+                        </span>
+                        <span
+                                v-if="rental.status === 'withdrawn'"
+                                class="status withdrawn tooltip"
+                                title="The rental request has been withdrawn">
+                            Withdrawn
+                        </span>
+                        <span
+                                v-if="rental.status === 'refused'"
+                                class="status refused tooltip"
+                                title="The rental request has been refused">
+                            Refused
+                        </span>
+                        <span
+                                v-if="rental.status === 'accepted'"
+                                class="status accepted tooltip"
+                                title="The rental request has been accepted">
+                            Accepted
+                        </span>
+                        <p class="date">{{rental.details.fromDay|formatDate}}
+                            - {{rental.details.tillDay|formatDate}}</p>
+
+                        <h2>Renting in {{rental.apartment.city}}</h2>
+                        <p class="title">{{rental.apartment.title}}</p>
+
+                        <p v-if="rental.role === 'owner'">
+                            Tenant: {{rental.details.contact.name}}<br/>
+                            Phone: {{rental.details.contact.phone}}<br/>
+                            Email: {{rental.details.contact.email}}
+                        </p>
+                        <p v-if="(rental.status === 'accepted' || rental.status === 'reviewed') && rental.role === 'tenant'">
+                            Owner: {{rental.ownerData.name}}<br/>
+                            Phone: {{rental.ownerData.phone}}<br/>
+                            Email: {{rental.ownerData.email}}
+                        </p>
+
+                        <p>{{rental.fee}} fee / {{rental.deposit}} deposit</p>
+
+                        <div class="form-control account-select"
+                             v-if="rental.status === 'requested' && rental.role === 'owner'">
+                            <v-select :options="accounts" placeholder="Select account" v-model="rental.ownerAccount">
+                                <template slot="option" slot-scope="option">
+                                    <span :class="{forbidden: option.type !== 'unknown'}">
+                                        <span class="blockie" :style="getBlockie(option.address)"></span>
+                                        {{option.label}}
+                                        <span v-if="option.type === 'owner'" class="mdi mdi-home-account tooltip"
+                                              title="This account is used for managing apartments and thus cannot be used in a new rental"></span>
+                                        <span v-if="option.type === 'tenant'"
+                                              class="mdi mdi-account-card-details tooltip"
+                                              title="This account is used for managing rentals and thus cannot be used in a new rental"></span>
+                                        <span v-if="option.type === 'interaction'"
+                                              class="mdi mdi-account-switch tooltip"
+                                              title="This account has been used in managing a rental request and thus cannot be used in a new rental"></span>
+                                    </span>
+                                </template>
+                            </v-select>
+                            <p class="hint">
+                                The selected account is only usable with this rental in CouchBC and will also receive
+                                any payments for the rental.
+                            </p>
+                        </div>
+                        <div v-if="rental.status === 'requested' && rental.role === 'owner'">
+                            <div class="form-control">
+                                <input v-model="rental.ownerData.name" placeholder="Your name" type="text">
+                            </div>
+                            <div class="form-control">
+                                <input v-model="rental.ownerData.phone" placeholder="Telephone number" type="tel">
+                            </div>
+                            <div class="form-control">
+                                <input v-model="rental.ownerData.email" placeholder="Email address" type="email">
+                            </div>
+                            <p class="hint">The contact data is provided to the tenant if you accept the rental request
+                                and is only visible to the tenant and the mediator in case of a dispute</p>
+                        </div>
+                        <div class="actions">
+                            <a href="#" class="button cancel" @click.stop="rental.cancel()"
+                               v-if="rental.status === 'pending'">Cancel</a>
+                            <a href="#" class="button withdraw" @click.stop="rental.withdraw()"
+                               v-if="rental.status === 'requested' && rental.role === 'tenant'">Withdraw</a>
+
+                            <a href="#" class="button accept" @click.stop="rental.accept()"
+                               v-if="rental.status === 'requested' && rental.role === 'owner'">Accept</a>
+                            <a href="#" class="button refuse" @click.stop="rental.refuse()"
+                               v-if="rental.status === 'requested' && rental.role === 'owner'">Refuse</a>
+
+                            <!-- TODO: Check if rental end date is today or in the past -->
+                            <a href="#" class="button review" @click.stop="tenantReview.rental = rental"
+                               v-if="rental.status === 'accepted' && rental.role === 'owner' && rental.depositStatus === 'open' && tenantReview !== rental">
+                                Review
+                            </a>
+                            <a href="#" class="button review" @click.stop="reviewApartment(rental)"
+                               v-if="rental.status === 'accepted' && rental.role === 'tenant' && apartmentReview !== rental">Review</a>
+                        </div>
+                        <div class="tenant-review" :class="{'shown': tenantReview.rental === rental}">
+                            <div class="form-control">
+                                <v-select :options="[1,2,3,4,5]" placeholder="Score"
+                                          v-model="tenantReview.score"></v-select>
+                            </div>
+                            <div class="form-control">
+                                <label for="tenantReview.text">Review text</label>
+                                <textarea id="tenantReview.text" v-model="tenantReview.text"></textarea>
+                            </div>
+                            <div class="form-control">
+                                <label for="tenantReview.deduction">Requested deposit deduction</label>
+                                <input id="tenantReview.deduction" type="number" min="0" :max="rental.deposit"
+                                       v-model="tenantReview.deduction"/>
+                            </div>
+                            <div class="form-control deduction-reason" :class="{'shown': tenantReview.deduction > 0}">
+                                <label for="tenantReview.reason">Reason for deduction</label>
+                                <textarea id="tenantReview.reason" v-model="tenantReview.reason"></textarea>
+                            </div>
+                            <a href="#" class="button save" @click.stop="reviewTenant()">Save</a>
+                        </div>
+                    </div>
+                </div>
+            </article>
+        </div>
+    </div>
+
+    <div id="overlay" :class="{shown: store.getters.loading.shown}"></div>
+    <div id="loading" :class="{shown: store.getters.loading.shown}">
+        <h4>
+            <div class="lds-ring">
+                <div></div>
+                <div></div>
+                <div></div>
+                <div></div>
+            </div>
+            {{store.getters.loading.headline}}
+        </h4>
+
+        <p v-for="element in store.getters.loadingElements">
+            <span class="text">{{element.text}}</span>
+            <span class="dots"></span>
+            <span v-if="typeof(element.status) === 'undefined' || element.status === 'active'" class="status active">IN PROGRESS</span>
+            <span v-if="element.status === 'success'" class="status success">SUCCESS</span>
+            <span v-if="element.status === 'error'" class="status error">ERROR</span>
+            <span v-if="element.status !== 'success' && element.status !== 'active' && element.status !== 'error'"
+                  class="status active">
+                {{element.status}}
+            </span>
+        </p>
+    </div>
 </div>
 
 <script src="/bundles/app.js"></script>
