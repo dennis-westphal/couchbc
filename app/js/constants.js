@@ -7,9 +7,9 @@ const rinkebyNet = 4
 // Define if we are running in test mode => split local accounts between chrome and firefox
 export const accountTestMode = false
 
-// Define the server address (for now)
-export const websocketAddress = 'wss://couchbc.com'
-export const useInjectedWeb3 = true // We can't use Metamask's web3 currently as subscriptions through websockets are still in dev
+// Define the server address
+export const websocketAddress = 'wss://couchbc.com' // Websocket address to use for network connection
+export const useInjectedWeb3 = !accountTestMode // Don't use the injected web3 if we're running in test mode; use websockets instead
 export const networkId = ropstenNet // Determine which network we're running on
 
 export const ipfsHost = {'host': 'couchbc.com', 'port': 443, 'protocol': 'https'}
