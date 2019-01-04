@@ -1,6 +1,16 @@
+// Network ids
+const truffleNet = 4447
+const liveNet = 1
+const ropstenNet = 3
+const rinkebyNet = 4
+
+// Define if we are running in test mode => split local accounts between chrome and firefox
+export const accountTestMode = false
+
 // Define the server address (for now)
 export const websocketAddress = 'wss://couchbc.com'
-export const useInjectedWeb3 = false // We can't use Metamask's web3 currently as subscriptions through websockets are still in dev
+export const useInjectedWeb3 = true // We can't use Metamask's web3 currently as subscriptions through websockets are still in dev
+export const networkId = ropstenNet // Determine which network we're running on
 
 export const ipfsHost = {'host': 'couchbc.com', 'port': 443, 'protocol': 'https'}
 export const ipfsGatewayUrl = '/ipfs/'

@@ -61,6 +61,7 @@
     "mdi": "^2.2.43",
     "moment": "^2.22.2",
     "npm-font-open-sans": "^1.1.0",
+    "truffle-hdwallet-provider": "^1.0.2",
     "uniqid": "^5.0.3",
     "vue": "^2.5.17",
     "vue-filter": "^0.2.5",

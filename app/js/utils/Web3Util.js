@@ -1,4 +1,4 @@
-import { useInjectedWeb3, websocketAddress } from '../constants'
+import { accountTestMode, networkId, useInjectedWeb3, websocketAddress } from '../constants'
 import { default as Web3 } from 'web3'
 import { Notifications } from './Notifications'
 import rentArtifacts from '../../../build/contracts/Rent'
@@ -19,7 +19,7 @@ class Web3UtilClass {
 		}
 
 		this.accounts = []
-		this.contract = new this.web3.eth.Contract(rentArtifacts.abi, rentArtifacts.networks[4447].address)
+		this.contract = new this.web3.eth.Contract(rentArtifacts.abi, rentArtifacts.networks[networkId].address)
 	}
 
 	/**
@@ -30,6 +30,8 @@ class Web3UtilClass {
 	async fetchAccounts () {
 		return new Promise((resolve, reject) => {
 			this.web3.eth.getAccounts(async (error, bcAddresses) => {
+				console.log(bcAddresses)
+
 				if (error) {
 					Notifications.show('There was an error fetching your blockchain accounts')
 					console.error(error)
@@ -61,11 +63,14 @@ class Web3UtilClass {
 		let isChrome = /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor)
 
 		for (let bcAddress of bcAddresses) {
-			// Only show half of the accounts to chrome and the other half to other browsers (for test purposes)
-			if (isChrome && i++ % 2 === 0) {
-				continue
-			} else if (!isChrome && i++ % 2 === 1) {
-				continue
+			// Check if we are running in test mode
+			if (accountTestMode) {
+				// Only show half of the accounts to chrome and the other half to other browsers (for test purposes)
+				if (isChrome && i++ % 2 === 0) {
+					continue
+				} else if (!isChrome && i++ % 2 === 1) {
+					continue
+				}
 			}
 
 			promises.push(this.contract.methods.getAddressType().call({from: bcAddress}, (error, type) => {

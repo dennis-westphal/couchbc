@@ -1,0 +1,1 @@
+export const mnemonic = 'YOUR_WALLET_MNEMONIC'
