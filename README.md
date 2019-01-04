@@ -1,4 +1,6 @@
-# CouchBC: Apartment Rental Dapp Built on Ethereum Blockchain Technology
+# CouchBC
+Apartment Rental Dapp Built on Ethereum Blockchain Technology
+
 ## Usage
 
 
