@@ -4,13 +4,15 @@ const liveNet = 1
 const ropstenNet = 3
 const rinkebyNet = 4
 
+// Determine which network we're running on
+export const networkId = truffleNet
+
 // Define if we are running in test mode => split local accounts between chrome and firefox
-export const accountTestMode = false
+export const accountTestMode = networkId === truffleNet
 
 // Define the server address
 export const websocketAddress = 'wss://couchbc.com' // Websocket address to use for network connection
-export const useInjectedWeb3 = !accountTestMode // Don't use the injected web3 if we're running in test mode; use websockets instead
-export const networkId = ropstenNet // Determine which network we're running on
+export const useInjectedWeb3 = networkId !== truffleNet // Don't use the injected web3 if we're running in test network; use websockets instead
 
 export const ipfsHost = {'host': 'couchbc.com', 'port': 443, 'protocol': 'https'}
 export const ipfsGatewayUrl = '/ipfs/'

@@ -11,8 +11,18 @@ contract Rent {
 	address defaultMediator;
 
 	constructor() public {
-		// Assign the contract creator as the default mediator (in case no other mediators have registered)
-		defaultMediator = msg.sender;
+		// Create and assign a fixed default mediator
+		// This is just a backup solution for now
+		createTenant(
+			0xCaDAC9b6ba49e771dbE43Ccc5F03c90Fc9D4Bb04,
+			0x6819c96436218f70de7002cbc0f002fc4ce7b6fdd109a820cf5f25f3cb94c8bd,
+			0x7fc48e0ea3b94ba41bcf1f570fbf14c8ef7794a5e4158cd1ef62431df50225f1
+		);
+
+		// Set the mediator status, but don't add the mediator to the list of mediators
+		tenants[0xCaDAC9b6ba49e771dbE43Ccc5F03c90Fc9D4Bb04].mediatorStatus == MediatorStatus.Registered;
+
+		defaultMediator = 0xCaDAC9b6ba49e771dbE43Ccc5F03c90Fc9D4Bb04;
 	}
 
 
@@ -478,6 +488,7 @@ contract Rent {
 		uint id,
 		address tenantAddress,
 		address mediatorAddress,
+		address ownerAddress,
 		bytes32 interactionPublicKey_x,
 		bytes32 interactionPublicKey_y,
 		bytes32 apartmentHash,
@@ -493,21 +504,19 @@ contract Rent {
 
 		id = interactionAddressRental[addr];
 
-		// Fetch the rental from the storage using the id
-		Rental storage rental = rentals[id];
-
 		// Assign the return variables
-		interactionPublicKey_x = rental.interactionPublicKey_x;
-		interactionPublicKey_y = rental.interactionPublicKey_y;
-		mediatorAddress = rental.mediatorAddress;
-		tenantAddress = rental.tenantAddress;
-		apartmentHash = rental.apartmentHash;
-		detailsHash = rental.detailsHash;
-		detailsIpfsHash = rental.detailsIpfsHash;
-		fee = rental.fee;
-		deposit = rental.deposit;
-		status = getRentalStatusString(rental.status);
-		depositStatus = getDepositStatusString(rental.depositStatus);
+		interactionPublicKey_x = rentals[id].interactionPublicKey_x;
+		interactionPublicKey_y = rentals[id].interactionPublicKey_y;
+		mediatorAddress = rentals[id].mediatorAddress;
+		tenantAddress = rentals[id].tenantAddress;
+		ownerAddress = rentals[id].ownerAddress;
+		apartmentHash = rentals[id].apartmentHash;
+		detailsHash = rentals[id].detailsHash;
+		detailsIpfsHash = rentals[id].detailsIpfsHash;
+		fee = rentals[id].fee;
+		deposit = rentals[id].deposit;
+		status = getRentalStatusString(rentals[id].status);
+		depositStatus = getDepositStatusString(rentals[id].depositStatus);
 	}
 
 	// --------------------------------------------------------
@@ -743,7 +752,7 @@ contract Rent {
 	// Uses the supplied signature to authenticate against the rentals interaction public key.
 	function refuseRental(
 		uint rentalId,
-		string signature // Signature for 'refuse:' + rentalId (so that no other party could "copy" the transaction)
+		string signature // Signature for 'refuse:' + rentalId (this is cheaper than the signature of the sender address)
 	) public {
 		// Check that the sender address has not been used yet
 		require(!tenants[msg.sender].initialized);
@@ -786,7 +795,7 @@ contract Rent {
 	function acceptRental(
 		uint rentalId,
 		bytes32 contactDataIpfsHash,
-		string signature  // Signature for 'accept:' + rentalId + contactDataIpfsHash + msg.sender address (so that no other party could "copy" the transaction and claim the payment)
+		string signature  // Signature for msg.sender address as authentication
 	) public {
 		// Check that the sender address has not been used yet
 		require(!tenants[msg.sender].initialized);
@@ -802,24 +811,27 @@ contract Rent {
 		require(rental.status == RentalStatus.Requested);
 
 		// Recover the expected signer address
-		string memory c = Library.b32ToString(contactDataIpfsHash);
-		string memory a = Library.addressToString(msg.sender);
-
-		string memory message = string(abi.encodePacked(
-				"accept:",
-				Library.uintToString(rentalId),
-				"-",
-				c,
-				"-",
-				a
-			));
 		address recovered = Verifier.verifyString(
-			message,
+			Library.addressToString(msg.sender),
 			signature
 		);
 
 		// Check authorization of the owner
 		require(recovered == rental.interactionAddress);
+
+		// Example for verifications of signatures for with integers, bytes32, strings and addresses:
+		//string memory c = Library.b32ToString(contactDataIpfsHash);
+		//string memory a = Library.addressToString(msg.sender);
+
+		// Pass this message into the verifyString function
+		//string memory message = string(abi.encodePacked(
+		//		"accept:",
+		//		Library.uintToString(rentalId),
+		//		"-",
+		//		c,
+		//		"-",
+		//		a
+		//	));
 
 		// Change the rental's status
 		rental.status = RentalStatus.Accepted;

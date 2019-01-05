@@ -637,9 +637,14 @@ export class Rental {
 		Loading.success('upload')
 
 		// Create the string we must sign for authentication
+		// Uses the lower case of the address as this is how it is converted on the blockchain
+		let acceptString = this.ownerAddress.substr(2).toLowerCase()
+
+		/* Example for how signatures with additional text components are created: (matching the rental contract's example)
 		let acceptString = 'accept:' + this.id + '-' +
 			ownerDataHash.substr(2) + '-' +
-			this.ownerAddress.substr(2).toLowerCase() // Use the lower case of the address as this is how it is converted on the blockchain
+			this.ownerAddress.substr(2).toLowerCase()
+		 */
 
 		// Get the account to sign the message and thus used for authentication against the interaction address
 		let ecAccount = await Cryptography.getEcAccount(this.interactionAddress)
@@ -795,8 +800,9 @@ export class Rental {
 			resolve()
 		}))
 
-		let deductionReasonIpfsHash = ''
-		let contactDataForMediatorIpfsHash = ''
+		let deductionReasonIpfsHash = '0x0'
+		let contactDataForMediatorIpfsHash = '0x0'
+
 		// If we have requested a deduction, also upload the deduction reason and the contact data for the mediator
 		if (deduction > 0) {
 			// Fetch the mediator to get his public key. The mediator is always also a tenant, which is why we fetch him through the Tenant class.
@@ -854,8 +860,6 @@ export class Rental {
 
 							// Mark the account as used in an interaction
 							this.ownerAccount.type = 'interaction'
-
-							this.status = 'refused'
 
 							resolve()
 						})

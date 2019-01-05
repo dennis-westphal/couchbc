@@ -30,8 +30,6 @@ class Web3UtilClass {
 	async fetchAccounts () {
 		return new Promise((resolve, reject) => {
 			this.web3.eth.getAccounts(async (error, bcAddresses) => {
-				console.log(bcAddresses)
-
 				if (error) {
 					Notifications.show('There was an error fetching your blockchain accounts')
 					console.error(error)

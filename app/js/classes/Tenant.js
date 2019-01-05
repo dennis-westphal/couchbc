@@ -28,7 +28,7 @@ export class Tenant {
 		let tenantData = await Web3Util.contract.methods.getTenant(address).call()
 		let tenant = new Tenant()
 		Object.assign(tenant, tenantData)
-		this.address = address
+		tenant.address = address
 
 		// Get the reviews
 		let promises = []
