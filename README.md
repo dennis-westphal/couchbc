@@ -14,7 +14,7 @@ For testing on the test network, the following is recommended:
 3. Get test ether for the accounts from https://faucet.metamask.io/
 4. Go to couchbc.com and authorize the created accounts for the site
 5. Create apartments on the blockchain. Please enter and select a proper address for the apartment to later show up in the list
-6. Switch to a second machine or use a Browser with MetaMask to show the added apartment (MetaMask never exposes more than one account for the site at once, so it's better to use it for testing the tenant side)
+6. Switch to a second machine or use a Browser with MetaMask to show the added apartment (MetaMask never exposes more than one account for the site at once, so it's better to use it for testing the tenant side). You CAN also use Mist with a different account, but the rentals page will look a bit messed up in that case, as it will display a rental twice (from the owner's and tenant's perspective).
 7. Search for the city, select the apartment and request a rental
 8. Switch to Mist / the first machine and refresh the page
 9. Accept or deny the rental
