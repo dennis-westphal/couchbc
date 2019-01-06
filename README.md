@@ -22,6 +22,7 @@ For testing on the test network, the following is recommended:
 ## Missing features
 * Events have been implemented in the smart contract, but not in the frontend. Therefore you need to reload after a change has occurred to the rentals.
 * Mediation is implemented in the smart contract, but not in the frontend.
+* Currently, only demo reviews are displayed in the frontend, yet reviews are sent to and retrieved from the blockchain.
 
 ## Requirements
 To run the app in a local test network (i.e. truffle), you will need the following
