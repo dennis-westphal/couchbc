@@ -429,6 +429,22 @@ let app = new Vue({
 		},
 
 		/**
+		 * Add a review for an apartment as tenant
+		 *
+		 * @returns {Promise<void>}
+		 */
+		reviewApartment: async () => {
+			// Process the review
+			await app.apartmentReview.rental.reviewApartment(
+				app.apartmentReview.score,
+				app.apartmentReview.text
+			)
+
+			// Clear the form
+			Object.assign(app.$data.apartmentReview, app.$options.data.call(app).apartmentReview)
+		},
+
+		/**
 		 * Get style attributes for a blockie generated from an account address
 		 *
 		 * @param address

@@ -75,6 +75,8 @@
             <div class="text">
                 <h1>Time for a retreat</h1>
                 <h2>Rent an apartment on CouchBC using blockchain technology</h2>
+                <p>Disclaimer: This application is a demo for privacy-preserving apartment rentals.<br>
+                    Try it out with the Ethereum test network Ropsten. Your rentals and apartments can be deleted at any point in time though.</p>
             </div>
         </header>
     </div>
@@ -421,11 +423,11 @@
 
                             <!-- TODO: Check if rental end date is today or in the past -->
                             <a href="#" class="button review" @click.stop="tenantReview.rental = rental"
-                               v-if="rental.status === 'accepted' && rental.role === 'owner' && rental.depositStatus === 'open' && tenantReview !== rental">
+                               v-if="rental.status === 'accepted' && rental.role === 'owner' && rental.depositStatus === 'open' && tenantReview.rental !== rental">
                                 Review
                             </a>
-                            <a href="#" class="button review" @click.stop="reviewApartment(rental)"
-                               v-if="rental.status === 'accepted' && rental.role === 'tenant' && apartmentReview !== rental">Review</a>
+                            <a href="#" class="button review" @click.stop="apartmentReview.rental = rental"
+                               v-if="rental.status === 'accepted' && rental.role === 'tenant' && apartmentReview.rental !== rental">Review</a>
                         </div>
                         <div class="tenant-review" :class="{'shown': tenantReview.rental === rental}">
                             <div class="form-control">
@@ -446,6 +448,17 @@
                                 <textarea id="tenantReview.reason" v-model="tenantReview.reason"></textarea>
                             </div>
                             <a href="#" class="button save" @click.stop="reviewTenant()">Save</a>
+                        </div>
+                        <div class="apartment-review" :class="{'shown': apartmentReview.rental === rental}">
+                            <div class="form-control">
+                                <v-select :options="[1,2,3,4,5]" placeholder="Score"
+                                          v-model="apartmentReview.score"></v-select>
+                            </div>
+                            <div class="form-control">
+                                <label for="apartmentReview.text">Review text</label>
+                                <textarea id="apartmentReview.text" v-model="apartmentReview.text"></textarea>
+                            </div>
+                            <a href="#" class="button save" @click.stop="reviewApartment()">Save</a>
                         </div>
                     </div>
                 </div>
