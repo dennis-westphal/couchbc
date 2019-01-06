@@ -36,6 +36,7 @@ To run the app in a local test network (i.e. truffle), you will need the followi
 * Create the topics "issue-interaction-key" and "request-interaction-key" on Google Cloud Pub/Sub and follow the configuration
 * Adjust constants in the js/constants.js file
 * Adjust credentials in the js/credentials.js file
+* Adjust configuration and details in package.json
 * Run "npm install" in your application folder
 * For local test network, run the following in the application folder:
   * truffle develop
@@ -45,3 +46,4 @@ To run the app in a local test network (i.e. truffle), you will need the followi
   * Set your wallet seed in wallet.js
   * Adjust the infura project in truffle.js
   * run "truffle deploy --network ropsten"
+* Run the IPFS NS server with "node ipfsNs.js"
