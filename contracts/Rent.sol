@@ -13,14 +13,22 @@ contract Rent {
 	constructor() public {
 		// Create and assign a fixed default mediator
 		// This is just a backup solution for now
-		createTenant(
-			0xCaDAC9b6ba49e771dbE43Ccc5F03c90Fc9D4Bb04,
-			0x6819c96436218f70de7002cbc0f002fc4ce7b6fdd109a820cf5f25f3cb94c8bd,
-			0x7fc48e0ea3b94ba41bcf1f570fbf14c8ef7794a5e4158cd1ef62431df50225f1
-		);
 
-		// Set the mediator status, but don't add the mediator to the list of mediators
-		tenants[0xCaDAC9b6ba49e771dbE43Ccc5F03c90Fc9D4Bb04].mediatorStatus == MediatorStatus.Registered;
+		// Initialize empty arrays. This is necessary for struct members and for some reaon cannot be done in the constructor call
+		uint[] memory tenantRentals;
+		uint[] memory mediatorRentals;
+
+		// Add a new tenant
+		tenants[0xCaDAC9b6ba49e771dbE43Ccc5F03c90Fc9D4Bb04] = Tenant(
+			true,
+			0x6819c96436218f70de7002cbc0f002fc4ce7b6fdd109a820cf5f25f3cb94c8bd,
+			0x7fc48e0ea3b94ba41bcf1f570fbf14c8ef7794a5e4158cd1ef62431df50225f1,
+			MediatorStatus.Registered,
+			0, // Initial score
+			tenantRentals, // Rental ids
+			mediatorRentals,
+			0               // Number of reviews
+		);
 
 		defaultMediator = 0xCaDAC9b6ba49e771dbE43Ccc5F03c90Fc9D4Bb04;
 	}

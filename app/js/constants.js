@@ -5,7 +5,7 @@ const ropstenNet = 3
 const rinkebyNet = 4
 
 // Determine which network we're running on
-export const networkId = truffleNet
+export const networkId = ropstenNet
 
 // Define if we are running in test mode => split local accounts between chrome and firefox
 export const accountTestMode = networkId === truffleNet
