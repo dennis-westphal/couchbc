@@ -458,6 +458,10 @@
                                 <label for="apartmentReview.text">Review text</label>
                                 <textarea id="apartmentReview.text" v-model="apartmentReview.text"></textarea>
                             </div>
+                            <p class="hint">
+                                Warning: When you review the apartment, the apartment is publicly visible in the rental.
+                                Your contact data still remain save.</p>
+
                             <a href="#" class="button save" @click.stop="reviewApartment()">Save</a>
                         </div>
                     </div>

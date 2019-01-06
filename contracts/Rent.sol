@@ -314,6 +314,7 @@ contract Rent {
 	// Get a city apartment at the specified id
 	function getCityApartment(bytes32 cityHash, uint cityApartmentId) public view returns (
 		uint id,
+		address ownerAddress,
 		bytes32 ownerPublicKey_x,
 		bytes32 ownerPublicKey_y,
 		bytes32 ipfsHash,
@@ -328,6 +329,7 @@ contract Rent {
 		Apartment storage apartment = apartments[id];
 
 		// Assign the return variables
+		ownerAddress = apartment.ownerAddress;
 		ownerPublicKey_x = apartment.ownerPublicKey_x;
 		ownerPublicKey_y = apartment.ownerPublicKey_y;
 		ipfsHash = apartment.ipfsHash;
@@ -810,7 +812,7 @@ contract Rent {
 		// Check that the rental has the right state
 		require(rental.status == RentalStatus.Requested);
 
-		// Recover the expected signer address
+		// Recover the signer address
 		address recovered = Verifier.verifyString(
 			Library.addressToString(msg.sender),
 			signature
@@ -1048,7 +1050,8 @@ contract Rent {
 	function review(
 		uint rentalId,
 		uint apartmentId,
-		uint nonce, // Nonce involved in created apartmentHash
+		string requestId, // requestId involved in created apartmentHash
+		string requestIdSignature, // signature of requestId. Has to be signed with apartment owner's address.
 		uint8 score,
 		bytes32 textIpfsHash // Hash of unencrypted review
 	) public {
@@ -1065,14 +1068,25 @@ contract Rent {
 		// Check that the rental has not been reviewed yet
 		require(rental.status == RentalStatus.Accepted);
 
-		// Check authorization: rentals apartment hash has match the sha3 of apartmentId + "-" + nonce
+		// Check constraint: rentals apartment hash matches the sha3 of apartmentId + "-" + requestId
 		require(rental.apartmentHash == keccak256(
 			abi.encodePacked(
 				Library.uintToString(apartmentId),
 				"-",
-				Library.uintToString(nonce)
+				requestId
 			)
 		));
+
+		// Recover the requestId signer address
+		// Does not work currently, so it's disabled
+		/*address recovered = Verifier.verifyString(
+			requestId,
+			requestIdSignature
+		);
+
+		// Check the signer is the apartment owner
+		require(apartment.ownerAddress == recovered);
+		*/
 
 		// Change the rental status to reviewed
 		rental.status = RentalStatus.Reviewed;

@@ -42,6 +42,9 @@ export class Rental {
 			email: ''
 		}
 		this.ownerDataForMediator = {}
+
+		this.requestId = 0
+		this.requestIdSignature = ''
 	}
 
 	/**
@@ -98,8 +101,8 @@ export class Rental {
 		rental.role = 'tenant'
 		rental.status = 'pending'
 
-		// Assign a random local id so we can associate for now so we can identify the request later on
-		rental.localStorageId = Cryptography.getRandomString()
+		// Assign a random request id so we can associate for now so we can identify the request later on
+		rental.requestId = Cryptography.getRandomString()
 
 		// Show the load message. Wait for the response, as following steps might freeze the browser for a second.
 		await Loading.show('Adding rental request')
@@ -122,11 +125,12 @@ export class Rental {
 		// Send a new interaction key request
 		Loading.add('publish', 'Sending encrypted interaction key request')
 		await PubSub.publishMessage(
-			// Send the tenants public key
+			// Send the tenants public key, the request id and (for now) also the owner's address
 			JSON.stringify({
-				id: rental.localStorageId,
-				x:  ecAccount.public.x,
-				y:  ecAccount.public.y
+				id:           rental.requestId,
+				x:            ecAccount.public.x,
+				y:            ecAccount.public.y,
+				ownerAddress: rental.apartment.ownerAddress
 			}),
 
 			// Topic to send the message to
@@ -161,9 +165,11 @@ export class Rental {
 		// Show the load message. Wait for the response, as following steps might freeze the browser for a second.
 		await Loading.show('Sending rental request')
 
-		// Add the apartmentSecret to the details to allow the owner to verify the apartment hash and the tenant to later retrieve it from local storage.
-		// The apartmentSecret is used to proof to the blockchain which apartment was involved in a rental when a tenant rates the apartment.
-		this.details.apartmentSecret = Cryptography.getRandomString()
+		// Add the requestId to the details
+		this.details.requestId = this.requestId
+
+		// Also add the signature to the details (for now); can also be saved purely in local storage
+		this.details.requestIdSignature = this.requestIdSignature
 
 		Loading.add('account', 'Fetching or creating tenant account')
 		let ecAccount = await Cryptography.getOrCreateEcAccount(Web3Util.getAccount(this.tenantAddress))
@@ -243,11 +249,11 @@ export class Rental {
 		let pendingRentalRequests = JSON.parse(window.localStorage.getItem('pendingRentalRequests') || '[]')
 
 		pendingRentalRequests.push({
-			localStorageId: this.localStorageId,
-			tenantAddress:  this.tenantAddress,
-			fee:            this.fee,
-			deposit:        this.deposit,
-			details:        this.details
+			requestId:     this.requestId,
+			tenantAddress: this.tenantAddress,
+			fee:           this.fee,
+			deposit:       this.deposit,
+			details:       this.details
 		})
 
 		// Save the tenant's data in local storage for autocompletion of further actions
@@ -265,7 +271,7 @@ export class Rental {
 	removePendingRequest () {
 		let pendingRentalRequests = JSON.parse(window.localStorage.getItem('pendingRentalRequests') || '[]')
 
-		let filteredRequests = pendingRentalRequests.filter(request => request.localStorageId !== this.localStorageId)
+		let filteredRequests = pendingRentalRequests.filter(request => request.requestId !== this.requestId)
 
 		window.localStorage.setItem('pendingRentalRequests', JSON.stringify(filteredRequests))
 	}
@@ -279,11 +285,11 @@ export class Rental {
 	}
 
 	/**
-	 * Create the apartment hash based on the apartment id and the (random) apartmentSecret
+	 * Create the apartment hash based on the apartment id and the requestId
 	 * @returns {string}
 	 */
 	createApartmentHash () {
-		return Web3Util.web3.utils.sha3(this.apartment.id + '-' + this.details.apartmentSecret)
+		return Web3Util.web3.utils.sha3(this.apartment.id + '-' + this.details.requestId)
 	}
 
 	/**
@@ -365,7 +371,7 @@ export class Rental {
 			}
 
 			let rental = new Rental()
-			rental.localStorageId = request.localStorageId
+			rental.requestId = request.requestId
 			rental.tenantAddress = request.tenantAddress
 			rental.role = 'tenant'
 			rental.fee = parseInt(request.fee)
@@ -881,7 +887,61 @@ export class Rental {
 		})
 	}
 
-	reviewApartment (score, text) {
+	/**
+	 * Review the apartment, thereby revealing the relationship between rental and apartment.
+	 *
+	 * @param score
+	 * @param text
+	 * @return {Promise<*>}
+	 */
+	async reviewApartment (score, text) {
+		// Wait till the loading screen is shown
+		await Loading.show('Adding apartment review')
 
+		// Upload the review to IPFS
+		Loading.add('review.upload', 'Uploading review text to IPFS')
+		let reviewIpfsHash = await IpfsUtil.uploadData(text)
+		Loading.success('review.upload')
+
+		let parameters = [
+			parseInt(this.id),
+			parseInt(this.apartment.id),
+			this.details.requestId,
+			this.details.requestIdSignature,
+			score,
+			reviewIpfsHash
+		]
+
+		// Estimate gas and endRental function
+		Loading.add('review.blockchain', 'Sending message to blockchain')
+		let method = Web3Util.contract.methods.review(...parameters)
+
+		return new Promise((resolve, reject) => {
+			method.estimateGas({from: this.tenantAddress})
+				.then(gasAmount => {
+					method.send({from: this.tenantAddress, gas: gasAmount})
+						.on('receipt', () => {
+							Notifications.show('Apartment review added')
+							Loading.success('review.blockchain')
+							Loading.hide()
+
+							resolve()
+						})
+						.on('error', (error, parameters) => {
+							console.error(error)
+							Loading.error('review.blockchain')
+							Loading.hide()
+
+							reject(error)
+						})
+				})
+				.catch(error => {
+					console.error(error, parameters)
+					Loading.error('review.blockchain')
+					Loading.hide()
+
+					reject(error)
+				})
+		})
 	}
 }

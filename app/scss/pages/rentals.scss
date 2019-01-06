@@ -43,7 +43,7 @@ div.page.rentals {
 		div.actions {
 			text-align: right;
 		}
-		div.tenant-review, div.deduction-reason {
+		div.tenant-review, div.apartment-review, div.deduction-reason {
 			height: 0;
 			overflow-y: hidden;
 			transition: height 0.5s cubic-bezier(0.420, 0.000, 0.580, 1.000);;

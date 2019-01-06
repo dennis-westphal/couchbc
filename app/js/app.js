@@ -303,15 +303,22 @@ let app = new Vue({
 				return
 			}
 
+			// Get the owner account associated with this request
+			let ownerEcAccount = await Cryptography.getEcAccountForBcAccount(requestData.ownerAddress)
+
 			// Generate a new EC account => the interaction key
 			let ecAccount = await Cryptography.generateEcAccount()
 
+			// Sign the request id with the owner account
+			let requestIdSign = Web3Util.web3.eth.accounts.sign(requestData.id, ownerEcAccount.private.hex)
+
 			// Extract the public key and encode it for transmission
 			let interactionKey = JSON.stringify({
-				id:      requestData.id,
-				x:       ecAccount.public.x,
-				y:       ecAccount.public.y,
-				address: ecAccount.address
+				id:                 requestData.id,
+				x:                  ecAccount.public.x,
+				y:                  ecAccount.public.y,
+				address:            ecAccount.address,
+				requestIdSignature: requestIdSign.signature
 			})
 
 			// Publish the interaction key encrypted with the tenant's public key
@@ -335,7 +342,7 @@ let app = new Vue({
 			console.debug('Received interaction key', responseData)
 
 			// Find the rental request with the matching local storage id
-			let filteredRentals = app.rentals.filter(rental => rental.localStorageId === responseData.id)
+			let filteredRentals = app.rentals.filter(rental => rental.requestId === responseData.id)
 
 			if (filteredRentals.length !== 1) {
 				console.warn('Could not find any rental with the specified id')
@@ -347,6 +354,7 @@ let app = new Vue({
 			rental.interactionPublicKey_x = responseData.x
 			rental.interactionPublicKey_y = responseData.y
 			rental.interactionAddress = responseData.address
+			rental.requestIdSignature = responseData.requestIdSignature
 
 			// Send the rental request to the blockchain
 			rental.sendRequest()
